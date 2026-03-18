@@ -307,9 +307,12 @@ def _parse_gemini_response(text: str) -> BookInsights:
 
 
 def _simple_cleanup_title(raw_title: str, raw_author: Optional[str] = None) -> str:
+    parsed_title, parsed_author = _extract_embedded_author(raw_title, raw_author)
     text = (raw_title or "").strip()
     text = re.sub(r"\s+", " ", text)
-    text = normalize_title(text, raw_author)
+    if parsed_title:
+        text = parsed_title
+    text = normalize_title(text, parsed_author or raw_author)
     return text.strip()
 
 
@@ -323,15 +326,64 @@ def _simple_cleanup_author(raw_author: Optional[str]) -> Optional[str]:
     return text
 
 
+def _looks_like_person_name(text: str) -> bool:
+    if not text:
+        return False
+    if any(ch.isdigit() for ch in text):
+        return False
+
+    lowered = text.lower()
+    forbidden = ["edizione", "edition", "volume", "vol", "deluxe", "collector", "special"]
+    if any(token in lowered for token in forbidden):
+        return False
+
+    tokens = [t for t in re.split(r"\s+", text.strip()) if t]
+    if len(tokens) < 2 or len(tokens) > 8:
+        return False
+
+    alpha_tokens = [t for t in tokens if re.search(r"[a-zA-Z]", t)]
+    if len(alpha_tokens) < 2:
+        return False
+    return True
+
+
+def _extract_embedded_author(raw_title: str, raw_author: Optional[str] = None) -> tuple[str, Optional[str]]:
+    title_text = (raw_title or "").strip()
+    explicit_author = _simple_cleanup_author(raw_author)
+    if explicit_author:
+        return title_text, explicit_author
+
+    if not title_text:
+        return "", None
+
+    # Match common catalog formats like: "Title, Author" or "Title - Author".
+    split_patterns = [
+        r"^(?P<title>.+?)\s*,\s*(?P<author>[^,]+)$",
+        r"^(?P<title>.+?)\s+-\s+(?P<author>.+)$",
+        r"^(?P<title>.+?)\s+[\u2013\u2014]\s+(?P<author>.+)$",
+    ]
+    for pattern in split_patterns:
+        match = re.match(pattern, title_text)
+        if not match:
+            continue
+        candidate_title = re.sub(r"\s+", " ", match.group("title")).strip(" -_\t\n,;")
+        candidate_author = _simple_cleanup_author(match.group("author"))
+        if candidate_author and _looks_like_person_name(candidate_author) and candidate_title:
+            return candidate_title, candidate_author
+
+    return title_text, None
+
+
 def normalize_catalog_entry(
     raw_title: str,
     raw_author: Optional[str] = None,
     raw_publisher: Optional[str] = None,
 ) -> dict:
     """Normalize noisy catalog fields using Gemini, with deterministic fallback."""
+    parsed_title, parsed_author = _extract_embedded_author(raw_title, raw_author)
     fallback = {
-        "title": _simple_cleanup_title(raw_title, raw_author),
-        "author": _simple_cleanup_author(raw_author),
+        "title": _simple_cleanup_title(parsed_title or raw_title, parsed_author or raw_author),
+        "author": _simple_cleanup_author(parsed_author or raw_author),
         "publisher": _simple_cleanup_author(raw_publisher),
         "source": "rule_based",
     }
@@ -348,7 +400,7 @@ def normalize_catalog_entry(
         "Return strictly JSON with keys: title, author, publisher. "
         "Keep original language and do not translate.\n\n"
         f"Raw title: {raw_title or '-'}\n"
-        f"Raw author: {raw_author or '-'}\n"
+        f"Raw author: {parsed_author or raw_author or '-'}\n"
         f"Raw publisher: {raw_publisher or '-'}\n"
     )
 
@@ -374,8 +426,8 @@ def normalize_catalog_entry(
                 return fallback
 
             parsed = CatalogNormalizationPayload(**_parse_json_object(content))
-            title = _simple_cleanup_title(parsed.title, parsed.author or raw_author)
-            author = _simple_cleanup_author(parsed.author)
+            title = _simple_cleanup_title(parsed.title, parsed.author or parsed_author or raw_author)
+            author = _simple_cleanup_author(parsed.author or parsed_author or raw_author)
             publisher = _simple_cleanup_author(parsed.publisher)
             if not title:
                 return fallback

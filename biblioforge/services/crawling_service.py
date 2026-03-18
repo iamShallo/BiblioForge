@@ -1,11 +1,13 @@
 """Google Books-backed crawling and enrichment, with Goodreads HTML scrape for ratings."""
 
 import asyncio
+import difflib
 import html
 import json
 import os
 import random
 import re
+import unicodedata
 from typing import List, Optional, Tuple
 from urllib.parse import quote_plus
 
@@ -20,26 +22,121 @@ OPENLIBRARY_SEARCH_URL = "https://openlibrary.org/search.json"
 AMAZON_IT_SEARCH_URL = "https://www.amazon.it/s"
 
 
+def _normalize_for_match(text: Optional[str]) -> str:
+    if not text:
+        return ""
+    lowered = str(text).strip().lower()
+    lowered = unicodedata.normalize("NFKD", lowered)
+    lowered = "".join(ch for ch in lowered if not unicodedata.combining(ch))
+    lowered = re.sub(r"[^a-z0-9\s]", " ", lowered)
+    lowered = re.sub(r"\s+", " ", lowered).strip()
+    return lowered
+
+
+def _title_similarity(left: Optional[str], right: Optional[str]) -> float:
+    l_norm = _normalize_for_match(left)
+    r_norm = _normalize_for_match(right)
+    if not l_norm or not r_norm:
+        return 0.0
+    ratio = difflib.SequenceMatcher(None, l_norm, r_norm).ratio()
+
+    # Token overlap helps recover from swapped words and OCR-like noise.
+    l_tokens = set(l_norm.split())
+    r_tokens = set(r_norm.split())
+    if not l_tokens or not r_tokens:
+        return ratio
+    overlap = len(l_tokens & r_tokens) / max(len(l_tokens), len(r_tokens))
+    return max(ratio, overlap)
+
+
+def _pick_best_google_books_match(items: List[dict], normalized_title: str, author: Optional[str]) -> dict:
+    if not items:
+        return {}
+
+    author_norm = _normalize_for_match(author)
+    best_item = None
+    best_score = -1.0
+
+    for item in items:
+        volume = item.get("volumeInfo", {})
+        candidate_title = volume.get("title")
+        score = _title_similarity(normalized_title, candidate_title)
+
+        candidate_authors = volume.get("authors", [])
+        if isinstance(candidate_authors, list):
+            author_blob = " ".join(str(a) for a in candidate_authors)
+        else:
+            author_blob = str(candidate_authors or "")
+        candidate_author_norm = _normalize_for_match(author_blob)
+
+        if author_norm and candidate_author_norm:
+            if author_norm in candidate_author_norm or candidate_author_norm in author_norm:
+                score += 0.18
+            else:
+                score += 0.08 * _title_similarity(author_norm, candidate_author_norm)
+
+        if score > best_score:
+            best_score = score
+            best_item = item
+
+    # Keep false matches low when queries are very noisy.
+    if best_score < 0.42:
+        return {}
+    return best_item or {}
+
+
 async def _fetch_google_books(normalized_title: str, author: Optional[str], publisher: Optional[str] = None) -> dict:
-    query_parts = [f'intitle:"{normalized_title}"']
+    strict_query_parts = [f'intitle:"{normalized_title}"']
     if author:
-        query_parts.append(f'inauthor:"{author}"')
+        strict_query_parts.append(f'inauthor:"{author}"')
     if publisher:
-        query_parts.append(f'inpublisher:"{publisher}"')
-    params = {
-        "q": " ".join(query_parts),
-        "maxResults": 1,
-    }
+        strict_query_parts.append(f'inpublisher:"{publisher}"')
+
+    relaxed_query_parts = [f"intitle:{normalized_title}"]
+    if author:
+        relaxed_query_parts.append(f"inauthor:{author}")
+    if publisher:
+        relaxed_query_parts.append(f"inpublisher:{publisher}")
+
+    fallback_query = f"{normalized_title} {author or ''} {publisher or ''}".strip()
+
     api_key = os.getenv("GOOGLE_BOOKS_API_KEY")
-    if api_key:
-        params["key"] = api_key
 
     async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.get(GOOGLE_BOOKS_URL, params=params)
-        resp.raise_for_status()
-        data = resp.json()
-    items = data.get("items", [])
-    return items[0] if items else {}
+        common_params = {"orderBy": "relevance"}
+        if api_key:
+            common_params["key"] = api_key
+
+        all_items: List[dict] = []
+        seen_ids = set()
+
+        queries = [
+            (" ".join(strict_query_parts), 6),
+            (fallback_query or normalized_title, 15),
+        ]
+        if author:
+            # Only use relaxed field query when author is known; without author it is too noisy.
+            queries.append((" ".join(relaxed_query_parts), 12))
+
+        for query, max_results in queries:
+            resp = await client.get(
+                GOOGLE_BOOKS_URL,
+                params={
+                    **common_params,
+                    "q": query,
+                    "maxResults": max_results,
+                },
+            )
+            resp.raise_for_status()
+            for item in resp.json().get("items", []):
+                item_id = item.get("id")
+                if item_id and item_id in seen_ids:
+                    continue
+                if item_id:
+                    seen_ids.add(item_id)
+                all_items.append(item)
+
+        return _pick_best_google_books_match(all_items, normalized_title, author)
 
 
 async def _fetch_goodreads_rating(normalized_title: str, author: Optional[str]) -> Tuple[Optional[float], int, Optional[str]]:
@@ -213,6 +310,16 @@ def _extract_metadata(item: dict, normalized_title: str) -> dict:
     volume = item.get("volumeInfo", {})
     image_links = volume.get("imageLinks", {})
     identifiers = volume.get("industryIdentifiers", [])
+    raw_authors = volume.get("authors", [])
+    cleaned_authors: List[str] = []
+    for entry in raw_authors:
+        author_name = str(entry or "").strip()
+        lowered = author_name.lower()
+        if not author_name:
+            continue
+        if "wikipedia" in lowered or lowered.startswith("fonte") or "source" in lowered:
+            continue
+        cleaned_authors.append(author_name)
 
     isbn = None
     isbn_10 = None
@@ -245,7 +352,7 @@ def _extract_metadata(item: dict, normalized_title: str) -> dict:
 
     return {
         "title": volume.get("title", normalized_title),
-        "author": ", ".join(volume.get("authors", [])) or None,
+        "author": ", ".join(cleaned_authors) or None,
         "subtitle": volume.get("subtitle"),
         "publication_year": year,
         "published_date": volume.get("publishedDate"),
@@ -478,26 +585,29 @@ async def enrich_book(book: Book) -> Book:
             book.fetched_summary = str(meta.get("description")).strip()
             book.summary_source = "google_books_api"
 
-        # Try Goodreads to refine sentiment
-        gr_rating, gr_count, gr_desc = await _fetch_goodreads_rating(book.normalized_title, book.author)
-        if gr_rating:
-            gr_ratio = min(max(gr_rating / 5, 0), 1)
-            if gr_count and gr_count < 20:
-                gr_ratio = gr_ratio * 0.7 + 0.3 * random.uniform(0.4, 0.9)
-            book.positive_ratio = gr_ratio
-            book.average_rating = gr_rating
-            if gr_count:
-                book.ratings_count = gr_count
-        if gr_desc and not book.review_samples:
-            book.review_samples, discarded = _reviews_from_snippet_with_discarded(gr_desc)
-            discarded_examples.extend(discarded)
-        if gr_desc and len(book.review_samples) < 2:
-            more_reviews, discarded = _reviews_from_description_with_discarded(gr_desc)
-            discarded_examples.extend(discarded)
-            book.review_samples.extend(more_reviews)
-        if gr_desc and not book.fetched_summary:
-            book.fetched_summary = str(gr_desc).strip()
-            book.summary_source = "goodreads_crawler"
+        # Try Goodreads to refine sentiment.
+        try:
+            gr_rating, gr_count, gr_desc = await _fetch_goodreads_rating(book.normalized_title, book.author)
+            if gr_rating:
+                gr_ratio = min(max(gr_rating / 5, 0), 1)
+                if gr_count and gr_count < 20:
+                    gr_ratio = gr_ratio * 0.7 + 0.3 * random.uniform(0.4, 0.9)
+                book.positive_ratio = gr_ratio
+                book.average_rating = gr_rating
+                if gr_count:
+                    book.ratings_count = gr_count
+            if gr_desc and not book.review_samples:
+                book.review_samples, discarded = _reviews_from_snippet_with_discarded(gr_desc)
+                discarded_examples.extend(discarded)
+            if gr_desc and len(book.review_samples) < 2:
+                more_reviews, discarded = _reviews_from_description_with_discarded(gr_desc)
+                discarded_examples.extend(discarded)
+                book.review_samples.extend(more_reviews)
+            if gr_desc and not book.fetched_summary:
+                book.fetched_summary = str(gr_desc).strip()
+                book.summary_source = "goodreads_crawler"
+        except Exception:
+            pass
 
         # Fetch user-generated snippets from Goodreads when available.
         try:
@@ -515,22 +625,25 @@ async def enrich_book(book: Book) -> Book:
         except Exception:
             pass
 
-        if not book.fetched_summary:
-            ol_summary = await _fetch_openlibrary_summary(book.normalized_title, book.author)
-            if ol_summary:
-                book.fetched_summary = ol_summary
-                book.summary_source = "openlibrary_crawler"
+        try:
+            if not book.fetched_summary:
+                ol_summary = await _fetch_openlibrary_summary(book.normalized_title, book.author)
+                if ol_summary:
+                    book.fetched_summary = ol_summary
+                    book.summary_source = "openlibrary_crawler"
 
-        ol_meta = await _fetch_openlibrary_metadata(book.normalized_title, book.author)
-        if ol_meta:
-            if not book.openlibrary_key:
-                book.openlibrary_key = ol_meta.get("openlibrary_key")
-            if not book.first_publish_year:
-                book.first_publish_year = ol_meta.get("first_publish_year")
-            if not book.edition_count:
-                book.edition_count = ol_meta.get("edition_count")
-            if not book.language:
-                book.language = ol_meta.get("language")
+            ol_meta = await _fetch_openlibrary_metadata(book.normalized_title, book.author)
+            if ol_meta:
+                if not book.openlibrary_key:
+                    book.openlibrary_key = ol_meta.get("openlibrary_key")
+                if not book.first_publish_year:
+                    book.first_publish_year = ol_meta.get("first_publish_year")
+                if not book.edition_count:
+                    book.edition_count = ol_meta.get("edition_count")
+                if not book.language:
+                    book.language = ol_meta.get("language")
+        except Exception:
+            pass
 
         if not book.positive_ratio:
             book.positive_ratio = round(random.uniform(0.6, 0.95), 3)

@@ -12,6 +12,10 @@ from biblioforge.services.crawling_service import enrich_book
 from biblioforge.services.normalization_service import normalize_title
 
 
+class BookNotFoundError(ValueError):
+    """Raised when enrichment cannot reliably resolve a book."""
+
+
 class PipelineController:
     """Coordinates cleaning, enrichment, AI, and persistence."""
 
@@ -26,6 +30,29 @@ class PipelineController:
         self.repository = BookRepository(target)
         self.approved_repository = BookRepository(approved_target)
         self.default_cleaned_excel_path = cleaned_dir / "books_cleaned.xlsx"
+        self.last_import_skipped = 0
+
+    @staticmethod
+    def _is_reliably_enriched(book: Book) -> bool:
+        author = (book.author or "").strip().lower()
+        bad_author_markers = ["unknown author", "fonte wikipedia", "wikipedia source"]
+        has_real_author = bool(author) and not any(marker in author for marker in bad_author_markers)
+
+        has_trusted_link = any(
+            [
+                bool(getattr(book, "info_link", None)),
+                bool(getattr(book, "canonical_volume_link", None)),
+                bool(getattr(book, "openlibrary_key", None)),
+            ]
+        )
+
+        categories = [str(c).strip().lower() for c in (book.categories or []) if str(c).strip()]
+        has_real_categories = any(cat != "unknown genre" for cat in categories)
+        has_summary = bool((book.fetched_summary or "").strip())
+        has_isbn = bool((book.isbn or "").strip())
+
+        # Require at least one trusted external anchor and meaningful bibliographic evidence.
+        return has_trusted_link and (has_real_author or has_real_categories or has_summary or has_isbn)
 
     def resolve_excel_path(self, excel_path: Optional[Path | str] = None) -> Path:
         """Resolve Excel path from absolute or common relative locations."""
@@ -57,18 +84,33 @@ class PipelineController:
         catalog_quantity: Optional[int] = None,
         catalog_price: Optional[float] = None,
     ) -> Book:
-        normalized_title = normalize_title(raw_title, author)
+        if not (raw_title or "").strip():
+            raise BookNotFoundError("Title is empty. Please insert a valid book title.")
+
+        cleaned_author = (author or "").strip() or None
+        normalized_catalog = normalize_catalog_entry(
+            raw_title=raw_title,
+            raw_author=cleaned_author,
+            raw_publisher=catalog_publisher,
+        )
+        normalized_input_title = normalized_catalog.get("title") or raw_title
+        normalized_input_author = normalized_catalog.get("author") or cleaned_author
+        normalized_title = normalize_title(normalized_input_title, normalized_input_author)
         book = Book(
             raw_title=raw_title,
             normalized_title=normalized_title,
-            author=author,
+            author=normalized_input_author,
             catalog_ean=catalog_ean,
-            catalog_publisher=catalog_publisher,
+            catalog_publisher=normalized_catalog.get("publisher") or catalog_publisher,
             catalog_quantity=catalog_quantity,
             catalog_price=catalog_price,
             status=BookStatus.IN_PROGRESS,
         )
         book = asyncio.run(enrich_book(book))
+        if not self._is_reliably_enriched(book):
+            raise BookNotFoundError(
+                "Book not found with sufficient confidence. Please correct title/author and try again."
+            )
         book = generate_insights(book)
         return self.repository.upsert_book(book)
 
@@ -117,7 +159,9 @@ class PipelineController:
 
         workbook = pd.read_excel(resolved_excel_path, sheet_name=None)
         queued = 0
+        skipped = 0
         seen = set()
+        self.last_import_skipped = 0
 
         title_candidates = ["Title", "Titolo", "Book Title", "Titolo Libro", "Libro", "Nome Libro"]
         author_candidates = ["Author", "Autore", "Authors", "Autori", "Writer"]
@@ -206,15 +250,21 @@ class PipelineController:
                     raw_publisher=publisher_value or None,
                 )
 
-                self.ingest_raw_book(
-                    normalized_catalog.get("title") or title_value,
-                    normalized_catalog.get("author") or author,
-                    catalog_ean=ean_value or None,
-                    catalog_publisher=normalized_catalog.get("publisher") or publisher_value or None,
-                    catalog_quantity=quantity_value,
-                    catalog_price=price_value,
-                )
-                queued += 1
+                try:
+                    self.ingest_raw_book(
+                        normalized_catalog.get("title") or title_value,
+                        normalized_catalog.get("author") or author,
+                        catalog_ean=ean_value or None,
+                        catalog_publisher=normalized_catalog.get("publisher") or publisher_value or None,
+                        catalog_quantity=quantity_value,
+                        catalog_price=price_value,
+                    )
+                    queued += 1
+                except BookNotFoundError:
+                    skipped += 1
+                    continue
+
+        self.last_import_skipped = skipped
         return queued
 
 
@@ -222,6 +272,17 @@ class PipelineController:
         book = self.repository.get_book(book_id)
         if not book:
             return None
+
+        if not (book.author or "").strip():
+            refreshed_catalog = normalize_catalog_entry(
+                raw_title=book.raw_title,
+                raw_author=book.author,
+                raw_publisher=getattr(book, "catalog_publisher", None),
+            )
+            book.author = refreshed_catalog.get("author") or book.author
+            inferred_title = refreshed_catalog.get("title") or book.raw_title
+            if inferred_title:
+                book.normalized_title = normalize_title(inferred_title, book.author)
 
         previous_summary = book.insights.summary if book.insights else None
         regeneration_token = str(uuid4())

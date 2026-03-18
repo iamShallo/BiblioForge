@@ -1,6 +1,6 @@
 import streamlit as st
 
-from biblioforge.controllers.pipeline_controller import PipelineController
+from biblioforge.controllers.pipeline_controller import BookNotFoundError, PipelineController
 from biblioforge.models.book import Book, BookStatus
 from biblioforge.services.normalization_service import normalize_title
 
@@ -239,12 +239,16 @@ def render_editing_column(book: Book) -> None:
 def render_ingestion_box():
     st.markdown("### Add a Book")
     with st.form("ingestion-form"):
-        title = st.text_input("Raw Title", value="The Name of the Rose - Umberto Eco")
-        author = st.text_input("Author", value="Umberto Eco")
+        title = st.text_input("Raw Title", value="The Name of the Rose")
+        author = st.text_input("Author (optional)", value="")
+        st.caption("You can type only the title: the pipeline will try to resolve the author automatically.")
         submitted = st.form_submit_button("Ingest and Enrich")
         if submitted:
-            book = controller.ingest_raw_book(title, author)
-            st.success(f"Book queued for review: {book.normalized_title}")
+            try:
+                book = controller.ingest_raw_book(title, author or None)
+                st.success(f"Book queued for review: {book.normalized_title}")
+            except BookNotFoundError as exc:
+                st.error(str(exc))
 
 
 def render_excel_ingestion_box() -> None:
@@ -259,6 +263,10 @@ def render_excel_ingestion_box() -> None:
         try:
             total = controller.ingest_books_from_excel(excel_path_input)
             st.success(f"Imported {total} books into review queue.")
+            if getattr(controller, "last_import_skipped", 0):
+                st.warning(
+                    f"Skipped {controller.last_import_skipped} rows because the book could not be resolved confidently."
+                )
         except Exception as exc:
             st.error(f"Excel import failed: {exc}")
 
