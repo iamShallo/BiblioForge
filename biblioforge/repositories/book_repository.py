@@ -57,19 +57,62 @@ class BookRepository:
         self._persist()
         return book
 
+    @staticmethod
+    def _normalize_status(raw_status: Optional[str]) -> BookStatus:
+        if not raw_status:
+            return BookStatus.TO_CLEAN
+
+        mapping = {
+            "raw": BookStatus.TO_CLEAN,
+            "cleaned": BookStatus.IN_PROGRESS,
+            "enriched": BookStatus.IN_PROGRESS,
+            "pending_review": BookStatus.TO_APPROVE,
+            "approved": BookStatus.APPROVED,
+            "rejected": BookStatus.TO_CLEAN,
+            "da_pulire": BookStatus.TO_CLEAN,
+            "in_lavorazione": BookStatus.IN_PROGRESS,
+            "da_approvare": BookStatus.TO_APPROVE,
+            "approvato": BookStatus.APPROVED,
+            "to_clean": BookStatus.TO_CLEAN,
+            "in_progress": BookStatus.IN_PROGRESS,
+            "to_approve": BookStatus.TO_APPROVE,
+        }
+        return mapping.get(str(raw_status), BookStatus.TO_CLEAN)
+
     def seed_sample_if_empty(self) -> None:
         if self._cache:
             return
         sample = Book(
-            raw_title="Il Nome della Rosa - Umberto Eco",
+            raw_title="The Name of the Rose - Umberto Eco",
             normalized_title="The Name of the Rose",
             author="Umberto Eco",
+            fetched_summary=(
+                "In a 14th-century abbey, friar-detective William of Baskerville investigates "
+                "murders linked to a forbidden manuscript and a conflict over knowledge."
+            ),
+            summary_source="seed",
             isbn="312136632299",
+            isbn_10="8804631894",
+            published_date="2010-09-14",
             publication_year=2010,
             pages=355,
             cover_url=(
                 "https://images-na.ssl-images-amazon.com/images/I/51U0gB02cDL._SX331_BO1,204,203,200_.jpg"
             ),
+            publisher="Bompiani",
+            categories=["Historical Fiction", "Mystery", "Crime"],
+            subtitle="A Medieval Mystery",
+            language="it",
+            maturity_rating="NOT_MATURE",
+            print_type="BOOK",
+            info_link="https://books.google.com",
+            preview_link="https://books.google.com",
+            canonical_volume_link="https://books.google.com",
+            openlibrary_key="OL82563W",
+            first_publish_year=1980,
+            edition_count=120,
+            average_rating=4.5,
+            ratings_count=24000,
             positive_ratio=0.913,
             review_samples=[
                 ReviewSample(
@@ -100,7 +143,7 @@ class BookRepository:
                     ),
                 ],
             ),
-            status=BookStatus.PENDING_REVIEW,
+            status=BookStatus.TO_APPROVE,
         )
         self.upsert_book(sample)
 
@@ -120,13 +163,32 @@ class BookRepository:
             raw_title=data.get("raw_title", ""),
             normalized_title=data.get("normalized_title", ""),
             author=data.get("author"),
+            fetched_summary=data.get("fetched_summary"),
+            summary_source=data.get("summary_source"),
             isbn=data.get("isbn"),
+            isbn_10=data.get("isbn_10"),
+            published_date=data.get("published_date"),
             publication_year=data.get("publication_year"),
             pages=data.get("pages"),
             cover_url=data.get("cover_url"),
+            publisher=data.get("publisher"),
+            categories=list(data.get("categories", [])),
+            subtitle=data.get("subtitle"),
+            language=data.get("language"),
+            maturity_rating=data.get("maturity_rating"),
+            print_type=data.get("print_type"),
+            info_link=data.get("info_link"),
+            preview_link=data.get("preview_link"),
+            canonical_volume_link=data.get("canonical_volume_link"),
+            openlibrary_key=data.get("openlibrary_key"),
+            first_publish_year=data.get("first_publish_year"),
+            edition_count=data.get("edition_count"),
+            average_rating=data.get("average_rating"),
+            ratings_count=int(data.get("ratings_count", 0) or 0),
             positive_ratio=data.get("positive_ratio"),
             review_samples=reviews,
             insights=insights,
-            status=BookStatus(data.get("status", BookStatus.RAW)),
+            reject_attempts=int(data.get("reject_attempts", 0) or 0),
+            status=BookRepository._normalize_status(data.get("status")),
             id=data.get("id"),
         )

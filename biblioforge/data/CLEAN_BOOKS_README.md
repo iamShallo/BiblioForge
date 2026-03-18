@@ -1,54 +1,62 @@
 # BiblioForge - Data Cleaning Script
 
-## Descrizione
+## Description
 
-Script Python per la pulizia e trasformazione del database di libri grezzo (XLSX) in formato strutturato (CSV) per BiblioForge.
+Python script to clean and transform the raw book database (XLSX) into a structured XLSX format for BiblioForge.
 
-## Requisiti
+## Requirements
 
 - Python 3.7+
 - pandas
-- openpyxl (per lettura Excel)
+- openpyxl (for Excel read/write)
 
-Installare le dipendenze:
+Install dependencies:
+
 ```bash
 pip install pandas openpyxl
 ```
 
-## Uso
+## Usage
 
-Eseguire lo script dalla cartella root del progetto:
+Run the script from the project root folder:
 
 ```bash
 python clean_books.py
 ```
 
-## Trasformazioni Applicate
+## Applied Transformations
 
-### 1. Rinominazione Colonne
-- La colonna `Q.t` (con caratteri speciali) viene rinominata in `Quantità`
+### 1. Column Rename
 
-### 2. Split Titolo-Autore
-- La colonna `TITOLO - AUTORE` viene separata in due colonne distinte:
-  - `Titolo`: contiene il titolo del libro
-  - `Autore`: contiene il nome dell'autore
-- Utilizza `split(' - ', n=1)` per gestire separatori multipli
-- Se non presente, il valore va interamente nel Titolo
+- The `Q.t` column (possibly with special characters) is renamed to `Quantità`.
 
-### 3. Pulizia Spazi
-- Tutti i valori di testo vengono processati con `.strip()`
-- Rimuove spazi superflui all'inizio e alla fine
+### 2. Title-Author Split
 
-### 4. Formattazione Prezzo
-- La colonna `Prezzo` viene formattata come stringa con formato `EUR x.xx`
-- Esempio: `6.9` → `EUR 6.90`
+- The `TITOLO - AUTORE` column is split into two columns:
+- `Titolo`: book title
+- `Autore`: author name
+- Uses `split(' - ', n=1)` to handle multiple separators.
+- If the separator is not found, the full value is kept in `Titolo`.
 
-### 5. Conversione Quantità
-- La colonna `Quantità` viene convertita a intero
-- Valori mancanti vengono sostituiti con 0
+### 3. Whitespace Cleanup
 
-### 6. Riordino Colonne
-Ordine finale nel file CSV:
+- All text values are processed with `.strip()`.
+- Leading and trailing whitespace is removed.
+
+### 4. Price Formatting
+
+- The `Prezzo` column is formatted as `EUR x.xx`.
+- Example: `6.9` -> `EUR 6.90`
+
+### 5. Quantity Conversion
+
+- The `Quantità` column is converted to integer.
+- Missing values are replaced with 0.
+
+### 6. Column Reordering
+
+Final order in the output file:
+
 1. Codice EAN
 2. Cod. Ed. Int.
 3. Titolo
@@ -59,56 +67,57 @@ Ordine finale nel file CSV:
 
 ## Input/Output
 
-**Input**: `biblioforge/data/raw/Stampa_Libri_Interni_RAW.xlsx`
-**Output**: `biblioforge/data/cleaned/books_cleaned.csv`
+Input: `biblioforge/data/raw/Stampa_Libri_Interni_RAW.xlsx`
+Output: `biblioforge/data/cleaned/books_cleaned.xlsx`
 
-## Gestione Errori
+## Error Handling
 
-Lo script include:
-- Verifiche di esistenza dei file
-- Gestione di valori mancanti (NaN)
-- Gestione di separatori multipli nel split
-- Creazione automatica della cartella output se non esiste
-- Try-catch globale con traceback completo
+The script includes:
 
-## Statistiche Elaborazione
+- Input file existence checks
+- Missing value handling (NaN)
+- Multiple-separator handling during split
+- Automatic output-folder creation
+- Global try/except with full traceback
 
-Il file di input contiene **2526 record** che vengono elaborati e salvati nel file CSV pulito.
+## Processing Stats
 
-## Output di Esempio
+The input file contains 2526 records, which are processed and saved in the cleaned output file.
 
+## Example Output
+
+```text
+[1/9] Reading raw Excel file...
+    > Loaded 2526 records
+
+[2/9] Renaming columns...
+    > Column 'Q.t' renamed to 'Quantità'
+
+[3/9] Splitting TITOLO - AUTORE...
+    > Column 'TITOLO - AUTORE' split into 'Titolo' and 'Autore'
+
+[4/9] Trimming extra whitespace (strip)...
+    > Whitespace removed from 5 text columns
+
+[5/9] Formatting Prezzo column...
+    > Prezzo formatted as EUR
+
+[6/9] Converting Quantità to integer...
+    > Quantità converted to integer
+
+[7/9] Reordering columns...
+    > Columns reordered
+
+[8/9] Creating output folder...
+    > Folder already exists: C:\...\biblioforge\data\cleaned
+
+[9/9] Saving XLSX file...
+    > File saved: C:\...\biblioforge\data\cleaned\books_cleaned.xlsx
+
+CLEANING COMPLETED SUCCESSFULLY!
 ```
-[1/8] Lettura del file Excel grezzo...
-    > Caricati 2526 record
 
-[2/8] Rinominazione colonne...
-    > Colonna 'Q.t' rinominata a 'Quantità'
-
-[3/8] Separazione TITOLO - AUTORE...
-    > Colonna 'TITOLO - AUTORE' separata in 'Titolo' e 'Autore'
-
-[4/8] Rimozione spazi superflui (strip)...
-    > Spazi rimossi da 5 colonne di testo
-
-[5/8] Formattazione colonna Prezzo...
-    > Prezzo formattato con simbolo Euro
-
-[6/8] Conversione Quantità a intero...
-    > Quantità convertita a intero
-
-[7/8] Riordino colonne...
-    > Colonne riordinate
-
-[8/8] Creazione cartella output...
-    > Cartella già esistente: C:\...\biblioforge\data\cleaned
-
-[9/9] Salvataggio file CSV...
-    > File salvato: C:\...\biblioforge\data\cleaned\books_cleaned.csv
-
-PULIZIA COMPLETATA CON SUCCESSO!
-```
-
-## Campione dei Dati Puliti
+## Cleaned Data Sample
 
 | Codice EAN | Cod. Ed. Int. | Titolo | Autore | EDITORE | Quantità | Prezzo |
 |---|---|---|---|---|---|---|
@@ -116,13 +125,8 @@ PULIZIA COMPLETATA CON SUCCESSO!
 | 9788822901637 | NaN | MELENCOLIA I DI DÜRER... | PANOFSKY ERWIN; SAXL... | v-quodlibet | 1 | EUR 24.00 |
 | 9788804765332 | NaN | RECHERCHE DI PROUST... | RABONI GIOVANNI | V-MONDADORI | 1 | EUR 13.00 |
 
-## Encoding
-
-Il file CSV viene salvato con encoding **UTF-8 BOM** (`utf-8-sig`) per garantire compatibilità con programmi come Excel mantenendo i caratteri accentati italiani.
-
 ---
 
-**Progetto**: BiblioForge  
-**Data**: 2026  
-**Versione**: 1.0
-
+Project: BiblioForge  
+Date: 2026  
+Version: 1.0
