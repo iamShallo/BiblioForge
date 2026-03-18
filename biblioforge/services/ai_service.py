@@ -2,7 +2,9 @@
 
 import json
 import os
+import re
 from typing import List, Optional
+from uuid import uuid4
 
 import httpx
 from pydantic import BaseModel, ValidationError, Field
@@ -27,28 +29,186 @@ class InsightsPayload(BaseModel):
     rejected_information: List[TransparencyNotePayload] = Field(default_factory=list)
 
 
+def _word_count(text: str) -> int:
+    return len(re.findall(r"\b\w+\b", text or ""))
+
+
+def _summary_is_acceptable(summary: str) -> bool:
+    lowered = (summary or "").lower()
+    forbidden_markers = [
+        "author:",
+        "year:",
+        "pages:",
+        "isbn:",
+        "reader excerpts mention",
+        "is presented with the available catalog metadata",
+        "revision note [",
+    ]
+    if any(marker in lowered for marker in forbidden_markers):
+        return False
+
+    spoilers = ["ending", "killer is", "turns out", "in the final", "identity revealed"]
+    if any(token in lowered for token in spoilers):
+        return False
+
+    words = _word_count(summary)
+    return 55 <= words <= 170
+
+
+def _tags_are_acceptable(tags: List[str]) -> bool:
+    clean = [t.strip() for t in tags if str(t).strip()]
+    if len(clean) < 4:
+        return False
+    if len(clean) > 10:
+        return False
+    # Avoid low-quality one-word noise tags.
+    very_short = [t for t in clean if len(t) <= 2]
+    if very_short:
+        return False
+    return True
+
+
+def _derive_tags(book: Book) -> List[str]:
+    candidates: List[str] = []
+    if getattr(book, "categories", None):
+        candidates.extend(book.categories)
+
+    # Prefer broad editorial tags over author names.
+    if book.publication_year and book.publication_year < 1980:
+        candidates.append("20th Century")
+    if book.publication_year and book.publication_year >= 2000:
+        candidates.append("Contemporary")
+    if (book.positive_ratio or 0) >= 0.85:
+        candidates.append("Highly Rated")
+    if book.publication_year and book.publication_year < 2000:
+        candidates.append("Classic")
+
+    if book.fetched_summary:
+        text = book.fetched_summary.lower()
+        keyword_tags = {
+            "murder": "Mystery",
+            "detective": "Investigation",
+            "history": "Historical Fiction",
+            "war": "War",
+            "romance": "Romance",
+            "science": "Science",
+            "fantasy": "Fantasy",
+            "crime": "Crime",
+            "politic": "Political",
+            "religion": "Religion",
+            "philosoph": "Philosophy",
+            "court": "Legal",
+            "family": "Family Saga",
+            "magic": "Magic",
+            "coming-of-age": "Coming of Age",
+        }
+        for keyword, tag in keyword_tags.items():
+            if keyword in text:
+                candidates.append(tag)
+
+    if book.review_samples:
+        review_text = " ".join(sample.text for sample in book.review_samples).lower()
+        review_map = {
+            "slow": "Slow Burn",
+            "twist": "Twisty",
+            "atmosphere": "Atmospheric",
+            "character": "Character-Driven",
+            "world": "World-Building",
+        }
+        for keyword, tag in review_map.items():
+            if keyword in review_text:
+                candidates.append(tag)
+
+    ordered = []
+    seen = set()
+    for item in candidates:
+        clean = str(item).strip()
+        if not clean:
+            continue
+        key = clean.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(clean)
+    return ordered[:8]
+
+
+def _derive_rejected_information(book: Book) -> List[TransparencyNote]:
+    rejected: List[TransparencyNote] = []
+    if not book.review_samples:
+        rejected.append(
+            TransparencyNote(
+                reason="No direct user reviews",
+                detail="Excluded reader-opinion claims because no review samples were available.",
+            )
+        )
+    if not book.isbn:
+        rejected.append(
+            TransparencyNote(
+                reason="Missing ISBN",
+                detail="Dropped edition-specific details due to missing ISBN metadata.",
+            )
+        )
+    if not book.publication_year:
+        rejected.append(
+            TransparencyNote(
+                reason="Missing publication date",
+                detail="Removed historical placement claims that require a verified publication year.",
+            )
+        )
+    if not book.fetched_summary:
+        rejected.append(
+            TransparencyNote(
+                reason="Insufficient synopsis",
+                detail="Avoided plot-specific statements because no trusted summary was fetched.",
+            )
+        )
+    if not rejected:
+        rejected.append(
+            TransparencyNote(
+                reason="Marketing language filtered",
+                detail="Removed promotional wording to keep the report factual and source-grounded.",
+            )
+        )
+    return rejected[:4]
+
+
 def _fallback_insights(book: Book) -> BookInsights:
     title = book.normalized_title or book.raw_title
+    base_summary = (book.fetched_summary or "").strip()
+
+    # Build a spoiler-safe editorial abstract from available evidence.
+    review_line = ""
+    if book.review_samples:
+        review_line = f" Readers describe it as {book.review_samples[0].text[:130]}"
+
+    if not base_summary:
+        base_summary = (
+            f"{title} is presented through its setting, themes, and tone, without revealing major plot turns."
+        )
+
+    spoiler_terms = ["dies", "killer", "ending", "finale", "murderer", "twist", "identity revealed"]
+    lowered = base_summary.lower()
+    if any(term in lowered for term in spoiler_terms):
+        base_summary = (
+            f"{title} explores its central conflict and themes with a focus on atmosphere and character stakes, "
+            "without disclosing key revelations."
+        )
+
+    summary_text = base_summary.rstrip()
+    if summary_text and summary_text[-1] not in ".!?":
+        summary_text += "."
+    if review_line:
+        summary_text = f"{summary_text}{review_line}"
+
     return BookInsights(
-        summary=(
-            f"{title} blends investigation and history to surface themes of knowledge and power. "
-            "Reviews highlight atmosphere, textured world building, and steady suspense."
-        ),
-        tags=[tag for tag in ["Historical Fiction", "Mystery", "Investigation", book.author] if tag],
-        rejected_information=[
-            TransparencyNote(
-                reason="Off-focus trivia",
-                detail="Removed film adaptation details and marketing copy.",
-            ),
-            TransparencyNote(
-                reason="Redundant praise",
-                detail="Collapsed repetitive review sentences into one insight.",
-            ),
-        ],
+        summary=summary_text,
+        tags=_derive_tags(book),
+        rejected_information=_derive_rejected_information(book),
     )
 
 
-def _build_prompt(book: Book) -> str:
+def _build_prompt(book: Book, regeneration_token: Optional[str] = None) -> str:
     rating_line = f"Positive ratio: {book.positive_ratio}" if book.positive_ratio else ""
     reviews: List[str] = [f"- {r.reviewer}: {r.text} (rating {r.rating})" for r in book.review_samples]
     reviews_block = "\n".join(reviews) if reviews else "- No review samples available."
@@ -56,21 +216,55 @@ def _build_prompt(book: Book) -> str:
         "You are generating an editorial report for a book. "
         "Return JSON with keys: summary (string), tags (array of strings), "
         "rejected_information (array of objects with reason and detail). "
-        "Be concise; avoid opinions not grounded in provided inputs.\n\n"
+        "Be concise; avoid opinions not grounded in provided inputs.\n"
+        "Summary constraints: 80-140 words, spoiler-free, no ending reveal, no killer reveal, no final twist reveal.\n"
+        "Write summary as a back-cover style abstract focused on setup, themes, atmosphere, and stakes.\n"
+        "Tag constraints: provide 5 to 8 high-quality tags (genre, tone, themes, audience, pacing), not author names.\n"
+        "Do not append metadata fields like Author/Year/ISBN/Pages in the summary.\n"
+        "Use fresh wording and sentence structure for each generation.\n"
+        f"Regeneration token: {regeneration_token or 'initial-pass'}\n\n"
+        f"Reject attempts so far: {book.reject_attempts}\n"
         f"Title: {book.normalized_title or book.raw_title}\n"
         f"Author: {book.author or 'Unknown'}\n"
         f"ISBN: {book.isbn or '-'}\n"
         f"Year: {book.publication_year or '-'}\n"
         f"Pages: {book.pages or '-'}\n"
         f"{rating_line}\n"
+        f"Crawler/API Summary: {book.fetched_summary or '-'}\n"
+        f"Crawler/API Source: {book.summary_source or '-'}\n"
         "Reviews:\n"
         f"{reviews_block}\n"
         "JSON only, no markdown, no prose."
     )
 
 
+def _enforce_summary_variation(summary: str, regeneration_token: Optional[str]) -> str:
+    if not regeneration_token:
+        return summary
+    variants = [
+        "The narrative emphasis stays on themes, atmosphere, and stakes without revealing decisive turns.",
+        "The description highlights tone and central conflict while keeping major revelations undisclosed.",
+        "The abstract prioritizes setting and tension, avoiding spoilers about late-story outcomes.",
+    ]
+    idx = abs(hash(regeneration_token)) % len(variants)
+    base = summary.strip()
+    if base and base[-1] not in ".!?":
+        base += "."
+    return f"{base} {variants[idx]}"
+
+
 def _parse_gemini_response(text: str) -> BookInsights:
-    data = json.loads(text)
+    payload_text = text.strip()
+    fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", payload_text, re.DOTALL)
+    if fenced:
+        payload_text = fenced.group(1)
+    if payload_text and payload_text[0] != "{":
+        first = payload_text.find("{")
+        last = payload_text.rfind("}")
+        if first != -1 and last != -1 and first < last:
+            payload_text = payload_text[first:last + 1]
+
+    data = json.loads(payload_text)
     payload = InsightsPayload(**data)
     rejected = [TransparencyNote(**item.dict()) for item in payload.rejected_information]
     return BookInsights(
@@ -80,33 +274,73 @@ def _parse_gemini_response(text: str) -> BookInsights:
     )
 
 
-def generate_insights(book: Book) -> Book:
+def generate_insights(
+    book: Book,
+    regeneration_token: Optional[str] = None,
+    previous_summary: Optional[str] = None,
+) -> Book:
     """Call Gemini; fall back to local heuristics on error."""
     api_key = os.getenv("GEMINI_API_KEY")
-    prompt = _build_prompt(book)
-
     insights = None
     if api_key:
-        try:
-            with httpx.Client(timeout=20) as client:
-                resp = client.post(
-                    GEMINI_URL,
-                    params={"key": api_key},
-                    json={"contents": [{"parts": [{"text": prompt}]}]},
-                )
-                resp.raise_for_status()
-                candidates = resp.json().get("candidates", [])
-                content: Optional[str] = None
-                if candidates:
-                    content = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                if content:
-                    insights = _parse_gemini_response(content)
-        except (httpx.HTTPError, ValidationError, json.JSONDecodeError):
-            insights = None
+        max_attempts = 3
+        with httpx.Client(timeout=20) as client:
+            for attempt in range(max_attempts):
+                try:
+                    token_suffix = f"{regeneration_token or 'run'}-a{attempt + 1}"
+                    prompt = _build_prompt(book, regeneration_token=token_suffix)
+                    resp = client.post(
+                        GEMINI_URL,
+                        params={"key": api_key},
+                        json={
+                            "contents": [{"parts": [{"text": prompt}]}],
+                            "generationConfig": {
+                                "temperature": 0.9,
+                                "topP": 0.95,
+                            },
+                        },
+                    )
+                    resp.raise_for_status()
+                    candidates = resp.json().get("candidates", [])
+                    content: Optional[str] = None
+                    if candidates:
+                        content = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                    if not content:
+                        continue
+
+                    candidate = _parse_gemini_response(content)
+                    if not _summary_is_acceptable(candidate.summary):
+                        continue
+                    if not _tags_are_acceptable(candidate.tags):
+                        candidate.tags = _derive_tags(book)
+                    insights = candidate
+                    break
+                except (httpx.HTTPError, ValidationError, json.JSONDecodeError):
+                    insights = None
+                    continue
 
     if not insights:
         insights = _fallback_insights(book)
+        if not _summary_is_acceptable(insights.summary):
+            # Last-resort normalized fallback to avoid legacy templated outputs.
+            title = book.normalized_title or book.raw_title
+            insights.summary = (
+                f"{title} introduces its central conflict through atmosphere, stakes, and character tension, "
+                "keeping key revelations undisclosed while highlighting the themes that define the reading experience."
+            )
+        if not _tags_are_acceptable(insights.tags):
+            insights.tags = _derive_tags(book)
+
+    if previous_summary and insights.summary.strip() == previous_summary.strip():
+        token = regeneration_token or str(uuid4())
+        insights.summary = _enforce_summary_variation(insights.summary, token)
+        if not _summary_is_acceptable(insights.summary):
+            title = book.normalized_title or book.raw_title
+            insights.summary = (
+                f"{title} frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict "
+                "rather than plot revelations."
+            )
 
     book.insights = insights
-    book.status = BookStatus.PENDING_REVIEW
+    book.status = BookStatus.TO_APPROVE
     return book

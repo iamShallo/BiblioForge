@@ -1,7 +1,4 @@
-"""
-BiblioForge - Data Cleaning Script
-Script per pulire e trasformare il database di libri grezzo in formato strutturato.
-"""
+"""BiblioForge data cleaning script."""
 
 import os
 import pandas as pd
@@ -9,120 +6,110 @@ from pathlib import Path
 
 
 def clean_books_data(input_file: str, output_file: str) -> pd.DataFrame:
-    """
-    Legge il file Excel grezzo, applica trasformazioni e salva come XLSX.
+    """Read the raw Excel file, apply transformations, and save a cleaned XLSX."""
     
-    Args:
-        input_file: Percorso del file Excel grezzo
-        output_file: Percorso del file XLSX pulito
-    
-    Returns:
-        DataFrame con i dati puliti
-    """
-    
-    # Leggi il file Excel
-    print("[1/8] Lettura del file Excel grezzo...")
+    # Read the raw Excel file.
+    print("[1/9] Reading raw Excel file...")
     df = pd.read_excel(input_file)
-    print(f"    > Caricati {len(df)} record")
+    print(f"    > Loaded {len(df)} records")
     
-    # Step 1: Rinomina colonne
-    print("\n[2/8] Rinominazione colonne...")
-    # La colonna Q.t ha caratteri speciali \xa0, la rinominiamo in Quantità
-    # Usa il nome della colonna esatto da pandas
+    # Step 1: Rename columns.
+    print("\n[2/9] Renaming columns...")
+    # The Q.t column may contain special characters (\xa0), so we detect it safely.
     old_col_name = [col for col in df.columns if 'Q.t' in col][0] if any('Q.t' in col for col in df.columns) else 'Q.t\xa0'
     df.rename(columns={old_col_name: 'Quantità'}, inplace=True)
-    print(f"    > Colonna '{old_col_name}' rinominata a 'Quantità'")
+    print(f"    > Column '{old_col_name}' renamed to 'Quantità'")
     
-    # Step 2: Split colonna TITOLO - AUTORE
-    print("\n[3/8] Separazione TITOLO - AUTORE...")
-    # Separa usando n=1 per gestire il caso di " - " multipli
+    # Step 2: Split the TITOLO - AUTORE column.
+    print("\n[3/9] Splitting TITOLO - AUTORE...")
+    # Split with n=1 to handle multiple separators correctly.
     split_data = df['TITOLO - AUTORE'].str.split(' - ', n=1, expand=True)
     
-    # Gestisci il caso in cui lo split produca meno di 2 colonne
+    # Handle rows where the separator is missing.
     if len(split_data.columns) == 1:
-        # Se non c'è " - ", assegna tutto al Titolo
+        # If " - " is missing, keep full text in title.
         df['Titolo'] = split_data[0]
         df['Autore'] = ''
     else:
         df['Titolo'] = split_data[0]
         df['Autore'] = split_data[1]
     
-    print(f"    > Colonna 'TITOLO - AUTORE' separata in 'Titolo' e 'Autore'")
+    print("    > Column 'TITOLO - AUTORE' split into 'Titolo' and 'Autore'")
     
-    # Step 3: Pulizia spazi bianchi
-    print("\n[4/8] Rimozione spazi superflui (strip)...")
+    # Step 3: Trim whitespace.
+    print("\n[4/9] Trimming extra whitespace (strip)...")
     string_columns = df.select_dtypes(include=['object', 'string']).columns
     for col in string_columns:
         df[col] = df[col].str.strip()
-    print(f"    > Spazi rimossi da {len(string_columns)} colonne di testo")
+    print(f"    > Whitespace removed from {len(string_columns)} text columns")
     
-    # Step 4: Formattazione Prezzo con simbolo Euro
-    print("\n[5/8] Formattazione colonna Prezzo...")
-    # Converti a numerico e formatta con € 
+    # Step 4: Format price as EUR.
+    print("\n[5/9] Formatting Prezzo column...")
+    # Convert to numeric and format as EUR.
     df['Prezzo'] = df['Prezzo'].apply(lambda x: f"EUR {x:.2f}" if pd.notna(x) else "")
-    print("    > Prezzo formattato con simbolo Euro")
+    print("    > Prezzo formatted as EUR")
     
-    # Step 5: Converti Quantità a intero (dove possibile)
-    print("\n[6/8] Conversione Quantità a intero...")
+    # Step 5: Convert Quantità to integer.
+    print("\n[6/9] Converting Quantità to integer...")
     df['Quantità'] = df['Quantità'].fillna(0).astype(int)
-    print("    > Quantità convertita a intero")
+    print("    > Quantità converted to integer")
     
-    # Step 6: Riordina le colonne in ordine logico
-    print("\n[7/8] Riordino colonne...")
+    # Step 6: Reorder columns.
+    print("\n[7/9] Reordering columns...")
     columns_order = ['Codice EAN', 'Cod. Ed. Int.', 'Titolo', 'Autore', 
                      'EDITORE', 'Quantità', 'Prezzo']
-    # Seleziona solo le colonne che esistono
+    # Keep only columns that exist.
     columns_to_keep = [col for col in columns_order if col in df.columns]
     df = df[columns_to_keep]
-    print("    > Colonne riordinate")
+    print("    > Columns reordered")
     
-    # Step 7: Crea la cartella output se non esiste
-    print("\n[8/8] Creazione cartella output...")
+    # Step 7: Create output folder if needed.
+    print("\n[8/9] Creating output folder...")
     output_dir = os.path.dirname(output_file)
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
-        print(f"    > Cartella creata: {output_dir}")
+        print(f"    > Folder created: {output_dir}")
     else:
-        print(f"    > Cartella già esistente: {output_dir}")
+        print(f"    > Folder already exists: {output_dir}")
     
-    # Step 9: Salva il file XLSX con encoding UTF-8 BOM per preservare i caratteri
-    print("\n[9/9] Salvataggio file XLSX...")
+    # Step 8: Save XLSX output.
+    print("\n[9/9] Saving XLSX file...")
     df.to_excel(output_file, index=False, sheet_name='Libri')
-    print(f"    > File salvato: {output_file}")
+    print(f"    > File saved: {output_file}")
     
-    # Riepilogo
+    # Summary
     print("\n" + "="*70)
-    print("PULIZIA COMPLETATA CON SUCCESSO!")
+    print("CLEANING COMPLETED SUCCESSFULLY!")
     print("="*70)
-    print(f"\nStatistiche:")
-    print(f"  - Righe elaborate: {len(df)}")
-    print(f"  - Colonne nel file finale: {len(df.columns)}")
-    print(f"  - Colonne: {', '.join(df.columns)}")
-    print(f"\nAnteprima dati puliti (prime 5 righe):")
+    print("\nStatistics:")
+    print(f"  - Rows processed: {len(df)}")
+    print(f"  - Columns in final file: {len(df.columns)}")
+    print(f"  - Columns: {', '.join(df.columns)}")
+    print("\nPreview of cleaned data (first 5 rows):")
     print(df.head().to_string())
     
     return df
 
 
 def main():
-    """Funzione principale per eseguire il script di pulizia."""
+    """Main entrypoint for the cleaning script."""
     
-    # Percorsi dei file
+    # File paths
     project_root = Path(__file__).parent
     input_file = project_root / 'biblioforge' / 'data' / 'raw' / 'Stampa_Libri_Interni_RAW.xlsx'
     output_file = project_root / 'biblioforge' / 'data' / 'cleaned' / 'books_cleaned.xlsx'
     
-    # Verifica che il file input esista
+    # Validate input file existence
     if not input_file.exists():
-        print(f"ERRORE: File non trovato: {input_file}")
+        print(f"ERROR: File not found: {input_file}")
         return False
     
     try:
-        # Esegui la pulizia
+        # Run cleaning
         clean_books_data(str(input_file), str(output_file))
         return True
     except Exception as e:
-        print(f"ERRORE durante l'elaborazione: {str(e)}")
+        print(f"ERROR during processing: {str(e)}")
         import traceback
         traceback.print_exc()
         return False
