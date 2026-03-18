@@ -7,7 +7,7 @@ import pandas as pd
 
 from biblioforge.models.book import Book, BookStatus
 from biblioforge.repositories.book_repository import BookRepository
-from biblioforge.services.ai_service import generate_insights
+from biblioforge.services.ai_service import generate_insights, normalize_catalog_entry
 from biblioforge.services.crawling_service import enrich_book
 from biblioforge.services.normalization_service import normalize_title
 
@@ -17,19 +17,55 @@ class PipelineController:
 
     def __init__(self, storage_path: Optional[Path] = None) -> None:
         processed_dir = Path(__file__).resolve().parent.parent / "data" / "processed"
+        cleaned_dir = Path(__file__).resolve().parent.parent / "data" / "cleaned"
+        self.project_root = Path(__file__).resolve().parents[2]
+        self.package_root = Path(__file__).resolve().parent.parent
         target = storage_path or processed_dir / "books.json"
         approved_target = processed_dir / "approved_books.json"
 
         self.repository = BookRepository(target)
         self.approved_repository = BookRepository(approved_target)
-        self.repository.seed_sample_if_empty()
+        self.default_cleaned_excel_path = cleaned_dir / "books_cleaned.xlsx"
 
-    def ingest_raw_book(self, raw_title: str, author: Optional[str] = None) -> Book:
-        normalized_title = normalize_title(raw_title)
+    def resolve_excel_path(self, excel_path: Optional[Path | str] = None) -> Path:
+        """Resolve Excel path from absolute or common relative locations."""
+        if excel_path is None:
+            return self.default_cleaned_excel_path
+
+        provided = Path(excel_path).expanduser()
+        if provided.is_absolute():
+            return provided
+
+        candidates = [
+            Path.cwd() / provided,
+            self.project_root / provided,
+            self.package_root / provided,
+            self.package_root / "data" / "cleaned" / provided.name,
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+
+        return (self.project_root / provided).resolve()
+
+    def ingest_raw_book(
+        self,
+        raw_title: str,
+        author: Optional[str] = None,
+        catalog_ean: Optional[str] = None,
+        catalog_publisher: Optional[str] = None,
+        catalog_quantity: Optional[int] = None,
+        catalog_price: Optional[float] = None,
+    ) -> Book:
+        normalized_title = normalize_title(raw_title, author)
         book = Book(
             raw_title=raw_title,
             normalized_title=normalized_title,
             author=author,
+            catalog_ean=catalog_ean,
+            catalog_publisher=catalog_publisher,
+            catalog_quantity=catalog_quantity,
+            catalog_price=catalog_price,
             status=BookStatus.IN_PROGRESS,
         )
         book = asyncio.run(enrich_book(book))
@@ -65,26 +101,122 @@ class PipelineController:
                 approved += 1
         return approved
 
+    def remove_from_queue(self, book_id: str) -> bool:
+        book = self.repository.get_book(book_id)
+        if not book or book.status != BookStatus.TO_APPROVE:
+            return False
+        return self.repository.delete_book(book_id)
+
     def ingest_books_from_excel(
         self,
-        excel_path: Path,
-        title_column: str = "Title",
-        author_column: str = "Author",
+        excel_path: Path | str,
     ) -> int:
-        frame = pd.read_excel(excel_path)
-        effective_title_col = title_column if title_column in frame.columns else "Titolo"
-        effective_author_col = author_column if author_column in frame.columns else "Autore"
+        resolved_excel_path = self.resolve_excel_path(excel_path)
+        if not resolved_excel_path.exists():
+            raise FileNotFoundError(f"Excel file not found: {resolved_excel_path}")
 
+        workbook = pd.read_excel(resolved_excel_path, sheet_name=None)
         queued = 0
-        for _, row in frame.iterrows():
-            title_value = str(row.get(effective_title_col, "")).strip()
-            if not title_value:
+        seen = set()
+
+        title_candidates = ["Title", "Titolo", "Book Title", "Titolo Libro", "Libro", "Nome Libro"]
+        author_candidates = ["Author", "Autore", "Authors", "Autori", "Writer"]
+        ean_candidates = ["Codice EAN", "EAN", "CodiceEAN", "Barcode", "Codice a barre"]
+        publisher_candidates = ["Editore", "Publisher", "Casa Editrice"]
+        quantity_candidates = ["Quantita", "Quantità", "Qta", "Stock", "Giacenza"]
+        price_candidates = ["Prezzo", "Price", "Prezzo vendita", "Prezzo listino"]
+
+        def _pick_column(columns, candidates):
+            exact = {str(c): c for c in columns}
+            for candidate in candidates:
+                if candidate in exact:
+                    return exact[candidate]
+
+            lower = {str(c).strip().lower(): c for c in columns}
+            for candidate in candidates:
+                if candidate.strip().lower() in lower:
+                    return lower[candidate.strip().lower()]
+
+            # Fuzzy fallback: match by containment for messy headers.
+            lowered_columns = {str(c).strip().lower(): c for c in columns}
+            for col_lower, original in lowered_columns.items():
+                for candidate in candidates:
+                    cand = candidate.strip().lower()
+                    if cand and (cand in col_lower or col_lower in cand):
+                        return original
+            return None
+
+        def _cell_to_text(value) -> str:
+            if value is None or pd.isna(value):
+                return ""
+            return str(value).strip()
+
+        def _to_int(value) -> Optional[int]:
+            text = _cell_to_text(value)
+            if not text:
+                return None
+            text = text.replace(".", "").replace(",", ".")
+            try:
+                return int(float(text))
+            except ValueError:
+                return None
+
+        def _to_float(value) -> Optional[float]:
+            text = _cell_to_text(value)
+            if not text:
+                return None
+            normalized = text.replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
+            try:
+                return float(normalized)
+            except ValueError:
+                return None
+
+        for _, frame in workbook.items():
+            if frame is None or frame.empty:
                 continue
-            author_value = str(row.get(effective_author_col, "")).strip()
-            author = author_value or None
-            self.ingest_raw_book(title_value, author)
-            queued += 1
+
+            title_col = _pick_column(frame.columns, title_candidates)
+            if title_col is None:
+                continue
+            author_col = _pick_column(frame.columns, author_candidates)
+            ean_col = _pick_column(frame.columns, ean_candidates)
+            publisher_col = _pick_column(frame.columns, publisher_candidates)
+            quantity_col = _pick_column(frame.columns, quantity_candidates)
+            price_col = _pick_column(frame.columns, price_candidates)
+
+            for _, row in frame.iterrows():
+                title_value = _cell_to_text(row.get(title_col))
+                if not title_value:
+                    continue
+
+                author_value = _cell_to_text(row.get(author_col)) if author_col is not None else ""
+                ean_value = _cell_to_text(row.get(ean_col)) if ean_col is not None else ""
+                publisher_value = _cell_to_text(row.get(publisher_col)) if publisher_col is not None else ""
+                quantity_value = _to_int(row.get(quantity_col)) if quantity_col is not None else None
+                price_value = _to_float(row.get(price_col)) if price_col is not None else None
+                dedupe_key = (title_value.casefold(), author_value.casefold())
+                if dedupe_key in seen:
+                    continue
+                seen.add(dedupe_key)
+
+                author = author_value or None
+                normalized_catalog = normalize_catalog_entry(
+                    raw_title=title_value,
+                    raw_author=author,
+                    raw_publisher=publisher_value or None,
+                )
+
+                self.ingest_raw_book(
+                    normalized_catalog.get("title") or title_value,
+                    normalized_catalog.get("author") or author,
+                    catalog_ean=ean_value or None,
+                    catalog_publisher=normalized_catalog.get("publisher") or publisher_value or None,
+                    catalog_quantity=quantity_value,
+                    catalog_price=price_value,
+                )
+                queued += 1
         return queued
+
 
     def reject_and_retry(self, book_id: str) -> Optional[Book]:
         book = self.repository.get_book(book_id)
@@ -111,3 +243,4 @@ class PipelineController:
 
     def list_approved(self) -> List[Book]:
         return self.approved_repository.list_books(BookStatus.APPROVED)
+

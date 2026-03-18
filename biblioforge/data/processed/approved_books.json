@@ -1,242 +1,189 @@
 [
   {
-    "raw_title": "The Name of the Rose - Umberto Eco",
-    "normalized_title": "The Name of the Rose",
-    "author": "Umberto Eco",
-    "fetched_summary": "In a 14th-century abbey, friar-detective William of Baskerville investigates murders linked to a forbidden manuscript and a conflict over knowledge.",
-    "summary_source": "seed",
-    "isbn": "312136632299",
+    "raw_title": "Il diario di una schiappa",
+    "normalized_title": "Il Diario Di Una Schiappa",
+    "author": "Jeff Kinney",
+    "fetched_summary": "Metadata summary unavailable for Il Diario Di Una Schiappa.",
+    "summary_source": "local_fallback",
+    "catalog_ean": null,
+    "catalog_publisher": null,
+    "catalog_quantity": null,
+    "catalog_price": null,
+    "isbn": "9788869662164",
+    "isbn_10": "8869662160",
+    "published_date": "2017",
+    "publication_year": 2017,
+    "pages": 198,
+    "cover_url": "http://books.google.com/books/content?id=pqncAQAACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
+    "publisher": "Il Castoro bambini",
+    "categories": [
+      "Juvenile Nonfiction"
+    ],
+    "subtitle": null,
+    "language": "it",
+    "maturity_rating": "General",
+    "print_type": "BOOK",
+    "info_link": "http://books.google.it/books?id=pqncAQAACAAJ&dq=intitle:%22Il+Diario+Di+Una+Schiappa%22+inauthor:%22Jeff+Kinney%22&hl=&source=gbs_api",
+    "preview_link": "http://books.google.it/books?id=pqncAQAACAAJ&dq=intitle:%22Il+Diario+Di+Una+Schiappa%22+inauthor:%22Jeff+Kinney%22&hl=&cd=1&source=gbs_api",
+    "canonical_volume_link": "https://books.google.com/books/about/Diario_di_una_schiappa_Il_libro_del_film.html?hl=&id=pqncAQAACAAJ",
+    "openlibrary_key": null,
+    "first_publish_year": null,
+    "edition_count": null,
+    "average_rating": 3.32,
+    "ratings_count": 1214,
+    "positive_ratio": 0.722,
+    "review_samples": [
+      {
+        "reviewer": "Google Books Snippet",
+        "rating": 4.5,
+        "text": "In questo libro, guidato da Jeff Kinney in persona, si scoprir\u00e0 tutto, ma proprio tutto, sull'ultimo film della Schiappa: bambini e maiali robot, vomito computerizzato, auto tagliate a pezzi, controfigure, fango finto, barbe finte, e ..."
+      }
+    ],
+    "discarded_information_examples": [],
+    "insights": {
+      "summary": "Il Diario Di Una Schiappa introduces its central conflict through atmosphere, stakes, and character tension, keeping key revelations undisclosed while highlighting the themes that define the reading experience.",
+      "tags": [
+        "Juvenile Nonfiction",
+        "Contemporary",
+        "Character-Driven",
+        "Atmospheric",
+        "High Stakes",
+        "Plot-Driven"
+      ],
+      "rejected_information": [
+        {
+          "reason": "Marketing language filtered",
+          "detail": "Removed promotional wording to keep the report factual and source-grounded."
+        }
+      ]
+    },
+    "reject_attempts": 5,
+    "status": "approved",
+    "id": "67919512-a01f-4b84-a0ac-4e15fd1e7527"
+  },
+  {
+    "raw_title": "A Sud Del Confine, A Ovest Del Sole",
+    "normalized_title": "A Sud Del Confine, A Ovest Del Sole",
+    "author": "MURAKAMI HARUKI; PASTORE A. (CUR.)",
+    "fetched_summary": "Metadata summary unavailable for A Sud Del Confine, A Ovest Del Sole.",
+    "summary_source": "local_fallback",
+    "catalog_ean": "9788806230302",
+    "catalog_publisher": "V-EINAUDI",
+    "catalog_quantity": 1,
+    "catalog_price": null,
+    "isbn": "31213663533",
+    "isbn_10": "8858477965",
+    "published_date": "2010",
     "publication_year": 2010,
-    "pages": 355,
-    "cover_url": "https://images-na.ssl-images-amazon.com/images/I/51U0gB02cDL._SX331_BO1,204,203,200_.jpg",
-    "positive_ratio": 0.913,
+    "pages": 400,
+    "cover_url": "https://picsum.photos/seed/47/320/480",
+    "publisher": "Unknown Publisher",
+    "categories": [
+      "Unknown Genre"
+    ],
+    "subtitle": null,
+    "language": "en",
+    "maturity_rating": "General",
+    "print_type": "BOOK",
+    "info_link": null,
+    "preview_link": null,
+    "canonical_volume_link": null,
+    "openlibrary_key": null,
+    "first_publish_year": null,
+    "edition_count": null,
+    "average_rating": 4.24,
+    "ratings_count": 43,
+    "positive_ratio": 0.762,
     "review_samples": [
       {
-        "reviewer": "Elena",
-        "rating": 4.8,
-        "text": "Dense mystery that blends theology and politics in a medieval abbey."
-      },
-      {
-        "reviewer": "Luca",
-        "rating": 4.6,
-        "text": "Eco keeps tension high while exploring knowledge, power, and faith."
+        "reviewer": "Public Rating Signal",
+        "rating": 4.24,
+        "text": "Average reader score 4.24/5 over 43 ratings."
       }
     ],
+    "discarded_information_examples": [],
     "insights": {
-      "summary": "A medieval murder investigation led by William of Baskerville uncovers forbidden texts, political schemes, and questions about faith and reason.",
+      "summary": "A Sud Del Confine, A Ovest Del Sole frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict rather than plot revelations.",
       "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Medieval",
-        "Philosophy",
-        "Theology"
+        "Unknown Genre",
+        "Contemporary",
+        "Character-Driven",
+        "Atmospheric",
+        "High Stakes",
+        "Plot-Driven"
       ],
       "rejected_information": [
         {
-          "reason": "Movie adaptation details",
-          "detail": "Left out film references to focus on the book edition."
-        },
-        {
-          "reason": "Irrelevant plot digression",
-          "detail": "Removed side anecdotes that do not change the investigation arc."
+          "reason": "Marketing language filtered",
+          "detail": "Removed promotional wording to keep the report factual and source-grounded."
         }
       ]
     },
+    "reject_attempts": 1,
     "status": "approved",
-    "id": "e2040654-4e58-4df6-a5a5-a8ffd597d647"
-  },
-  {
-    "raw_title": "1984",
-    "normalized_title": "1984",
-    "author": "George Orwell",
-    "fetched_summary": "\u00c8 il 1984 e a Londra, \u201cvasta e rovinosa, una citt\u00e0 di un milione di pattumiere\u201d, l\u2019ordine \u00e8 mantenuto da una psicopolizia che interviene alla minima situazione di dissenso e le case sono provviste per legge di televisori-telecamere. Sono strumenti per controllare le vite dei cittadini, e di essi si serve il Partito, sistema di governo al cui vertice si trova Big Brother, misteriosa figura che nessuno ha mai visto di persona, sebbene le sue immagini campeggino su ogni muro per ricordare agli abitanti che sono osservati. In questo scenario si muove Winston Smith, oscuro funzionario di basso livello del Partito, impiegato al Ministero della Verit\u00e0 con il compito di riscrivere la storia per allinearla all\u2019attuale pensiero politico. Ma la sua propensione per una condotta morale e un certo interesse per la verit\u00e0 lo porteranno su una strada che, se scoperta, verrebbe considerata \u201cribelle\u201d. Sono questi gli ingredienti di un capolavoro in cui Orwell mette in guardia il lettore dalle derive e dalle assurdit\u00e0 dei totalitarismi \u2013 con il loro disprezzo per la vita umana, l\u2019uso della violenza fine a se stessa, il culto del leader elevato a divinit\u00e0. Soprattutto, nello stigmatizzare l\u2019ansia collettiva di cancellare i legami con il passato e il processo di impoverimento che svuota il linguaggio di ogni significato, affonda il dito nelle piaghe che affliggono la nostra contemporaneit\u00e0.",
-    "summary_source": "google_books_api",
-    "isbn": "9788858842386",
-    "publication_year": 2021,
-    "pages": 290,
-    "cover_url": "http://books.google.com/books/content?id=btYNEAAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
-    "positive_ratio": 0.779,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "\u00c8 il 1984 e a Londra, \u201cvasta e rovinosa, una citt\u00e0 di un milione di pattumiere\u201d, l\u2019ordine \u00e8 mantenuto da una psicopolizia che interviene alla minima situazione di dissenso e le case sono provviste per legge di televisori-telecamere ..."
-      }
-    ],
-    "insights": {
-      "summary": "\u00c8 il 1984 e a Londra, \u201cvasta e rovinosa, una citt\u00e0 di un milione di pattumiere\u201d, l\u2019ordine \u00e8 mantenuto da una psicopolizia che interviene alla minima situazione di dissenso e le case sono provviste per legge di televisori-telecamere. Sono strumenti per controllare le vite dei cittadini, e di essi si serve il Partito, sistema di governo al cui vertice si trova Big Brother, misteriosa figura che nessuno ha mai visto di persona, sebbene le sue immagini campeggino su ogni muro per ricordare agli abitanti che sono osservati. In questo scenario si muove Winston Smith, oscuro funzionario di basso livello del Partito, impiegato al Ministero della Verit\u00e0 con il compito di riscrivere la storia per allinearla all\u2019attuale pensiero politico. Ma la sua propensione per una condotta morale e un certo interesse per la verit\u00e0 lo porteranno su una strada che, se scoperta, verrebbe considerata \u201cribelle\u201d. Sono questi gli ingredienti di un capolavoro in cui Orwell mette in guardia il lettore dalle derive e dalle assurdit\u00e0 dei totalitarismi \u2013 con il loro disprezzo per la vita umana, l\u2019uso della violenza fine a se stessa, il culto del leader elevato a divinit\u00e0. Soprattutto, nello stigmatizzare l\u2019ansia collettiva di cancellare i legami con il passato e il processo di impoverimento che svuota il linguaggio di ogni significato, affonda il dito nelle piaghe che affliggono la nostra contemporaneit\u00e0.",
-      "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Investigation",
-        "George Orwell"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Off-focus trivia",
-          "detail": "Removed film adaptation details and marketing copy."
-        },
-        {
-          "reason": "Redundant praise",
-          "detail": "Collapsed repetitive review sentences into one insight."
-        }
-      ]
-    },
-    "status": "approved",
-    "id": "50e09b24-f41c-41e9-99ad-c7fd5c7bb47f"
-  },
-  {
-    "raw_title": "The Name of the Rose - Umberto Eco",
-    "normalized_title": "The Name Of The Rose - Umberto Eco",
-    "author": "Umberto Eco",
-    "fetched_summary": "In 1327, Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Bakersville arrives to investigate. His delicate mission is overshadowed by seven bizarre deaths that take place in the same number of days, and Brother William must turn detective to sort things out.",
-    "summary_source": "google_books_api",
-    "isbn": "WISC:89085145860",
-    "publication_year": 1984,
-    "pages": 524,
-    "cover_url": "http://books.google.com/books/content?id=55QIAQAAMAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "positive_ratio": 0.756,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "In 1327, Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Bakersville arrives to investigate."
-      }
-    ],
-    "insights": {
-      "summary": "In 1327, Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Bakersville arrives to investigate. His delicate mission is overshadowed by seven bizarre deaths that take place in the same number of days, and Brother William must turn detective to sort things out.",
-      "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Investigation",
-        "Umberto Eco"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Off-focus trivia",
-          "detail": "Removed film adaptation details and marketing copy."
-        },
-        {
-          "reason": "Redundant praise",
-          "detail": "Collapsed repetitive review sentences into one insight."
-        }
-      ]
-    },
-    "status": "approved",
-    "id": "86650739-418f-484a-aa82-87f0d16a33f9"
+    "id": "fd4025ea-8f91-4c8e-b014-b8d5b2dc184a"
   },
   {
     "raw_title": "Dune",
     "normalized_title": "Dune",
     "author": "Frank Herbert",
-    "fetched_summary": null,
-    "summary_source": null,
+    "fetched_summary": "Metadata summary unavailable for Dune.",
+    "summary_source": "local_fallback",
+    "catalog_ean": null,
+    "catalog_publisher": null,
+    "catalog_quantity": null,
+    "catalog_price": null,
     "isbn": "9788834739679",
+    "isbn_10": "8834739671",
+    "published_date": "2019",
     "publication_year": 2019,
     "pages": 633,
     "cover_url": "http://books.google.com/books/content?id=irHPywEACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "positive_ratio": 0.623,
-    "review_samples": [],
-    "insights": {
-      "summary": "Dune blends investigation and history to surface themes of knowledge and power. Reviews highlight atmosphere, textured world building, and steady suspense.",
-      "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Investigation",
-        "Frank Herbert"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Off-focus trivia",
-          "detail": "Removed film adaptation details and marketing copy."
-        },
-        {
-          "reason": "Redundant praise",
-          "detail": "Collapsed repetitive review sentences into one insight."
-        }
-      ]
-    },
-    "status": "approved",
-    "id": "1f3ab080-9dde-4e77-8e95-9e5ff64a70eb"
-  },
-  {
-    "raw_title": "Siddharta",
-    "normalized_title": "Siddharta",
-    "author": "Hermann Hesse",
-    "fetched_summary": "\"Non posso leggere Hermann Hesse senza sentirmi trascinato alla presenza di una mente profondamente seria, una mente che sta cercando il significato della vita\". - Carl Jung Nuova traduzione del manoscritto originale tedesco del romanzo \"Siddharta\" di Hermann Hesse, vincitore del premio Nobel. Questa edizione contiene anche un epilogo del traduttore, un glossario filosofico dei concetti utilizzati da Hesse e una cronologia della sua vita e delle sue opere. Hesse ha vinto il Premio Nobel per la Letteratura nel 1947. \"Siddharta\" \u00e8 una delle opere pi\u00f9 famose di Hesse e racconta il viaggio spirituale di Siddharta. Si tratta di una sintesi di vari pensieri filosofici, tra cui quelli di Nietzsche e Schopenhauer, combinati con lo Yoga ind\u00f9 e il panpsichismo di San Francesco. La storia segue Siddharta mentre attraversa le varie sfide della vita, alla ricerca della pace interiore e dell'illuminazione. Dopo molteplici esperienze di vita, tra cui il dolore della paternit\u00e0 e l'orlo dell'autodistruzione, Siddharta scopre che la vera illuminazione risiede nell'amore incondizionato e nell'ammirazione per il mondo. Si distingue per l'esplorazione del percorso verso l'illuminazione, attingendo a piene mani dalle filosofie buddiste e induiste. Un fatto interessante \u00e8 che la storia non \u00e8 incentrata sul Buddha storico, Siddharta Gautama, ma piuttosto su un personaggio di fantasia con lo stesso nome. Si tratta di un romanzo spirituale che ripercorre il viaggio del suo omonimo protagonista alla ricerca dell'illuminazione e di una comprensione pi\u00f9 profonda dell'esistenza. L'esplorazione di Hesse della filosofia orientale, della ricerca della pace interiore e dell'interconnessione di tutti gli esseri \u00e8 ci\u00f2 che rende quest'opera significativa. Ha influenzato la letteratura introducendo i lettori alle filosofie orientali e ispirando un rinnovato interesse per la ricerca spirituale e l'autorealizzazione.",
-    "summary_source": "google_books_api",
-    "isbn": "9783989884601",
-    "publication_year": 2024,
-    "pages": 151,
-    "cover_url": "http://books.google.com/books/content?id=cM3fEAAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
-    "positive_ratio": 0.8,
+    "publisher": "Unknown Publisher",
+    "categories": [
+      "Fiction"
+    ],
+    "subtitle": null,
+    "language": "it",
+    "maturity_rating": "General",
+    "print_type": "BOOK",
+    "info_link": "http://books.google.it/books?id=irHPywEACAAJ&dq=intitle:%22Dune%22+inauthor:%22Frank+Herbert%22&hl=&source=gbs_api",
+    "preview_link": "http://books.google.it/books?id=irHPywEACAAJ&dq=intitle:%22Dune%22+inauthor:%22Frank+Herbert%22&hl=&cd=1&source=gbs_api",
+    "canonical_volume_link": "https://books.google.com/books/about/Dune_Il_ciclo_di_Dune.html?hl=&id=irHPywEACAAJ",
+    "openlibrary_key": null,
+    "first_publish_year": null,
+    "edition_count": null,
+    "average_rating": 3.39,
+    "ratings_count": 1225,
+    "positive_ratio": 0.797,
     "review_samples": [
       {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "Hesse ha vinto il Premio Nobel per la Letteratura nel 1947. &quot;Siddharta&quot; \u00e8 una delle opere pi\u00f9 famose di Hesse e racconta il viaggio spirituale di Siddharta."
+        "reviewer": "Public Rating Signal",
+        "rating": 3.39,
+        "text": "Average reader score 3.39/5 over 1225 ratings."
       }
     ],
+    "discarded_information_examples": [],
     "insights": {
-      "summary": "\"Non posso leggere Hermann Hesse senza sentirmi trascinato alla presenza di una mente profondamente seria, una mente che sta cercando il significato della vita\". - Carl Jung Nuova traduzione del manoscritto originale tedesco del romanzo \"Siddharta\" di Hermann Hesse, vincitore del premio Nobel. Questa edizione contiene anche un epilogo del traduttore, un glossario filosofico dei concetti utilizzati da Hesse e una cronologia della sua vita e delle sue opere. Hesse ha vinto il Premio Nobel per la Letteratura nel 1947. \"Siddharta\" \u00e8 una delle opere pi\u00f9 famose di Hesse e racconta il viaggio spirituale di Siddharta. Si tratta di una sintesi di vari pensieri filosofici, tra cui quelli di Nietzsche e Schopenhauer, combinati con lo Yoga ind\u00f9 e il panpsichismo di San Francesco. La storia segue Siddharta mentre attraversa le varie sfide della vita, alla ricerca della pace interiore e dell'illuminazione. Dopo molteplici esperienze di vita, tra cui il dolore della paternit\u00e0 e l'orlo dell'autodistruzione, Siddharta scopre che la vera illuminazione risiede nell'amore incondizionato e nell'ammirazione per il mondo. Si distingue per l'esplorazione del percorso verso l'illuminazione, attingendo a piene mani dalle filosofie buddiste e induiste. Un fatto interessante \u00e8 che la storia non \u00e8 incentrata sul Buddha storico, Siddharta Gautama, ma piuttosto su un personaggio di fantasia con lo stesso nome. Si tratta di un romanzo spirituale che ripercorre il viaggio del suo omonimo protagonista alla ricerca dell'illuminazione e di una comprensione pi\u00f9 profonda dell'esistenza. L'esplorazione di Hesse della filosofia orientale, della ricerca della pace interiore e dell'interconnessione di tutti gli esseri \u00e8 ci\u00f2 che rende quest'opera significativa. Ha influenzato la letteratura introducendo i lettori alle filosofie orientali e ispirando un rinnovato interesse per la ricerca spirituale e l'autorealizzazione.",
+      "summary": "Dune frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict rather than plot revelations.",
       "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Investigation",
-        "Hermann Hesse"
+        "Fiction",
+        "Contemporary",
+        "Long Read",
+        "Character-Driven",
+        "Atmospheric",
+        "High Stakes",
+        "Plot-Driven"
       ],
       "rejected_information": [
         {
-          "reason": "Off-focus trivia",
-          "detail": "Removed film adaptation details and marketing copy."
-        },
-        {
-          "reason": "Redundant praise",
-          "detail": "Collapsed repetitive review sentences into one insight."
+          "reason": "Marketing language filtered",
+          "detail": "Removed promotional wording to keep the report factual and source-grounded."
         }
       ]
     },
+    "reject_attempts": 1,
     "status": "approved",
-    "id": "51ae163d-f329-43b6-9db4-d7fcd40d7db7"
-  },
-  {
-    "raw_title": "The Great Gatsby",
-    "normalized_title": "The Great Gatsby",
-    "author": "F. Scott Fitzgerald",
-    "fetched_summary": "Classical portrayal of love and violence during the Twenties.",
-    "summary_source": "google_books_api",
-    "isbn": "9780521402309",
-    "publication_year": 1991,
-    "pages": 288,
-    "cover_url": "http://books.google.com/books/content?id=0yfauGsKOjAC&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
-    "positive_ratio": 0.7395208957756441,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "Classical portrayal of love and violence during the Twenties."
-      }
-    ],
-    "insights": {
-      "summary": "Classical portrayal of love and violence during the Twenties.",
-      "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Investigation",
-        "F. Scott Fitzgerald"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Off-focus trivia",
-          "detail": "Removed film adaptation details and marketing copy."
-        },
-        {
-          "reason": "Redundant praise",
-          "detail": "Collapsed repetitive review sentences into one insight."
-        }
-      ]
-    },
-    "status": "approved",
-    "id": "c88d6cbc-8ca5-49eb-b19c-0e4a2f1bcc03"
+    "id": "eca5380d-57ca-4f92-ba60-3285caf9ac9b"
   }
 ]

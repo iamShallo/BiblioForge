@@ -10,6 +10,7 @@ import httpx
 from pydantic import BaseModel, ValidationError, Field
 
 from biblioforge.models.book import Book, BookInsights, BookStatus, TransparencyNote
+from biblioforge.services.normalization_service import normalize_title
 
 
 GEMINI_URL = (
@@ -27,6 +28,12 @@ class InsightsPayload(BaseModel):
     summary: str
     tags: List[str] = Field(default_factory=list)
     rejected_information: List[TransparencyNotePayload] = Field(default_factory=list)
+
+
+class CatalogNormalizationPayload(BaseModel):
+    title: str
+    author: Optional[str] = None
+    publisher: Optional[str] = None
 
 
 def _word_count(text: str) -> int:
@@ -114,10 +121,23 @@ def _derive_tags(book: Book) -> List[str]:
             "atmosphere": "Atmospheric",
             "character": "Character-Driven",
             "world": "World-Building",
+            "epic": "Epic",
+            "political": "Political Intrigue",
+            "court": "Court Politics",
+            "magic": "Magic System",
+            "adventure": "Adventure",
         }
         for keyword, tag in review_map.items():
             if keyword in review_text:
                 candidates.append(tag)
+
+    if getattr(book, "maturity_rating", "") == "Mature":
+        candidates.append("Mature Themes")
+    if book.pages and book.pages >= 500:
+        candidates.append("Long Read")
+
+    fallback_defaults = ["Character-Driven", "Atmospheric", "High Stakes", "Plot-Driven"]
+    candidates.extend(fallback_defaults)
 
     ordered = []
     seen = set()
@@ -135,6 +155,7 @@ def _derive_tags(book: Book) -> List[str]:
 
 def _derive_rejected_information(book: Book) -> List[TransparencyNote]:
     rejected: List[TransparencyNote] = []
+    discarded_examples: List[str] = list(getattr(book, "discarded_information_examples", []) or [])
     if not book.review_samples:
         rejected.append(
             TransparencyNote(
@@ -163,6 +184,14 @@ def _derive_rejected_information(book: Book) -> List[TransparencyNote]:
                 detail="Avoided plot-specific statements because no trusted summary was fetched.",
             )
         )
+    if discarded_examples:
+        for example in discarded_examples[:2]:
+            rejected.append(
+                TransparencyNote(
+                    reason="Promotional or noisy source removed",
+                    detail=f"Filtered low-quality source snippet. Removed example: \"{example}\"",
+                )
+            )
     if not rejected:
         rejected.append(
             TransparencyNote(
@@ -170,7 +199,7 @@ def _derive_rejected_information(book: Book) -> List[TransparencyNote]:
                 detail="Removed promotional wording to keep the report factual and source-grounded.",
             )
         )
-    return rejected[:4]
+    return rejected[:6]
 
 
 def _fallback_insights(book: Book) -> BookInsights:
@@ -253,7 +282,7 @@ def _enforce_summary_variation(summary: str, regeneration_token: Optional[str]) 
     return f"{base} {variants[idx]}"
 
 
-def _parse_gemini_response(text: str) -> BookInsights:
+def _parse_json_object(text: str) -> dict:
     payload_text = text.strip()
     fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", payload_text, re.DOTALL)
     if fenced:
@@ -263,8 +292,11 @@ def _parse_gemini_response(text: str) -> BookInsights:
         last = payload_text.rfind("}")
         if first != -1 and last != -1 and first < last:
             payload_text = payload_text[first:last + 1]
+    return json.loads(payload_text)
 
-    data = json.loads(payload_text)
+
+def _parse_gemini_response(text: str) -> BookInsights:
+    data = _parse_json_object(text)
     payload = InsightsPayload(**data)
     rejected = [TransparencyNote(**item.dict()) for item in payload.rejected_information]
     return BookInsights(
@@ -272,6 +304,89 @@ def _parse_gemini_response(text: str) -> BookInsights:
         tags=payload.tags,
         rejected_information=rejected,
     )
+
+
+def _simple_cleanup_title(raw_title: str, raw_author: Optional[str] = None) -> str:
+    text = (raw_title or "").strip()
+    text = re.sub(r"\s+", " ", text)
+    text = normalize_title(text, raw_author)
+    return text.strip()
+
+
+def _simple_cleanup_author(raw_author: Optional[str]) -> Optional[str]:
+    if raw_author is None:
+        return None
+    text = str(raw_author).strip()
+    if not text:
+        return None
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
+def normalize_catalog_entry(
+    raw_title: str,
+    raw_author: Optional[str] = None,
+    raw_publisher: Optional[str] = None,
+) -> dict:
+    """Normalize noisy catalog fields using Gemini, with deterministic fallback."""
+    fallback = {
+        "title": _simple_cleanup_title(raw_title, raw_author),
+        "author": _simple_cleanup_author(raw_author),
+        "publisher": _simple_cleanup_author(raw_publisher),
+        "source": "rule_based",
+    }
+
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return fallback
+
+    prompt = (
+        "Normalize the following catalog row for book lookup. "
+        "Fix spelling and OCR errors but do not invent missing data. "
+        "If title contains author names, remove author names from title and keep them in author only. "
+        "If title contains edition labels (e.g., deluxe, collector, special, vol., ediz.), remove them. "
+        "Return strictly JSON with keys: title, author, publisher. "
+        "Keep original language and do not translate.\n\n"
+        f"Raw title: {raw_title or '-'}\n"
+        f"Raw author: {raw_author or '-'}\n"
+        f"Raw publisher: {raw_publisher or '-'}\n"
+    )
+
+    try:
+        with httpx.Client(timeout=20) as client:
+            resp = client.post(
+                GEMINI_URL,
+                params={"key": api_key},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "temperature": 0.2,
+                        "topP": 0.8,
+                    },
+                },
+            )
+            resp.raise_for_status()
+            candidates = resp.json().get("candidates", [])
+            content: Optional[str] = None
+            if candidates:
+                content = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+            if not content:
+                return fallback
+
+            parsed = CatalogNormalizationPayload(**_parse_json_object(content))
+            title = _simple_cleanup_title(parsed.title, parsed.author or raw_author)
+            author = _simple_cleanup_author(parsed.author)
+            publisher = _simple_cleanup_author(parsed.publisher)
+            if not title:
+                return fallback
+            return {
+                "title": title,
+                "author": author,
+                "publisher": publisher,
+                "source": "gemini",
+            }
+    except (httpx.HTTPError, ValidationError, json.JSONDecodeError):
+        return fallback
 
 
 def generate_insights(

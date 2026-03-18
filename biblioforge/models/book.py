@@ -38,6 +38,10 @@ class Book:
     author: Optional[str] = None
     fetched_summary: Optional[str] = None
     summary_source: Optional[str] = None
+    catalog_ean: Optional[str] = None
+    catalog_publisher: Optional[str] = None
+    catalog_quantity: Optional[int] = None
+    catalog_price: Optional[float] = None
     isbn: Optional[str] = None
     isbn_10: Optional[str] = None
     published_date: Optional[str] = None
@@ -60,6 +64,7 @@ class Book:
     ratings_count: int = 0
     positive_ratio: Optional[float] = None
     review_samples: List[ReviewSample] = field(default_factory=list)
+    discarded_information_examples: List[str] = field(default_factory=list)
     insights: Optional[BookInsights] = None
     reject_attempts: int = 0
     status: BookStatus = BookStatus.TO_CLEAN

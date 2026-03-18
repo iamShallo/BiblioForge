@@ -1,553 +1,55 @@
 [
   {
     "raw_title": "The Name of the Rose - Umberto Eco",
-    "normalized_title": "The Name of the Rose",
+    "normalized_title": "The Name Of The Rose",
     "author": "Umberto Eco",
-    "fetched_summary": "In a 14th-century abbey, friar-detective William of Baskerville investigates murders linked to a forbidden manuscript and a conflict over knowledge.",
-    "summary_source": "seed",
-    "isbn": "312136632299",
-    "isbn_10": null,
-    "published_date": null,
-    "publication_year": 2010,
-    "pages": 355,
-    "cover_url": "https://images-na.ssl-images-amazon.com/images/I/51U0gB02cDL._SX331_BO1,204,203,200_.jpg",
-    "publisher": null,
-    "categories": [],
-    "subtitle": null,
-    "language": null,
-    "maturity_rating": null,
-    "print_type": null,
-    "info_link": null,
-    "preview_link": null,
-    "canonical_volume_link": null,
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.913,
-    "review_samples": [
-      {
-        "reviewer": "Elena",
-        "rating": 4.8,
-        "text": "Dense mystery that blends theology and politics in a medieval abbey."
-      },
-      {
-        "reviewer": "Luca",
-        "rating": 4.6,
-        "text": "Eco keeps tension high while exploring knowledge, power, and faith."
-      }
-    ],
-    "insights": {
-      "summary": "A medieval murder investigation led by William of Baskerville uncovers forbidden texts, political schemes, and questions about faith and reason.",
-      "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Medieval",
-        "Philosophy",
-        "Theology"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Movie adaptation details",
-          "detail": "Left out film references to focus on the book edition."
-        },
-        {
-          "reason": "Irrelevant plot digression",
-          "detail": "Removed side anecdotes that do not change the investigation arc."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "approved",
-    "id": "e2040654-4e58-4df6-a5a5-a8ffd597d647"
-  },
-  {
-    "raw_title": "The Hobbit",
-    "normalized_title": "The Hobbit",
-    "author": "J.R.R. Tolkien",
-    "fetched_summary": "Metadata summary unavailable for The Hobbit.",
-    "summary_source": "local_fallback",
-    "isbn": "31213663784",
-    "isbn_10": null,
-    "published_date": null,
-    "publication_year": 2010,
-    "pages": 355,
-    "cover_url": "https://picsum.photos/seed/12/320/480",
-    "publisher": null,
-    "categories": [],
-    "subtitle": null,
-    "language": null,
-    "maturity_rating": null,
-    "print_type": null,
-    "info_link": null,
-    "preview_link": null,
-    "canonical_volume_link": null,
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.943,
-    "review_samples": [],
-    "insights": {
-      "summary": "Metadata summary unavailable for The Hobbit.",
-      "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Investigation",
-        "J.R.R. Tolkien"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Off-focus trivia",
-          "detail": "Removed film adaptation details and marketing copy."
-        },
-        {
-          "reason": "Redundant praise",
-          "detail": "Collapsed repetitive review sentences into one insight."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "to_clean",
-    "id": "cf7c1891-75a5-4805-ad9d-55d52ad4c8d3"
-  },
-  {
-    "raw_title": "1984",
-    "normalized_title": "1984",
-    "author": "George Orwell",
-    "fetched_summary": "\u00c8 il 1984 e a Londra, \u201cvasta e rovinosa, una citt\u00e0 di un milione di pattumiere\u201d, l\u2019ordine \u00e8 mantenuto da una psicopolizia che interviene alla minima situazione di dissenso e le case sono provviste per legge di televisori-telecamere. Sono strumenti per controllare le vite dei cittadini, e di essi si serve il Partito, sistema di governo al cui vertice si trova Big Brother, misteriosa figura che nessuno ha mai visto di persona, sebbene le sue immagini campeggino su ogni muro per ricordare agli abitanti che sono osservati. In questo scenario si muove Winston Smith, oscuro funzionario di basso livello del Partito, impiegato al Ministero della Verit\u00e0 con il compito di riscrivere la storia per allinearla all\u2019attuale pensiero politico. Ma la sua propensione per una condotta morale e un certo interesse per la verit\u00e0 lo porteranno su una strada che, se scoperta, verrebbe considerata \u201cribelle\u201d. Sono questi gli ingredienti di un capolavoro in cui Orwell mette in guardia il lettore dalle derive e dalle assurdit\u00e0 dei totalitarismi \u2013 con il loro disprezzo per la vita umana, l\u2019uso della violenza fine a se stessa, il culto del leader elevato a divinit\u00e0. Soprattutto, nello stigmatizzare l\u2019ansia collettiva di cancellare i legami con il passato e il processo di impoverimento che svuota il linguaggio di ogni significato, affonda il dito nelle piaghe che affliggono la nostra contemporaneit\u00e0.",
+    "fetched_summary": "The year is 1327. Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Baskerville arrives to investigate. His delicate mission is suddenly overshadowed by seven bizarre deaths that take place in seven days and nights of apocalyptic terror. The body of one monk is found in a cask of pigs' blood, another is floating in a bathhouse, still another is crushed at the foot of a cliff.",
     "summary_source": "google_books_api",
-    "isbn": "9788858842386",
-    "isbn_10": null,
-    "published_date": null,
-    "publication_year": 2021,
-    "pages": 290,
-    "cover_url": "http://books.google.com/books/content?id=btYNEAAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
-    "publisher": null,
-    "categories": [],
-    "subtitle": null,
-    "language": null,
-    "maturity_rating": null,
-    "print_type": null,
-    "info_link": null,
-    "preview_link": null,
-    "canonical_volume_link": null,
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.779,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "\u00c8 il 1984 e a Londra, \u201cvasta e rovinosa, una citt\u00e0 di un milione di pattumiere\u201d, l\u2019ordine \u00e8 mantenuto da una psicopolizia che interviene alla minima situazione di dissenso e le case sono provviste per legge di televisori-telecamere ..."
-      }
-    ],
-    "insights": {
-      "summary": "\u00c8 il 1984 e a Londra, \u201cvasta e rovinosa, una citt\u00e0 di un milione di pattumiere\u201d, l\u2019ordine \u00e8 mantenuto da una psicopolizia che interviene alla minima situazione di dissenso e le case sono provviste per legge di televisori-telecamere. Sono strumenti per controllare le vite dei cittadini, e di essi si serve il Partito, sistema di governo al cui vertice si trova Big Brother, misteriosa figura che nessuno ha mai visto di persona, sebbene le sue immagini campeggino su ogni muro per ricordare agli abitanti che sono osservati. In questo scenario si muove Winston Smith, oscuro funzionario di basso livello del Partito, impiegato al Ministero della Verit\u00e0 con il compito di riscrivere la storia per allinearla all\u2019attuale pensiero politico. Ma la sua propensione per una condotta morale e un certo interesse per la verit\u00e0 lo porteranno su una strada che, se scoperta, verrebbe considerata \u201cribelle\u201d. Sono questi gli ingredienti di un capolavoro in cui Orwell mette in guardia il lettore dalle derive e dalle assurdit\u00e0 dei totalitarismi \u2013 con il loro disprezzo per la vita umana, l\u2019uso della violenza fine a se stessa, il culto del leader elevato a divinit\u00e0. Soprattutto, nello stigmatizzare l\u2019ansia collettiva di cancellare i legami con il passato e il processo di impoverimento che svuota il linguaggio di ogni significato, affonda il dito nelle piaghe che affliggono la nostra contemporaneit\u00e0.",
-      "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Investigation",
-        "George Orwell"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Off-focus trivia",
-          "detail": "Removed film adaptation details and marketing copy."
-        },
-        {
-          "reason": "Redundant praise",
-          "detail": "Collapsed repetitive review sentences into one insight."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "approved",
-    "id": "50e09b24-f41c-41e9-99ad-c7fd5c7bb47f"
-  },
-  {
-    "raw_title": "The Name of the Rose - Umberto Eco",
-    "normalized_title": "The Name Of The Rose - Umberto Eco",
-    "author": "Umberto Eco",
-    "fetched_summary": "In 1327, Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Bakersville arrives to investigate. His delicate mission is overshadowed by seven bizarre deaths that take place in the same number of days, and Brother William must turn detective to sort things out.",
-    "summary_source": "google_books_api",
-    "isbn": "WISC:89085145860",
-    "isbn_10": null,
-    "published_date": null,
+    "catalog_ean": null,
+    "catalog_publisher": null,
+    "catalog_quantity": null,
+    "catalog_price": null,
+    "isbn": "9780330284783",
+    "isbn_10": "0330284789",
+    "published_date": "1984",
     "publication_year": 1984,
-    "pages": 524,
-    "cover_url": "http://books.google.com/books/content?id=55QIAQAAMAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "publisher": null,
-    "categories": [],
-    "subtitle": null,
-    "language": null,
-    "maturity_rating": null,
-    "print_type": null,
-    "info_link": null,
-    "preview_link": null,
-    "canonical_volume_link": null,
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.756,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "In 1327, Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Bakersville arrives to investigate."
-      }
-    ],
-    "insights": {
-      "summary": "In 1327, Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Bakersville arrives to investigate. His delicate mission is overshadowed by seven bizarre deaths that take place in the same number of days, and Brother William must turn detective to sort things out.",
-      "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Investigation",
-        "Umberto Eco"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Off-focus trivia",
-          "detail": "Removed film adaptation details and marketing copy."
-        },
-        {
-          "reason": "Redundant praise",
-          "detail": "Collapsed repetitive review sentences into one insight."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "approved",
-    "id": "86650739-418f-484a-aa82-87f0d16a33f9"
-  },
-  {
-    "raw_title": "The Great Gatsby",
-    "normalized_title": "The Great Gatsby",
-    "author": "F. Scott Fitzgerald",
-    "fetched_summary": "Classical portrayal of love and violence during the Twenties.",
-    "summary_source": "google_books_api",
-    "isbn": "9780521402309",
-    "isbn_10": null,
-    "published_date": null,
-    "publication_year": 1991,
-    "pages": 288,
-    "cover_url": "http://books.google.com/books/content?id=0yfauGsKOjAC&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
-    "publisher": null,
-    "categories": [],
-    "subtitle": null,
-    "language": null,
-    "maturity_rating": null,
-    "print_type": null,
-    "info_link": null,
-    "preview_link": null,
-    "canonical_volume_link": null,
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.8123842277487279,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "Classical portrayal of love and violence during the Twenties."
-      }
-    ],
-    "insights": {
-      "summary": "Classical portrayal of love and violence during the Twenties.",
-      "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Investigation",
-        "F. Scott Fitzgerald"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Off-focus trivia",
-          "detail": "Removed film adaptation details and marketing copy."
-        },
-        {
-          "reason": "Redundant praise",
-          "detail": "Collapsed repetitive review sentences into one insight."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "to_clean",
-    "id": "e9421c50-962a-4a9b-96d3-047f5ddbe7b8"
-  },
-  {
-    "raw_title": "Dune",
-    "normalized_title": "Dune",
-    "author": "Frank Herbert",
-    "fetched_summary": null,
-    "summary_source": null,
-    "isbn": "9788834739679",
-    "isbn_10": null,
-    "published_date": null,
-    "publication_year": 2019,
-    "pages": 633,
-    "cover_url": "http://books.google.com/books/content?id=irHPywEACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "publisher": null,
-    "categories": [],
-    "subtitle": null,
-    "language": null,
-    "maturity_rating": null,
-    "print_type": null,
-    "info_link": null,
-    "preview_link": null,
-    "canonical_volume_link": null,
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.623,
-    "review_samples": [],
-    "insights": {
-      "summary": "Dune blends investigation and history to surface themes of knowledge and power. Reviews highlight atmosphere, textured world building, and steady suspense.",
-      "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Investigation",
-        "Frank Herbert"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Off-focus trivia",
-          "detail": "Removed film adaptation details and marketing copy."
-        },
-        {
-          "reason": "Redundant praise",
-          "detail": "Collapsed repetitive review sentences into one insight."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "approved",
-    "id": "1f3ab080-9dde-4e77-8e95-9e5ff64a70eb"
-  },
-  {
-    "raw_title": "Siddharta",
-    "normalized_title": "Siddharta",
-    "author": "Hermann Hesse",
-    "fetched_summary": "\"Non posso leggere Hermann Hesse senza sentirmi trascinato alla presenza di una mente profondamente seria, una mente che sta cercando il significato della vita\". - Carl Jung Nuova traduzione del manoscritto originale tedesco del romanzo \"Siddharta\" di Hermann Hesse, vincitore del premio Nobel. Questa edizione contiene anche un epilogo del traduttore, un glossario filosofico dei concetti utilizzati da Hesse e una cronologia della sua vita e delle sue opere. Hesse ha vinto il Premio Nobel per la Letteratura nel 1947. \"Siddharta\" \u00e8 una delle opere pi\u00f9 famose di Hesse e racconta il viaggio spirituale di Siddharta. Si tratta di una sintesi di vari pensieri filosofici, tra cui quelli di Nietzsche e Schopenhauer, combinati con lo Yoga ind\u00f9 e il panpsichismo di San Francesco. La storia segue Siddharta mentre attraversa le varie sfide della vita, alla ricerca della pace interiore e dell'illuminazione. Dopo molteplici esperienze di vita, tra cui il dolore della paternit\u00e0 e l'orlo dell'autodistruzione, Siddharta scopre che la vera illuminazione risiede nell'amore incondizionato e nell'ammirazione per il mondo. Si distingue per l'esplorazione del percorso verso l'illuminazione, attingendo a piene mani dalle filosofie buddiste e induiste. Un fatto interessante \u00e8 che la storia non \u00e8 incentrata sul Buddha storico, Siddharta Gautama, ma piuttosto su un personaggio di fantasia con lo stesso nome. Si tratta di un romanzo spirituale che ripercorre il viaggio del suo omonimo protagonista alla ricerca dell'illuminazione e di una comprensione pi\u00f9 profonda dell'esistenza. L'esplorazione di Hesse della filosofia orientale, della ricerca della pace interiore e dell'interconnessione di tutti gli esseri \u00e8 ci\u00f2 che rende quest'opera significativa. Ha influenzato la letteratura introducendo i lettori alle filosofie orientali e ispirando un rinnovato interesse per la ricerca spirituale e l'autorealizzazione.",
-    "summary_source": "google_books_api",
-    "isbn": "9783989884601",
-    "isbn_10": null,
-    "published_date": null,
-    "publication_year": 2024,
-    "pages": 151,
-    "cover_url": "http://books.google.com/books/content?id=cM3fEAAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
-    "publisher": null,
-    "categories": [],
-    "subtitle": null,
-    "language": null,
-    "maturity_rating": null,
-    "print_type": null,
-    "info_link": null,
-    "preview_link": null,
-    "canonical_volume_link": null,
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.8,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "Hesse ha vinto il Premio Nobel per la Letteratura nel 1947. &quot;Siddharta&quot; \u00e8 una delle opere pi\u00f9 famose di Hesse e racconta il viaggio spirituale di Siddharta."
-      }
-    ],
-    "insights": {
-      "summary": "\"Non posso leggere Hermann Hesse senza sentirmi trascinato alla presenza di una mente profondamente seria, una mente che sta cercando il significato della vita\". - Carl Jung Nuova traduzione del manoscritto originale tedesco del romanzo \"Siddharta\" di Hermann Hesse, vincitore del premio Nobel. Questa edizione contiene anche un epilogo del traduttore, un glossario filosofico dei concetti utilizzati da Hesse e una cronologia della sua vita e delle sue opere. Hesse ha vinto il Premio Nobel per la Letteratura nel 1947. \"Siddharta\" \u00e8 una delle opere pi\u00f9 famose di Hesse e racconta il viaggio spirituale di Siddharta. Si tratta di una sintesi di vari pensieri filosofici, tra cui quelli di Nietzsche e Schopenhauer, combinati con lo Yoga ind\u00f9 e il panpsichismo di San Francesco. La storia segue Siddharta mentre attraversa le varie sfide della vita, alla ricerca della pace interiore e dell'illuminazione. Dopo molteplici esperienze di vita, tra cui il dolore della paternit\u00e0 e l'orlo dell'autodistruzione, Siddharta scopre che la vera illuminazione risiede nell'amore incondizionato e nell'ammirazione per il mondo. Si distingue per l'esplorazione del percorso verso l'illuminazione, attingendo a piene mani dalle filosofie buddiste e induiste. Un fatto interessante \u00e8 che la storia non \u00e8 incentrata sul Buddha storico, Siddharta Gautama, ma piuttosto su un personaggio di fantasia con lo stesso nome. Si tratta di un romanzo spirituale che ripercorre il viaggio del suo omonimo protagonista alla ricerca dell'illuminazione e di una comprensione pi\u00f9 profonda dell'esistenza. L'esplorazione di Hesse della filosofia orientale, della ricerca della pace interiore e dell'interconnessione di tutti gli esseri \u00e8 ci\u00f2 che rende quest'opera significativa. Ha influenzato la letteratura introducendo i lettori alle filosofie orientali e ispirando un rinnovato interesse per la ricerca spirituale e l'autorealizzazione.",
-      "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Investigation",
-        "Hermann Hesse"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Off-focus trivia",
-          "detail": "Removed film adaptation details and marketing copy."
-        },
-        {
-          "reason": "Redundant praise",
-          "detail": "Collapsed repetitive review sentences into one insight."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "approved",
-    "id": "51ae163d-f329-43b6-9db4-d7fcd40d7db7"
-  },
-  {
-    "raw_title": "The Great Gatsby",
-    "normalized_title": "The Great Gatsby",
-    "author": "F. Scott Fitzgerald",
-    "fetched_summary": "Classical portrayal of love and violence during the Twenties.",
-    "summary_source": "google_books_api",
-    "isbn": "9780521402309",
-    "isbn_10": null,
-    "published_date": null,
-    "publication_year": 1991,
-    "pages": 288,
-    "cover_url": "http://books.google.com/books/content?id=0yfauGsKOjAC&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
-    "publisher": null,
-    "categories": [],
-    "subtitle": null,
-    "language": null,
-    "maturity_rating": null,
-    "print_type": null,
-    "info_link": null,
-    "preview_link": null,
-    "canonical_volume_link": null,
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.7395208957756441,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "Classical portrayal of love and violence during the Twenties."
-      }
-    ],
-    "insights": {
-      "summary": "Classical portrayal of love and violence during the Twenties.",
-      "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Investigation",
-        "F. Scott Fitzgerald"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Off-focus trivia",
-          "detail": "Removed film adaptation details and marketing copy."
-        },
-        {
-          "reason": "Redundant praise",
-          "detail": "Collapsed repetitive review sentences into one insight."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "approved",
-    "id": "c88d6cbc-8ca5-49eb-b19c-0e4a2f1bcc03"
-  },
-  {
-    "raw_title": "Il diario di una schiappa",
-    "normalized_title": "Il Diario Di Una Schiappa",
-    "author": "Jeff Kinney",
-    "fetched_summary": null,
-    "summary_source": null,
-    "isbn": "9788869662164",
-    "isbn_10": null,
-    "published_date": null,
-    "publication_year": 2017,
-    "pages": 198,
-    "cover_url": "http://books.google.com/books/content?id=pqncAQAACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "publisher": null,
-    "categories": [],
-    "subtitle": null,
-    "language": null,
-    "maturity_rating": null,
-    "print_type": null,
-    "info_link": null,
-    "preview_link": null,
-    "canonical_volume_link": null,
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.847,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "In questo libro, guidato da Jeff Kinney in persona, si scoprir\u00e0 tutto, ma proprio tutto, sull&#39;ultimo film della Schiappa: bambini e maiali robot, vomito computerizzato, auto tagliate a pezzi, controfigure, fango finto, barbe finte, e ..."
-      }
-    ],
-    "insights": {
-      "summary": "Il Diario Di Una Schiappa blends investigation and history to surface themes of knowledge and power. Reviews highlight atmosphere, textured world building, and steady suspense.",
-      "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Investigation",
-        "Jeff Kinney"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Off-focus trivia",
-          "detail": "Removed film adaptation details and marketing copy."
-        },
-        {
-          "reason": "Redundant praise",
-          "detail": "Collapsed repetitive review sentences into one insight."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "to_clean",
-    "id": "bee9ce3c-8393-4a7e-b102-c1052d3113c8"
-  },
-  {
-    "raw_title": "Il diario di una schiappa",
-    "normalized_title": "Il Diario Di Una Schiappa",
-    "author": "Jeff Kinney",
-    "fetched_summary": "Metadata summary unavailable for Il Diario Di Una Schiappa.",
-    "summary_source": "local_fallback",
-    "isbn": "9788869662164",
-    "isbn_10": "8869662160",
-    "published_date": "2017",
-    "publication_year": 2017,
-    "pages": 198,
-    "cover_url": "http://books.google.com/books/content?id=pqncAQAACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "publisher": "Il Castoro bambini",
+    "pages": 516,
+    "cover_url": "http://books.google.com/books/content?id=KAgbmUnR2EQC&printsec=frontcover&img=1&zoom=1&source=gbs_api",
+    "publisher": "Unknown Publisher",
     "categories": [
-      "Juvenile Nonfiction"
+      "Detective and mystery stories"
     ],
     "subtitle": null,
-    "language": "it",
+    "language": "en",
     "maturity_rating": "General",
     "print_type": "BOOK",
-    "info_link": "http://books.google.it/books?id=pqncAQAACAAJ&dq=intitle:%22Il+Diario+Di+Una+Schiappa%22+inauthor:%22Jeff+Kinney%22&hl=&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=pqncAQAACAAJ&dq=intitle:%22Il+Diario+Di+Una+Schiappa%22+inauthor:%22Jeff+Kinney%22&hl=&cd=1&source=gbs_api",
-    "canonical_volume_link": "https://books.google.com/books/about/Diario_di_una_schiappa_Il_libro_del_film.html?hl=&id=pqncAQAACAAJ",
+    "info_link": "http://books.google.it/books?id=KAgbmUnR2EQC&dq=intitle:%22The+Name+Of+The+Rose%22+inauthor:%22Umberto+Eco%22&hl=&source=gbs_api",
+    "preview_link": "http://books.google.it/books?id=KAgbmUnR2EQC&dq=intitle:%22The+Name+Of+The+Rose%22+inauthor:%22Umberto+Eco%22&hl=&cd=1&source=gbs_api",
+    "canonical_volume_link": "https://books.google.com/books/about/The_Name_of_the_Rose.html?hl=&id=KAgbmUnR2EQC",
     "openlibrary_key": null,
     "first_publish_year": null,
     "edition_count": null,
-    "average_rating": 4.42,
-    "ratings_count": 1080,
-    "positive_ratio": 0.875,
+    "average_rating": 3.24,
+    "ratings_count": 1546,
+    "positive_ratio": 0.674,
     "review_samples": [
       {
         "reviewer": "Google Books Snippet",
         "rating": 4.5,
-        "text": "In questo libro, guidato da Jeff Kinney in persona, si scoprir\u00e0 tutto, ma proprio tutto, sull'ultimo film della Schiappa: bambini e maiali robot, vomito computerizzato, auto tagliate a pezzi, controfigure, fango finto, barbe finte, e ..."
+        "text": "The year is 1327."
       }
     ],
+    "discarded_information_examples": [],
     "insights": {
-      "summary": "Il Diario Di Una Schiappa frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict rather than plot revelations.",
+      "summary": "The year is 1327. Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Baskerville arrives to investigate. His delicate mission is suddenly overshadowed by seven bizarre deaths that take place in seven days and nights of apocalyptic terror. The body of one monk is found in a cask of pigs' blood, another is floating in a bathhouse, still another is crushed at the foot of a cliff. Readers describe it as The year is 1327.",
       "tags": [
-        "Juvenile Nonfiction",
-        "Contemporary",
-        "Highly Rated"
+        "Detective and mystery stories",
+        "Classic",
+        "Long Read",
+        "Character-Driven",
+        "Atmospheric",
+        "High Stakes",
+        "Plot-Driven"
       ],
       "rejected_information": [
         {
@@ -556,239 +58,89 @@
         }
       ]
     },
-    "reject_attempts": 2,
+    "reject_attempts": 0,
     "status": "to_approve",
-    "id": "67919512-a01f-4b84-a0ac-4e15fd1e7527"
+    "id": "65c22be6-437f-4693-b1d6-2e4984f0cbfa"
   },
   {
-    "raw_title": "The Name of the Rose - Umberto Eco",
-    "normalized_title": "The Name Of The Rose - Umberto Eco",
-    "author": "Umberto Eco",
-    "fetched_summary": "In 1327, Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Bakersville arrives to investigate. His delicate mission is overshadowed by seven bizarre deaths that take place in the same number of days, and Brother William must turn detective to sort things out.",
-    "summary_source": "google_books_api",
-    "isbn": "WISC:89085145860",
-    "isbn_10": null,
-    "published_date": null,
-    "publication_year": 1984,
-    "pages": 524,
-    "cover_url": "http://books.google.com/books/content?id=55QIAQAAMAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "publisher": null,
-    "categories": [],
+    "raw_title": "A Sud Del Confine, A Ovest Del Sole",
+    "normalized_title": "A Sud Del Confine, A Ovest Del Sole",
+    "author": "MURAKAMI HARUKI; PASTORE A. (CUR.)",
+    "fetched_summary": "Metadata summary unavailable for A Sud Del Confine, A Ovest Del Sole.",
+    "summary_source": "local_fallback",
+    "catalog_ean": "9788806230302",
+    "catalog_publisher": "V-EINAUDI",
+    "catalog_quantity": 1,
+    "catalog_price": null,
+    "isbn": "31213663533",
+    "isbn_10": "8858477965",
+    "published_date": "2010",
+    "publication_year": 2010,
+    "pages": 400,
+    "cover_url": "https://picsum.photos/seed/47/320/480",
+    "publisher": "Unknown Publisher",
+    "categories": [
+      "Unknown Genre"
+    ],
     "subtitle": null,
-    "language": null,
-    "maturity_rating": null,
-    "print_type": null,
+    "language": "en",
+    "maturity_rating": "General",
+    "print_type": "BOOK",
     "info_link": null,
     "preview_link": null,
     "canonical_volume_link": null,
     "openlibrary_key": null,
     "first_publish_year": null,
     "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.845,
+    "average_rating": 4.24,
+    "ratings_count": 43,
+    "positive_ratio": 0.762,
     "review_samples": [
       {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "In 1327, Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Bakersville arrives to investigate."
+        "reviewer": "Public Rating Signal",
+        "rating": 4.24,
+        "text": "Average reader score 4.24/5 over 43 ratings."
       }
     ],
+    "discarded_information_examples": [],
     "insights": {
-      "summary": "In 1327, Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Bakersville arrives to investigate. His delicate mission is overshadowed by seven bizarre deaths that take place in the same number of days, and Brother William must turn detective to sort things out.",
+      "summary": "A Sud Del Confine, A Ovest Del Sole frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict rather than plot revelations.",
       "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Investigation",
-        "Umberto Eco"
+        "Unknown Genre",
+        "Contemporary",
+        "Character-Driven",
+        "Atmospheric",
+        "High Stakes",
+        "Plot-Driven"
       ],
       "rejected_information": [
         {
-          "reason": "Off-focus trivia",
-          "detail": "Removed film adaptation details and marketing copy."
-        },
-        {
-          "reason": "Redundant praise",
-          "detail": "Collapsed repetitive review sentences into one insight."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "to_approve",
-    "id": "db94a73b-23e7-4317-89d5-4a39ec13323e"
-  },
-  {
-    "raw_title": "Diario di una schiappa",
-    "normalized_title": "Diario Di Una Schiappa",
-    "author": "Jeff Kinney",
-    "fetched_summary": null,
-    "summary_source": null,
-    "isbn": "9788869662164",
-    "isbn_10": "8869662160",
-    "published_date": "2017",
-    "publication_year": 2017,
-    "pages": 198,
-    "cover_url": "http://books.google.com/books/content?id=pqncAQAACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "publisher": "Il Castoro bambini",
-    "categories": [
-      "Juvenile Nonfiction"
-    ],
-    "subtitle": null,
-    "language": "it",
-    "maturity_rating": "NOT_MATURE",
-    "print_type": "BOOK",
-    "info_link": "http://books.google.it/books?id=pqncAQAACAAJ&dq=intitle:%22Diario+Di+Una+Schiappa%22+inauthor:%22Jeff+Kinney%22&hl=&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=pqncAQAACAAJ&dq=intitle:%22Diario+Di+Una+Schiappa%22+inauthor:%22Jeff+Kinney%22&hl=&cd=1&source=gbs_api",
-    "canonical_volume_link": "https://books.google.com/books/about/Diario_di_una_schiappa_Il_libro_del_film.html?hl=&id=pqncAQAACAAJ",
-    "openlibrary_key": "OL44103316W",
-    "first_publish_year": 2012,
-    "edition_count": 1,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.612,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "In questo libro, guidato da Jeff Kinney in persona, si scoprir\u00e0 tutto, ma proprio tutto, sull&#39;ultimo film della Schiappa: bambini e maiali robot, vomito computerizzato, auto tagliate a pezzi, controfigure, fango finto, barbe finte, e ..."
-      }
-    ],
-    "insights": {
-      "summary": "Diario Di Una Schiappa introduces its central conflict through atmosphere, stakes, and character tension, keeping key revelations undisclosed while highlighting the themes that define the reading experience.",
-      "tags": [
-        "Juvenile Nonfiction",
-        "Contemporary"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Insufficient synopsis",
-          "detail": "Avoided plot-specific statements because no trusted summary was fetched."
+          "reason": "Marketing language filtered",
+          "detail": "Removed promotional wording to keep the report factual and source-grounded."
         }
       ]
     },
     "reject_attempts": 1,
-    "status": "to_approve",
-    "id": "2d876200-0877-446a-a680-e1b097097113"
+    "status": "approved",
+    "id": "fd4025ea-8f91-4c8e-b014-b8d5b2dc184a"
   },
   {
     "raw_title": "Dune",
     "normalized_title": "Dune",
     "author": "Frank Herbert",
-    "fetched_summary": null,
-    "summary_source": null,
+    "fetched_summary": "Metadata summary unavailable for Dune.",
+    "summary_source": "local_fallback",
+    "catalog_ean": null,
+    "catalog_publisher": null,
+    "catalog_quantity": null,
+    "catalog_price": null,
     "isbn": "9788834739679",
-    "isbn_10": null,
-    "published_date": null,
+    "isbn_10": "8834739671",
+    "published_date": "2019",
     "publication_year": 2019,
     "pages": 633,
     "cover_url": "http://books.google.com/books/content?id=irHPywEACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "publisher": null,
-    "categories": [],
-    "subtitle": null,
-    "language": null,
-    "maturity_rating": null,
-    "print_type": null,
-    "info_link": null,
-    "preview_link": null,
-    "canonical_volume_link": null,
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.718,
-    "review_samples": [],
-    "insights": {
-      "summary": "Dune blends investigation and history to surface themes of knowledge and power. Reviews highlight atmosphere, textured world building, and steady suspense.",
-      "tags": [
-        "Historical Fiction",
-        "Mystery",
-        "Investigation",
-        "Frank Herbert"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Off-focus trivia",
-          "detail": "Removed film adaptation details and marketing copy."
-        },
-        {
-          "reason": "Redundant praise",
-          "detail": "Collapsed repetitive review sentences into one insight."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "to_approve",
-    "id": "ff1ce961-cc90-43fe-930c-cb76244d1d99"
-  },
-  {
-    "raw_title": "The Name of the Rose - Umberto Eco",
-    "normalized_title": "The Name Of The Rose - Umberto Eco",
-    "author": "Umberto Eco",
-    "fetched_summary": "In 1327, Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Bakersville arrives to investigate. His delicate mission is overshadowed by seven bizarre deaths that take place in the same number of days, and Brother William must turn detective to sort things out.",
-    "summary_source": "google_books_api",
-    "isbn": "WISC:89085145860",
-    "isbn_10": null,
-    "published_date": null,
-    "publication_year": 1984,
-    "pages": 524,
-    "cover_url": "http://books.google.com/books/content?id=55QIAQAAMAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "publisher": null,
-    "categories": [
-      "Fiction"
-    ],
-    "subtitle": null,
-    "language": null,
-    "maturity_rating": null,
-    "print_type": null,
-    "info_link": null,
-    "preview_link": null,
-    "canonical_volume_link": null,
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.681,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "In 1327, Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Bakersville arrives to investigate."
-      }
-    ],
-    "insights": {
-      "summary": "In 1327, Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Bakersville arrives to investigate. His delicate mission is overshadowed by seven bizarre deaths that take place in the same number of days, and Brother William must turn detective to sort things out. (Author: Umberto Eco; Year: 1984; Pages: 524; ISBN: WISC:89085145860). Reader excerpts mention: In 1327, Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Bakersville arrives to investigate.",
-      "tags": [
-        "Fiction",
-        "Umberto Eco",
-        "Classic",
-        "Investigation"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Marketing language filtered",
-          "detail": "Removed promotional wording to keep the report factual and source-grounded."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "to_approve",
-    "id": "4a99ea9b-be2c-4a35-ba2a-558251992da1"
-  },
-  {
-    "raw_title": "Il Signore degli Anelli",
-    "normalized_title": "Il Signore Degli Anelli",
-    "author": "J. R. R. Tolkien",
-    "fetched_summary": "La nuova edizione del classico di J.R.R. Tolkien nella traduzione di Ottavio Fatica arricchita da 50 tavole illustrate dal pluripremiato artista Alan Lee. In un unico volume La compagnia dell'anello, Le due torri, Il ritorno del re. Il Signore degli Anelli \u00e8 un romanzo d'eccezione, al di fuori del tempo: chiarissimo ed enigmatico, semplice e sublime. Dona alla felicit\u00e0 del lettore ci\u00f2 che la narrativa del nostro secolo sembrava incapace di offrire: avventure in luoghi remoti e terribili, episodi d'inesauribile allegria, segreti paurosi che si svelano a poco a poco, draghi crudeli e alberi che camminano, citt\u00e0 d'argento e di diamante poco lontane da necropoli tenebrose in cui dimorano esseri che spaventano solo al nominarli, urti giganteschi di eserciti luminosi e oscuri; e tutto questo in un mondo immaginario ma ricostruito con cura meticolosa, e in effetti assolutamente verosimile, perch\u00e9 dietro i suoi simboli si nasconde una realt\u00e0 che dura oltre e malgrado la storia: la lotta, senza tregua, fra il bene e il male. Leggenda e fiaba, tragedia e poema cavalleresco, il romanzo di Tolkien \u00e8 in realt\u00e0 un'allegoria della condizione umana che ripropone in chiave moderna i miti antichi.",
-    "summary_source": "google_books_api",
-    "isbn": "9788858790304",
-    "isbn_10": "8858790308",
-    "published_date": "2020-10-28",
-    "publication_year": 2020,
-    "pages": 1349,
-    "cover_url": "http://books.google.com/books/content?id=m0gAEAAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
-    "publisher": "Bompiani",
+    "publisher": "Unknown Publisher",
     "categories": [
       "Fiction"
     ],
@@ -796,185 +148,33 @@
     "language": "it",
     "maturity_rating": "General",
     "print_type": "BOOK",
-    "info_link": "https://play.google.com/store/books/details?id=m0gAEAAAQBAJ&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=m0gAEAAAQBAJ&printsec=frontcover&dq=intitle:%22Il+Signore+Degli+Anelli%22+inauthor:%22J.+R.+R.+Tolkien%22&hl=&cd=1&source=gbs_api",
-    "canonical_volume_link": "https://play.google.com/store/books/details?id=m0gAEAAAQBAJ",
-    "openlibrary_key": "OL43656271W",
-    "first_publish_year": 2019,
-    "edition_count": 1,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.74,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "La nuova edizione del classico di J.R.R. Tolkien nella traduzione di Ottavio Fatica arricchita da 50 tavole illustrate dal pluripremiato artista Alan Lee."
-      }
-    ],
-    "insights": {
-      "summary": "Il Signore Degli Anelli frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict rather than plot revelations.",
-      "tags": [
-        "Fiction",
-        "Contemporary"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Marketing language filtered",
-          "detail": "Removed promotional wording to keep the report factual and source-grounded."
-        }
-      ]
-    },
-    "reject_attempts": 2,
-    "status": "to_approve",
-    "id": "271e30f4-2d9b-45f6-aa4b-58cdf37364a4"
-  },
-  {
-    "raw_title": "Cronache del Ghiaccio e del Fuoco (Il trono di spade)",
-    "normalized_title": "Cronache Del Ghiaccio E Del Fuoco",
-    "author": "George R. R. Martin",
-    "fetched_summary": null,
-    "summary_source": null,
-    "isbn": "9788804631897",
-    "isbn_10": null,
-    "published_date": null,
-    "publication_year": 2013,
-    "pages": 500,
-    "cover_url": "http://books.google.com/books/content?id=XHhYmwEACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "publisher": null,
-    "categories": [
-      "Fiction"
-    ],
-    "subtitle": null,
-    "language": null,
-    "maturity_rating": null,
-    "print_type": null,
-    "info_link": null,
-    "preview_link": null,
-    "canonical_volume_link": null,
+    "info_link": "http://books.google.it/books?id=irHPywEACAAJ&dq=intitle:%22Dune%22+inauthor:%22Frank+Herbert%22&hl=&source=gbs_api",
+    "preview_link": "http://books.google.it/books?id=irHPywEACAAJ&dq=intitle:%22Dune%22+inauthor:%22Frank+Herbert%22&hl=&cd=1&source=gbs_api",
+    "canonical_volume_link": "https://books.google.com/books/about/Dune_Il_ciclo_di_Dune.html?hl=&id=irHPywEACAAJ",
     "openlibrary_key": null,
     "first_publish_year": null,
     "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.689,
-    "review_samples": [],
-    "insights": {
-      "summary": "Cronache Del Ghiaccio E Del Fuoco is presented with the available catalog metadata, including author, publication context, and reader rating signal where available. (Author: George R. R. Martin; Year: 2013; Pages: 500; ISBN: 9788804631897).",
-      "tags": [
-        "Fiction",
-        "George R. R. Martin"
-      ],
-      "rejected_information": [
-        {
-          "reason": "No direct user reviews",
-          "detail": "Excluded reader-opinion claims because no review samples were available."
-        },
-        {
-          "reason": "Insufficient synopsis",
-          "detail": "Avoided plot-specific statements because no trusted summary was fetched."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "to_approve",
-    "id": "1c323e3f-c87b-4296-97e8-c1389354e256"
-  },
-  {
-    "raw_title": "A Game of Thrones",
-    "normalized_title": "A Game Of Thrones",
-    "author": "George R. R. Martin",
-    "fetched_summary": "NOW THE ACCLAIMED HBO SERIES GAME OF THRONES\u2014THE MASTERPIECE THAT BECAME A CULTURAL PHENOMENON Here is the first book in the landmark series that has redefined imaginative fiction and become a modern masterpiece. A GAME OF THRONES In a land where summers can last decades and winters a lifetime, trouble is brewing. The cold is returning, and in the frozen wastes to the North of Winterfell, sinister and supernatural forces are massing beyond the kingdom\u2019s protective Wall. At the center of the conflict lie the Starks of Winterfell, a family as harsh and unyielding as the land they were born to. Sweeping from a land of brutal cold to a distant summertime kingdom of epicurean plenty, here is a tale of lords and ladies, soldiers and sorcerers, assassins and bastards, who come together in a time of grim omens. Amid plots and counterplots, tragedy and betrayal, victory and terror, the fate of the Starks, their allies, and their enemies hangs perilously in the balance, as each endeavors to win that deadliest of conflicts: the game of thrones. A GAME OF THRONES \u2022 A CLASH OF KINGS \u2022 A STORM OF SWORDS \u2022 A FEAST FOR CROWS \u2022 A DANCE WITH DRAGONS",
-    "summary_source": "google_books_api",
-    "isbn": "9780553897845",
-    "isbn_10": null,
-    "published_date": null,
-    "publication_year": 2003,
-    "pages": 865,
-    "cover_url": "http://books.google.com/books/content?id=5NomkK4EV68C&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
-    "publisher": "Random House Worlds",
-    "categories": [
-      "Fiction"
-    ],
-    "subtitle": null,
-    "language": null,
-    "maturity_rating": null,
-    "print_type": null,
-    "info_link": null,
-    "preview_link": null,
-    "canonical_volume_link": null,
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": 4.0,
-    "ratings_count": 150,
-    "positive_ratio": 0.8,
+    "average_rating": 3.39,
+    "ratings_count": 1225,
+    "positive_ratio": 0.797,
     "review_samples": [
       {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "NOW THE ACCLAIMED HBO SERIES GAME OF THRONES\u2014THE MASTERPIECE THAT BECAME A CULTURAL PHENOMENON Here is the first book in the landmark series that has redefined imaginative fiction and become a modern masterpiece."
+        "reviewer": "Public Rating Signal",
+        "rating": 3.39,
+        "text": "Average reader score 3.39/5 over 1225 ratings."
       }
     ],
+    "discarded_information_examples": [],
     "insights": {
-      "summary": "NOW THE ACCLAIMED HBO SERIES GAME OF THRONES\u2014THE MASTERPIECE THAT BECAME A CULTURAL PHENOMENON Here is the first book in the landmark series that has redefined imaginative fiction and become a modern masterpiece. A GAME OF THRONES In a land where summers can last decades and winters a lifetime, trouble is brewing. The cold is returning, and in the frozen wastes to the North of Winterfell, sinister and supernatural forces are massing beyond the kingdom\u2019s protective Wall. At the center of the conflict lie the Starks of Winterfell, a family as harsh and unyielding as the land they were born to. Sweeping from a land of brutal cold to a distant summertime kingdom of epicurean plenty, here is a tale of lords and ladies, soldiers and sorcerers, assassins and bastards, who come together in a time of grim omens. Amid plots and counterplots, tragedy and betrayal, victory and terror, the fate of the Starks, their allies, and their enemies hangs perilously in the balance, as each endeavors to win that deadliest of conflicts: the game of thrones. A GAME OF THRONES \u2022 A CLASH OF KINGS \u2022 A STORM OF SWORDS \u2022 A FEAST FOR CROWS \u2022 A DANCE WITH DRAGONS (Author: George R. R. Martin; Year: 2003; Pages: 865; ISBN: 9780553897845). Reader excerpts mention: NOW THE ACCLAIMED HBO SERIES GAME OF THRONES\u2014THE MASTERPIECE THAT BECAME A CULTURAL PHENOMENON Here is the first book in the landmark series that has redefined ",
-      "tags": [
-        "Fiction",
-        "George R. R. Martin"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Marketing language filtered",
-          "detail": "Removed promotional wording to keep the report factual and source-grounded."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "to_approve",
-    "id": "5433f8cc-09a0-445d-9947-6e5713582f3d"
-  },
-  {
-    "raw_title": "A Game of Thrones",
-    "normalized_title": "A Game Of Thrones",
-    "author": "George R. R. Martin",
-    "fetched_summary": "NOW THE ACCLAIMED HBO SERIES GAME OF THRONES\u2014THE MASTERPIECE THAT BECAME A CULTURAL PHENOMENON Here is the first book in the landmark series that has redefined imaginative fiction and become a modern masterpiece. A GAME OF THRONES In a land where summers can last decades and winters a lifetime, trouble is brewing. The cold is returning, and in the frozen wastes to the North of Winterfell, sinister and supernatural forces are massing beyond the kingdom\u2019s protective Wall. At the center of the conflict lie the Starks of Winterfell, a family as harsh and unyielding as the land they were born to. Sweeping from a land of brutal cold to a distant summertime kingdom of epicurean plenty, here is a tale of lords and ladies, soldiers and sorcerers, assassins and bastards, who come together in a time of grim omens. Amid plots and counterplots, tragedy and betrayal, victory and terror, the fate of the Starks, their allies, and their enemies hangs perilously in the balance, as each endeavors to win that deadliest of conflicts: the game of thrones. A GAME OF THRONES \u2022 A CLASH OF KINGS \u2022 A STORM OF SWORDS \u2022 A FEAST FOR CROWS \u2022 A DANCE WITH DRAGONS",
-    "summary_source": "google_books_api",
-    "isbn": "9780553897845",
-    "isbn_10": "0553897845",
-    "published_date": "2003-01-01",
-    "publication_year": 2003,
-    "pages": 865,
-    "cover_url": "http://books.google.com/books/content?id=5NomkK4EV68C&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
-    "publisher": "Random House Worlds",
-    "categories": [
-      "Fiction"
-    ],
-    "subtitle": "A Song of Ice and Fire: Book One",
-    "language": "en",
-    "maturity_rating": "General",
-    "print_type": "BOOK",
-    "info_link": "https://play.google.com/store/books/details?id=5NomkK4EV68C&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=5NomkK4EV68C&printsec=frontcover&dq=intitle:%22A+Game+Of+Thrones%22+inauthor:%22George+R.+R.+Martin%22&hl=&cd=1&source=gbs_api",
-    "canonical_volume_link": "https://play.google.com/store/books/details?id=5NomkK4EV68C",
-    "openlibrary_key": "OL257943W",
-    "first_publish_year": 1996,
-    "edition_count": 135,
-    "average_rating": 4.0,
-    "ratings_count": 150,
-    "positive_ratio": 0.8,
-    "review_samples": [
-      {
-        "reviewer": "Editorial Extract 1",
-        "rating": 4.0,
-        "text": "A GAME OF THRONES In a land where summers can last decades and winters a lifetime, trouble is brewing."
-      }
-    ],
-    "insights": {
-      "summary": "A Game Of Thrones introduces its central conflict through atmosphere, stakes, and character tension, keeping key revelations undisclosed while highlighting the themes that define the reading experience.",
+      "summary": "Dune frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict rather than plot revelations.",
       "tags": [
         "Fiction",
         "Contemporary",
-        "Family Saga"
+        "Long Read",
+        "Character-Driven",
+        "Atmospheric",
+        "High Stakes",
+        "Plot-Driven"
       ],
       "rejected_information": [
         {
@@ -983,63 +183,8 @@
         }
       ]
     },
-    "reject_attempts": 5,
-    "status": "to_approve",
-    "id": "6cc9400f-e9ec-4174-9d35-25afc4e81462"
-  },
-  {
-    "raw_title": "Shannara",
-    "normalized_title": "Shannara",
-    "author": "Terry Brooks",
-    "fetched_summary": "Long ago, the wars of the ancient Evil ruined the world. In peaceful Shady Vale, half-elfin Shea Ohmsford knows little of such troubles. But the supposedly dead Warlock Lord is plotting to destroy everything in his wake.",
-    "summary_source": "google_books_api",
-    "isbn": "9780708813447",
-    "isbn_10": null,
-    "published_date": null,
-    "publication_year": 1977,
-    "pages": 726,
-    "cover_url": "http://books.google.com/books/content?id=7IJpPwAACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "publisher": "Penguin Books",
-    "categories": [
-      "American fiction"
-    ],
-    "subtitle": null,
-    "language": null,
-    "maturity_rating": null,
-    "print_type": null,
-    "info_link": null,
-    "preview_link": null,
-    "canonical_volume_link": null,
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.733,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "Long ago, the wars of the ancient Evil ruined the world. In peaceful Shady Vale, half-elfin Shea Ohmsford knows little of such troubles. But the supposedly dead Warlock Lord is plotting to destroy everything in his wake."
-      }
-    ],
-    "insights": {
-      "summary": "Long ago, the wars of the ancient Evil ruined the world. In peaceful Shady Vale, half-elfin Shea Ohmsford knows little of such troubles. But the supposedly dead Warlock Lord is plotting to destroy everything in his wake. (Author: Terry Brooks; Year: 1977; Pages: 726; ISBN: 9780708813447). Reader excerpts mention: Long ago, the wars of the ancient Evil ruined the world. In peaceful Shady Vale, half-elfin Shea Ohmsford knows little of such troubles. But the supposedly dead",
-      "tags": [
-        "American fiction",
-        "Terry Brooks",
-        "Classic",
-        "War"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Marketing language filtered",
-          "detail": "Removed promotional wording to keep the report factual and source-grounded."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "to_approve",
-    "id": "ea58f2cc-60a1-4da6-b758-1f5b980b3ba4"
+    "reject_attempts": 1,
+    "status": "approved",
+    "id": "eca5380d-57ca-4f92-ba60-3285caf9ac9b"
   }
 ]

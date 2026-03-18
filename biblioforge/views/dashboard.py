@@ -1,12 +1,37 @@
 import streamlit as st
-from pathlib import Path
 
 from biblioforge.controllers.pipeline_controller import PipelineController
 from biblioforge.models.book import Book, BookStatus
+from biblioforge.services.normalization_service import normalize_title
 
 
 controller = PipelineController()
 st.set_page_config(page_title="BiblioForge", layout="wide")
+st.markdown(
+    """
+    <style>
+    .meta-line {
+        font-size: 1.05rem;
+        line-height: 1.5;
+        margin-bottom: 2px;
+    }
+    .meta-label {
+        font-weight: 700;
+    }
+    .rejected-item {
+        border-left: 3px solid #e0a93b;
+        padding-left: 10px;
+        margin-bottom: 10px;
+    }
+    .rejected-example {
+        font-size: 0.93rem;
+        color: #555;
+        margin-top: 4px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 def status_label(status: BookStatus) -> str:
@@ -34,6 +59,10 @@ def render_context_column(book: Book) -> None:
     canonical_volume_link = getattr(book, "canonical_volume_link", None)
     categories = getattr(book, "categories", [])
     reject_attempts = getattr(book, "reject_attempts", 0)
+    catalog_ean = getattr(book, "catalog_ean", None)
+    catalog_publisher = getattr(book, "catalog_publisher", None)
+    catalog_quantity = getattr(book, "catalog_quantity", None)
+    catalog_price = getattr(book, "catalog_price", None)
 
     cols = st.columns([1, 2])
     with cols[0]:
@@ -47,6 +76,15 @@ def render_context_column(book: Book) -> None:
 
     st.markdown("---")
     metric_items = []
+    if catalog_ean:
+        metric_items.append(("Catalog EAN", str(catalog_ean)))
+    if catalog_publisher:
+        metric_items.append(("Catalog Publisher", str(catalog_publisher)))
+    if catalog_quantity is not None:
+        metric_items.append(("Catalog Quantity", str(catalog_quantity)))
+    if catalog_price is not None:
+        metric_items.append(("Catalog Price", f"EUR {catalog_price:.2f}"))
+
     if book.publication_year:
         metric_items.append(("Edition Year", str(book.publication_year)))
     if first_publish_year:
@@ -66,7 +104,7 @@ def render_context_column(book: Book) -> None:
     if edition_count:
         metric_items.append(("Edition Count", str(edition_count)))
     if book.publisher:
-        metric_items.append(("Publisher", book.publisher))
+        metric_items.append(("API Publisher", book.publisher))
     if language:
         metric_items.append(("Language", language))
     if print_type:
@@ -81,7 +119,10 @@ def render_context_column(book: Book) -> None:
         left_meta, right_meta = st.columns(2)
         for idx, (label, value) in enumerate(metric_items):
             target = left_meta if idx % 2 == 0 else right_meta
-            target.markdown(f"**{label}:** {value}")
+            target.markdown(
+                f"<div class='meta-line'><span class='meta-label'>{label}:</span> {value}</div>",
+                unsafe_allow_html=True,
+            )
 
     if book.summary_source:
         st.caption(f"Summary Source: {book.summary_source}")
@@ -96,7 +137,6 @@ def render_context_column(book: Book) -> None:
     if reject_attempts:
         st.caption(f"Reject attempts: {reject_attempts}")
 
-    st.markdown("---")
     if book.positive_ratio is not None:
         ratio = f"{(book.positive_ratio or 0) * 100:.1f}%"
         st.markdown(f"## {ratio}\n% Positive Reviews")
@@ -109,7 +149,23 @@ def render_context_column(book: Book) -> None:
     st.markdown("### Rejected Information & Reasoning")
     if book.insights and book.insights.rejected_information:
         for note in book.insights.rejected_information:
-            st.markdown(f"- **{note.reason}:** {note.detail}")
+            detail = note.detail or ""
+            example = ""
+            if "Removed example:" in detail:
+                parts = detail.split("Removed example:", 1)
+                detail = parts[0].strip()
+                example = parts[1].strip().strip('"')
+
+            st.markdown("<div class='rejected-item'>", unsafe_allow_html=True)
+            st.markdown(f"**{note.reason}**")
+            if detail:
+                st.caption(detail)
+            if example:
+                st.markdown(
+                    f"<div class='rejected-example'><strong>Removed example:</strong> {example}</div>",
+                    unsafe_allow_html=True,
+                )
+            st.markdown("</div>", unsafe_allow_html=True)
     else:
         st.info("No rejected items recorded.")
 
@@ -149,9 +205,35 @@ def render_editing_column(book: Book) -> None:
             else:
                 st.error("Reject failed: selected book was not found.")
 
-    if st.button("Trust the Process", help="Approve all pending books in one batch."):
+    trust_col, remove_col = st.columns([4, 1])
+    if trust_col.button("Trust the Process", help="Approve all pending books in one batch."):
         approved = controller.trust_process()
         st.success(f"Process trusted: {approved} books saved to the final DB in one batch.")
+
+    if remove_col.button("x", help="Remove this book from the review queue."):
+        if hasattr(controller, "remove_from_queue"):
+            removed = controller.remove_from_queue(book.id)
+        elif hasattr(controller.repository, "delete_book"):
+            # Fallback for stale Streamlit state with an older controller instance.
+            removed = controller.repository.delete_book(book.id)
+        else:
+            # Final fallback for older repository objects loaded before method additions.
+            repo = controller.repository
+            cache = getattr(repo, "_cache", None)
+            persist = getattr(repo, "_persist", None)
+            if isinstance(cache, list) and callable(persist):
+                original_len = len(cache)
+                repo._cache = [item for item in cache if getattr(item, "id", None) != book.id]
+                removed = len(repo._cache) != original_len
+                if removed:
+                    repo._persist()
+            else:
+                removed = False
+        if removed:
+            st.success("Book removed from the review queue.")
+            st.rerun()
+        else:
+            st.error("Could not remove the selected book from the queue.")
 
 
 def render_ingestion_box():
@@ -167,18 +249,18 @@ def render_ingestion_box():
 
 def render_excel_ingestion_box() -> None:
     st.markdown("### Import from Excel")
-    default_path = Path(__file__).resolve().parents[2] / "data" / "cleaned" / "books_cleaned.xlsx"
-    with st.form("excel-ingestion-form"):
-        excel_path = st.text_input("Clean Excel path", value=str(default_path))
-        title_column = st.text_input("Title column", value="Title")
-        author_column = st.text_input("Author column", value="Author")
-        submitted = st.form_submit_button("Load into review queue")
-        if submitted:
-            try:
-                queued = controller.ingest_books_from_excel(Path(excel_path), title_column, author_column)
-                st.success(f"Import completed: {queued} books loaded into review.")
-            except Exception as exc:
-                st.error(f"Excel import failed: {exc}")
+    default_path = "biblioforge/data/cleaned/books_cleaned.xlsx"
+    excel_path_input = st.text_input("Excel path", value=default_path)
+    resolved_path = controller.resolve_excel_path(excel_path_input)
+    st.caption(f"Resolved import source: {resolved_path}")
+    if not resolved_path.exists():
+        st.warning("Excel path does not exist. Update the path before importing.")
+    if st.button("Load into review queue", use_container_width=True):
+        try:
+            total = controller.ingest_books_from_excel(excel_path_input)
+            st.success(f"Imported {total} books into review queue.")
+        except Exception as exc:
+            st.error(f"Excel import failed: {exc}")
 
 
 def main():
@@ -202,7 +284,10 @@ def main():
     selected_id = st.selectbox(
         "Select a book to review",
         options=[book.id for book in pending],
-        format_func=lambda bid: next((b.normalized_title for b in pending if b.id == bid), bid),
+        format_func=lambda bid: next(
+            (normalize_title(b.raw_title or b.normalized_title, b.author) for b in pending if b.id == bid),
+            bid,
+        ),
     )
     book = next(b for b in pending if b.id == selected_id)
 

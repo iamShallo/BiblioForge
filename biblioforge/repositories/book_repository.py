@@ -32,12 +32,18 @@ class BookRepository:
         payload = [book.to_dict() for book in self._cache]
         self.storage_path.write_text(json.dumps(payload, indent=2))
 
+    def _refresh_from_disk(self) -> None:
+        """Reload cache to reflect external file edits while dashboard is running."""
+        self._cache = self._load()
+
     def list_books(self, status: Optional[BookStatus] = None) -> List[Book]:
+        self._refresh_from_disk()
         if status is None:
             return list(self._cache)
         return [b for b in self._cache if b.status == status]
 
     def get_book(self, book_id: str) -> Optional[Book]:
+        self._refresh_from_disk()
         return next((b for b in self._cache if b.id == book_id), None)
 
     def upsert_book(self, book: Book) -> Book:
@@ -50,12 +56,38 @@ class BookRepository:
         return book
 
     def update_status(self, book_id: str, status: BookStatus) -> Optional[Book]:
+        self._refresh_from_disk()
         book = self.get_book(book_id)
         if not book:
             return None
         book.status = status
         self._persist()
         return book
+
+    def clear_books(self, status: Optional[BookStatus] = None) -> int:
+        """Clear books from storage and return removed count."""
+        self._refresh_from_disk()
+        if status is None:
+            removed = len(self._cache)
+            self._cache = []
+            self._persist()
+            return removed
+
+        original_len = len(self._cache)
+        self._cache = [book for book in self._cache if book.status != status]
+        removed = original_len - len(self._cache)
+        self._persist()
+        return removed
+
+    def delete_book(self, book_id: str) -> bool:
+        """Delete a single book by id and return whether it existed."""
+        self._refresh_from_disk()
+        original_len = len(self._cache)
+        self._cache = [book for book in self._cache if book.id != book_id]
+        removed = len(self._cache) != original_len
+        if removed:
+            self._persist()
+        return removed
 
     @staticmethod
     def _normalize_status(raw_status: Optional[str]) -> BookStatus:
@@ -91,6 +123,10 @@ class BookRepository:
                 "murders linked to a forbidden manuscript and a conflict over knowledge."
             ),
             summary_source="seed",
+            catalog_ean="9788845292613",
+            catalog_publisher="Bompiani",
+            catalog_quantity=12,
+            catalog_price=18.5,
             isbn="312136632299",
             isbn_10="8804631894",
             published_date="2010-09-14",
@@ -126,6 +162,7 @@ class BookRepository:
                     text="Eco keeps tension high while exploring knowledge, power, and faith.",
                 ),
             ],
+            discarded_information_examples=[],
             insights=BookInsights(
                 summary=(
                     "A medieval murder investigation led by William of Baskerville uncovers "
@@ -165,6 +202,10 @@ class BookRepository:
             author=data.get("author"),
             fetched_summary=data.get("fetched_summary"),
             summary_source=data.get("summary_source"),
+            catalog_ean=data.get("catalog_ean"),
+            catalog_publisher=data.get("catalog_publisher"),
+            catalog_quantity=data.get("catalog_quantity"),
+            catalog_price=data.get("catalog_price"),
             isbn=data.get("isbn"),
             isbn_10=data.get("isbn_10"),
             published_date=data.get("published_date"),
@@ -187,6 +228,7 @@ class BookRepository:
             ratings_count=int(data.get("ratings_count", 0) or 0),
             positive_ratio=data.get("positive_ratio"),
             review_samples=reviews,
+            discarded_information_examples=list(data.get("discarded_information_examples", [])),
             insights=insights,
             reject_attempts=int(data.get("reject_attempts", 0) or 0),
             status=BookRepository._normalize_status(data.get("status")),
