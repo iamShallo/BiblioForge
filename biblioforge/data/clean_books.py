@@ -96,8 +96,8 @@ def main():
     
     # File paths
     project_root = Path(__file__).parent
-    input_file = project_root / 'biblioforge' / 'data' / 'raw' / 'Stampa_Libri_Interni_RAW.xlsx'
-    output_file = project_root / 'biblioforge' / 'data' / 'cleaned' / 'books_cleaned.xlsx'
+    input_file = project_root / 'raw' / 'Stampa_Libri_Interni_RAW.xlsx'
+    output_file = project_root / 'cleaned' / 'books_cleaned.xlsx'
     
     # Validate input file existence
     if not input_file.exists():

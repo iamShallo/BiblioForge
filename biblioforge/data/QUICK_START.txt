@@ -1,0 +1,233 @@
+═══════════════════════════════════════════════════════════════════════════
+  BiblioForge - Setup Rapido Database SQL Server
+═══════════════════════════════════════════════════════════════════════════
+
+✓ PREREQUISITI INSTALLATI:
+  - Python 3.14 ✓
+  - Pandas ✓
+  - Pyodbc ✓
+  - Openpyxl ✓
+  - File Excel cleaned ✓
+
+───────────────────────────────────────────────────────────────────────────
+  STEP 1: Verificare la Connessione a SQL Server
+───────────────────────────────────────────────────────────────────────────
+
+Aprire PowerShell e eseguire:
+
+  python biblioforge/data/test_database_connection.py
+
+Output atteso:
+  ✓ Connessione a 'localhost' riuscita!
+  ✓ Database 'BiblioForge' trovato!
+
+Se non trovi BiblioForge → Vai a STEP 2
+
+───────────────────────────────────────────────────────────────────────────
+  STEP 2: Creare il Database (Eseguire 1 SOLA VOLTA)
+───────────────────────────────────────────────────────────────────────────
+
+2.1 Aprire SQL Server Management Studio (SSMS)
+
+2.2 Connettere al server:
+    - Server Name: localhost (o il nome del vostro server)
+    - Authentication: Windows Authentication
+    - Click "Connect"
+
+2.3 Eseguire il file SQL:
+    - File → Open → Database_schema.sql
+    - Oppure fare copia/incolla del contenuto in "New Query"
+    - Click "Execute" (F5)
+
+2.4 Verificare che non ci siano errori
+
+2.5 Eseguire il test di nuovo per verificare:
+    python biblioforge/data/test_database_connection.py
+
+───────────────────────────────────────────────────────────────────────────
+  STEP 3: Importare i Dati dal File Excel
+───────────────────────────────────────────────────────────────────────────
+
+3.1 Aprire il file import_to_database.py e verificare:
+
+    SERVER = "localhost"                    ← Verificare il nome del server
+    DATABASE = "BiblioForge"
+    EXCEL_FILE = "biblioforge/data/cleaned/books_cleaned.xlsx"
+
+    Nota: È possibile trovare il nome del server in SQL Management Studio
+    nella finestra di connessione in alto.
+
+3.2 Eseguire l'importazione:
+
+    python biblioforge/data/import_to_database.py
+
+3.3 Attendere il completamento (2-5 minuti)
+
+    Output atteso:
+    [1] Lettura del file Excel: biblioforge/data/cleaned/books_cleaned.xlsx
+        ✓ Caricati 2526 record
+
+    [2] Inizio importazione nel database...
+        Processati 100/2526 record...
+
+    [3] Importazione completata!
+
+    ======================================================================
+    STATISTICHE IMPORTAZIONE
+    ======================================================================
+    Totali processati: 2526
+    ✓ Inseriti: 2368
+    ⊘ Duplicati: 0
+    ⚠ Warning: 158
+    ✗ Errori: 0
+    ======================================================================
+
+───────────────────────────────────────────────────────────────────────────
+  STEP 4: Verificare i Dati Importati
+───────────────────────────────────────────────────────────────────────────
+
+4.1 Con SQL Management Studio:
+
+    USE BiblioForge;
+    SELECT TOP 5 * FROM Libri;
+
+4.2 Con Python (Report Automatico):
+
+    python biblioforge/data/database_queries.py
+
+    Output: Statistiche complete, Top editori, Libri esauriti, ecc.
+
+───────────────────────────────────────────────────────────────────────────
+  TROUBLESHOOTING
+───────────────────────────────────────────────────────────────────────────
+
+❌ Errore: "Impossibile connettersi al database"
+
+   Soluzioni:
+   1. Verificare che SQL Server sia avviato
+      - Cercare "Services" su Windows
+      - Trovare "SQL Server (MSSQLSERVER)" e verificare che sia "Running"
+
+   2. Trovare il nome del server corretto
+      - Aprire SQL Management Studio
+      - Il nome del server è visibile nella finestra di connessione
+      - Esempi: localhost, DESKTOP-ABC123, SERVER-NAME
+
+   3. Verificare che il database esista
+      - In SQL Management Studio, espandere "Databases"
+      - Cercare "BiblioForge"
+      - Se non c'è, eseguire database_schema.sql
+
+
+❌ Errore: "File not found"
+
+   Soluzione:
+   1. Verificare che il file esista:
+      biblioforge/data/cleaned/books_cleaned.xlsx
+
+   2. Se non esiste, eseguire prima:
+      python biblioforge/data/clean_books.py
+
+
+❌ Avviso: "WARNING: Prezzo non valido"
+
+   Causa: Alcuni record hanno prezzo mancante o non valido
+   Azione: Questi record vengono registrati in ImportLog
+
+   Per visualizzarli in SQL:
+   SELECT * FROM ImportLog WHERE Stato = 'WARNING';
+
+
+❌ Errore: "DUPLICATE: EAN già presente"
+
+   Causa: Il libro è già stato importato (stesso EAN)
+   Azione: Lo script evita di inserire duplicati
+
+   Per pulire duplicati:
+   DELETE FROM ImportLog WHERE Stato = 'DUPLICATE';
+
+───────────────────────────────────────────────────────────────────────────
+  FILE CREATI
+───────────────────────────────────────────────────────────────────────────
+
+✓ biblioforge/data/database_schema.sql
+  → Schema del database con tutte le tabelle
+
+✓ biblioforge/data/import_to_database.py
+  → Script principale per importare i dati Excel
+
+✓ biblioforge/data/database_queries.py
+  → Utility per query comuni e report
+
+✓ biblioforge/data/test_database_connection.py
+  → Test della connessione a SQL Server
+
+✓ biblioforge/data/DATABASE_SETUP_GUIDE.md
+  → Documentazione completa (leggere per dettagli)
+
+✓ biblioforge/data/QUICK_START.txt
+  → Questo file (istruzioni rapide)
+
+───────────────────────────────────────────────────────────────────────────
+  QUERY SQL UTILI
+───────────────────────────────────────────────────────────────────────────
+
+# Contare i libri importati
+SELECT COUNT(*) as TotaleLibri FROM Libri;
+
+# Vedere i primi 5 libri
+SELECT TOP 5 Titolo, Prezzo, Quantita FROM Libri;
+
+# Cercare un libro per titolo
+SELECT * FROM Libri WHERE Titolo LIKE '%1984%';
+
+# Libri più cari
+SELECT TOP 10 Titolo, Prezzo FROM Libri ORDER BY Prezzo DESC;
+
+# Libri esauriti (Quantità = 0)
+SELECT COUNT(*) FROM Libri WHERE Quantita = 0;
+
+# Statistiche per editore
+SELECT
+    e.NomeEditore,
+    COUNT(*) as NumeroLibri,
+    AVG(l.Prezzo) as PrezzoMedio
+FROM Libri l
+JOIN Editori e ON l.EditorID = e.EditorID
+GROUP BY e.NomeEditore
+ORDER BY COUNT(*) DESC;
+
+───────────────────────────────────────────────────────────────────────────
+  COMANDI RAPIDI (PowerShell)
+───────────────────────────────────────────────────────────────────────────
+
+# Test connessione
+python biblioforge/data/test_database_connection.py
+
+# Importare i dati
+python biblioforge/data/import_to_database.py
+
+# Visualizzare report
+python biblioforge/data/database_queries.py
+
+# Pulire il file Excel (se necessario)
+python biblioforge/data/clean_books.py
+
+───────────────────────────────────────────────────────────────────────────
+  PROSSIMI PASSI (Dopo l'importazione)
+───────────────────────────────────────────────────────────────────────────
+
+1. Connettere l'app Django/Flask al database
+2. Creare una REST API per accedere ai dati
+3. Implementare CRUD (Create, Read, Update, Delete)
+4. Aggiungere validazioni e autorizzazioni
+5. Monitorare le performance con indici
+
+───────────────────────────────────────────────────────────────────────────
+
+📚 Documentazione Completa: DATABASE_SETUP_GUIDE.md
+⏰ Tempo Stimato: 15-20 minuti
+✅ Pronto al primo tentativo!
+
+═══════════════════════════════════════════════════════════════════════════
+

@@ -1,0 +1,312 @@
+📚 BiblioForge Database Setup - INDEX
+═══════════════════════════════════════════════════════════════════════════
+
+🎯 STEP BY STEP GUIDE
+═══════════════════════════════════════════════════════════════════════════
+
+1️⃣  LEGGERE PRIMA: QUICK_START.txt ⚡
+    └─ Guida rapida in testo semplice (5 minuti)
+    └─ Comandi essenziali pronti all'uso
+    └─ Troubleshooting immediato
+
+2️⃣  TEST CONNESSIONE:
+    python biblioforge/data/test_database_connection.py
+    └─ Verifica SQL Server e connessione
+    └─ Controlla se BiblioForge database esiste
+
+3️⃣  CREARE SCHEMA:
+    database_schema.sql
+    └─ Eseguire in SQL Server Management Studio
+    └─ Crea tutte le tabelle e relazioni
+
+4️⃣  IMPORTARE DATI:
+    python biblioforge/data/import_to_database.py
+    └─ Legge books_cleaned.xlsx
+    └─ Inserisce in database con validazione
+
+5️⃣  VERIFICARE DATI:
+    python biblioforge/data/database_queries.py
+    └─ Genera report automatico
+    └─ Statistiche e query comuni
+
+═══════════════════════════════════════════════════════════════════════════
+📄 FILE DESCRIZIONE E CONTENUTO
+═══════════════════════════════════════════════════════════════════════════
+
+🔹 QUICK_START.txt ⚡ (Leggi PRIMA)
+   ├─ Setup rapido in 4 step
+   ├─ Comandi pronti da eseguire
+   ├─ Troubleshooting con soluzioni
+   ├─ Query SQL comuni
+   └─ Tempo: 5 minuti
+
+🔹 database_schema.sql 🏗️ (Schema Database)
+   ├─ Tabella Libri (principale)
+   ├─ Tabella Autori (normalizzata)
+   ├─ Tabella Editori (normalizzata)
+   ├─ Tabella ImportLog (audit)
+   ├─ Indici per performance
+   ├─ Foreign Keys
+   ├─ Commenti documentazione
+   └─ Dimensione: ~3 KB
+
+🔹 import_to_database.py ⭐⭐⭐ (Script Principale)
+   ├─ Classe DatabaseImporter
+   ├─ Connessione SQL Server
+   ├─ Validazione dati
+   ├─ Gestione duplicati
+   ├─ Parsing prezzi EUR
+   ├─ Logging file + database
+   ├─ Transazioni e rollback
+   ├─ Commenti dettagliati
+   ├─ Docstring completi
+   ├─ Error handling
+   └─ Dimensione: ~500 righe
+
+🔹 database_queries.py 🔍 (Query Utilities)
+   ├─ Classe DatabaseQueryHelper
+   ├─ Statistiche database
+   ├─ Ricerca per titolo
+   ├─ Ricerca per autore
+   ├─ Ricerca per editore
+   ├─ Top publishers
+   ├─ Libri esauriti
+   ├─ Libri costosi
+   ├─ Report automatico
+   ├─ Commenti dettagliati
+   └─ Dimensione: ~400 righe
+
+🔹 test_database_connection.py 🧪 (Test Script)
+   ├─ Test connessione server
+   ├─ Lista database disponibili
+   ├─ Verifica BiblioForge
+   ├─ Controlla tabelle
+   ├─ Conta record
+   ├─ Suggerimenti troubleshooting
+   ├─ Commenti dettagliati
+   └─ Dimensione: ~250 righe
+
+🔹 DATABASE_SETUP_GUIDE.md 📚 (Documentazione Completa)
+   ├─ Prerequisiti software
+   ├─ Step 1: Test connessione
+   ├─ Step 2: Creare database
+   ├─ Step 3: Eseguire importazione
+   ├─ Step 4: Verificare dati
+   ├─ Struttura database dettagliata
+   ├─ Query SQL utili (10+ esempi)
+   ├─ Troubleshooting guide
+   ├─ Security best practices
+   ├─ Performance considerations
+   ├─ Prossimi passi opzionali
+   └─ Dimensione: ~400 linee
+
+🔹 SOLUTION_SUMMARY.md 📊 (Riepilogo Soluzione)
+   ├─ Obiettivo raggiunto
+   ├─ File creati overview
+   ├─ Come usare (4 fasi)
+   ├─ Cosa ricevi (qualità, robustness, performance)
+   ├─ Statistiche importazione
+   ├─ Sicurezza implementata
+   ├─ Prossimi passi
+   ├─ Configurazione tecnica
+   ├─ Commenti nel codice (esempi)
+   ├─ Best practices insegnate
+   ├─ Support e troubleshooting
+   └─ Dimensione: ~300 linee
+
+🔹 INDEX.txt 📍 (QUESTO FILE)
+   ├─ Mappa di navigazione
+   ├─ Descrizione file
+   └─ Coordinate di utilizzo
+
+═══════════════════════════════════════════════════════════════════════════
+🔥 COMANDI RAPIDI
+═══════════════════════════════════════════════════════════════════════════
+
+Aprire PowerShell e navigare a:
+  cd C:\Users\claud\source\repos\BiblioForge
+
+Test connessione:
+  python biblioforge/data/test_database_connection.py
+
+Importare dati:
+  python biblioforge/data/import_to_database.py
+
+Visualizzare report:
+  python biblioforge/data/database_queries.py
+
+Pulire Excel (se necessario):
+  python biblioforge/data/clean_books.py
+
+═══════════════════════════════════════════════════════════════════════════
+✅ CHECKLIST SETUP
+═══════════════════════════════════════════════════════════════════════════
+
+Prima di iniziare:
+  ☐ SQL Server 2019+ installato e avviato
+  ☐ SQL Server Management Studio (SSMS) installato
+  ☐ Python 3.8+ con librerie installate (pip install -r requirements.txt)
+  ☐ File books_cleaned.xlsx presente
+
+Setup Database:
+  ☐ Leggere QUICK_START.txt (5 min)
+  ☐ Eseguire test_database_connection.py
+  ☐ Se BiblioForge non esiste:
+      ☐ Aprire database_schema.sql in SSMS
+      ☐ Eseguire lo script SQL
+      ☐ Verificare il test di nuovo
+
+Importazione Dati:
+  ☐ Verificare nome server in import_to_database.py
+  ☐ Eseguire: python import_to_database.py
+  ☐ Attendere completamento (5 min)
+
+Verifica Finali:
+  ☐ Eseguire: python database_queries.py
+  ☐ Controllare statistiche nel report
+  ☐ Verificare in SQL Management Studio: SELECT * FROM Libri;
+
+═══════════════════════════════════════════════════════════════════════════
+❓ QUANDO USARE QUALE FILE
+═══════════════════════════════════════════════════════════════════════════
+
+Voglio iniziare velocemente
+  → Leggi: QUICK_START.txt
+  → Poi: Esegui test_database_connection.py
+
+Non conosco i passaggi esatti
+  → Leggi: DATABASE_SETUP_GUIDE.md
+
+Voglio capire cosa è stato creato
+  → Leggi: SOLUTION_SUMMARY.md
+
+Voglio un'overview tecnica
+  → Leggi: DATABASE_SETUP_GUIDE.md → Sezione "Struttura Database"
+
+Ho un errore di connessione
+  → Leggi: DATABASE_SETUP_GUIDE.md → Troubleshooting
+  → Esegui: test_database_connection.py
+
+Voglio vedere i dati importati
+  → Esegui: database_queries.py
+
+Voglio cercare un libro
+  → Leggi: database_queries.py → Metodo search_by_title()
+
+Voglio statistiche generali
+  → Esegui: python database_queries.py
+  → Oppure: Leggi database_queries.py → print_database_report()
+
+Voglio scrivere query SQL proprie
+  → Leggi: DATABASE_SETUP_GUIDE.md → Query SQL utili
+
+═══════════════════════════════════════════════════════════════════════════
+📊 STRUTTURA DIRECTORY
+═══════════════════════════════════════════════════════════════════════════
+
+BiblioForge/
+├── biblioforge/
+│   └── data/
+│       ├── cleaned/
+│       │   └── books_cleaned.xlsx ← File da importare
+│       ├── raw/
+│       │   └── Stampa_Libri_Interni_RAW.xlsx
+│       ├── database_schema.sql ⭐
+│       ├── import_to_database.py ⭐⭐⭐
+│       ├── database_queries.py
+│       ├── test_database_connection.py
+│       ├── clean_books.py
+│       ├── DATABASE_SETUP_GUIDE.md
+│       ├── SOLUTION_SUMMARY.md
+│       ├── QUICK_START.txt
+│       ├── INDEX.txt (QUESTO FILE)
+│       └── CLEAN_BOOKS_README.md
+└── requirements.txt (aggiornato con pyodbc)
+
+═══════════════════════════════════════════════════════════════════════════
+⏱️  TEMPO STIMATO
+═══════════════════════════════════════════════════════════════════════════
+
+Leggere QUICK_START.txt:        5 minuti
+Test connessione:                2 minuti
+Creare database (SSMS):          5 minuti
+Importare dati:                  5 minuti
+Verificare dati:                 1 minuto
+├─────────────────────────────────────
+TOTALE:                          18 minuti ✓
+
+═══════════════════════════════════════════════════════════════════════════
+🎓 PRINCIPI IMPLEMENTATI
+═══════════════════════════════════════════════════════════════════════════
+
+✅ Validazione dati completa
+✅ Gestione errori robusta
+✅ Prevenzione duplicati (EAN univoco)
+✅ Normalizzazione (3NF)
+✅ Logging strutturato
+✅ Audit trail completo
+✅ Transazioni con rollback
+✅ Indici per performance
+✅ Soft delete pattern
+✅ Type hints
+✅ Docstring dettagliati
+✅ Commenti abbondanti
+✅ Security (parameterized queries)
+✅ Batch processing
+✅ UTF-8 encoding
+
+═══════════════════════════════════════════════════════════════════════════
+💾 REQUISITI INSTALLATI
+═══════════════════════════════════════════════════════════════════════════
+
+✓ Python 3.14
+✓ pandas 3.0.1
+✓ numpy 2.4.3
+✓ pyodbc 5.3.0
+✓ openpyxl 3.1.5
+
+═══════════════════════════════════════════════════════════════════════════
+🆘 ERRORI PIÙ COMUNI
+═══════════════════════════════════════════════════════════════════════════
+
+"Impossibile connettersi"
+  ① Verificare SQL Server sia avviato
+  ② Controllare nome server (in SSMS)
+  ③ Verificare BiblioForge database esista
+  Vedi: DATABASE_SETUP_GUIDE.md → Troubleshooting
+
+"File not found"
+  ① Verificare books_cleaned.xlsx esista
+  ② Se no, eseguire: python clean_books.py
+  Vedi: DATABASE_SETUP_GUIDE.md → Troubleshooting
+
+"Database non trovato"
+  ① Creare il database: database_schema.sql
+  ② Eseguire in SQL Management Studio
+  Vedi: QUICK_START.txt → STEP 2
+
+═══════════════════════════════════════════════════════════════════════════
+📞 SUPPORTO
+═══════════════════════════════════════════════════════════════════════════
+
+Domanda                          File da Consultare
+────────────────────────────────────────────────────────────
+Come inizio?                     QUICK_START.txt
+Qual è il primo passo?           DATABASE_SETUP_GUIDE.md
+Cosa ho ricevuto?                SOLUTION_SUMMARY.md
+Come connetto SQL Server?        test_database_connection.py
+Come importo i dati?             import_to_database.py
+Come faccio query?               database_queries.py
+Ho un errore, cosa faccio?       DATABASE_SETUP_GUIDE.md (Troubleshooting)
+Quali sono i comandi rapidi?     QUICK_START.txt (Comandi Rapidi)
+Schema del database?             database_schema.sql
+Query SQL comuni?                DATABASE_SETUP_GUIDE.md (Query SQL Utili)
+
+═══════════════════════════════════════════════════════════════════════════
+
+👉 INIZIA QUI: Leggi "QUICK_START.txt" (5 minuti)
+
+═══════════════════════════════════════════════════════════════════════════
+Created: 18 Marzo 2026 | BiblioForge Complete Database Solution
+═══════════════════════════════════════════════════════════════════════════
+
