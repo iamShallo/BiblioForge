@@ -1,62 +1,118 @@
 # BiblioForge
-AI-driven pipeline for cleaning raw book titles, enriching them with trusted metadata, and generating concise editorial insights. Built as an exam project for **Big Data Management** by **Francesco Caldarelli** and **Claudio Cozzolino**.
 
-## What it does
-- Cleans noisy titles into search-friendly strings
-- Enriches metadata via Google Books plus a Goodreads scrape fallback
-- Calls Gemini to generate summaries, tags, and transparency notes (with local fallback when no key is set)
-- Surfaces a Streamlit dashboard for human-in-the-loop review and approval
-- Persists processed books to a simple JSON store for demo purposes
+![Python](https://img.shields.io/badge/Python-3.11%2B-blue)
+![Streamlit](https://img.shields.io/badge/Streamlit-UI-FF4B4B)
+![Google Gemini](https://img.shields.io/badge/AI-Google_Gemini-8E75B2)
+![Academic](https://img.shields.io/badge/Exam-Big_Data_Management-brightgreen)
 
-## Architecture
-- `main.py`: CLI entrypoint (`dashboard` or `ingest`).
-- `controllers/pipeline_controller.py`: orchestrates normalization, enrichment, AI insights, and persistence.
-- `services/normalization_service.py`: cleans the raw title.
-- `services/crawling_service.py`: fetches Google Books metadata and scrapes Goodreads ratings/snippets.
-- `services/ai_service.py`: builds the Gemini prompt, parses responses, and falls back to heuristic insights.
-- `repositories/book_repository.py`: JSON-backed storage located at `biblioforge/data/processed/books.json`.
-- `views/dashboard.py`: Streamlit UI to ingest, review, approve, or re-run books.
-- `data/clean_books.py`: one-off cleaner that turns the raw XLSX inventory into a structured XLSX/CSV (see `data/CLEAN_BOOKS_README.md`).
+**BiblioForge** is an AI-driven pipeline designed to clean raw book titles, enrich them with trusted web metadata, and generate concise, editorial insights. 
 
-## Prerequisites
-- Python 3.11+
-- Recommended: virtual environment (`python -m venv .venv && source .venv/bin/activate`)
+Built as an exam project for the **Big Data Management** course by **Francesco Caldarelli** and **Claudio Cozzolino**.
 
-Install deps (adjust if you already have a requirements file):
+---
+
+## Key Features
+
+* ** Automated Data Cleaning:** Transforms noisy, unstructured catalog titles into clean, search-friendly strings.
+* ** Smart Enrichment:** Fetches reliable metadata via the Google Books API, with a best-effort fallback to scrape Goodreads for ratings and snippets.
+* ** AI-Powered Insights:** Integrates with Google Gemini to generate dynamic summaries, smart tags, and transparency notes (includes a deterministic local fallback if no API key is provided).
+* ** Human-in-the-Loop (HITL):** Features a sleek **Streamlit** dashboard allowing human operators to review, edit, approve, or re-run AI-processed books before final database insertion.
+
+---
+
+## Project Architecture
+
+The codebase is organized using a clean, modular structure separating concerns across views, controllers, and services:
+
+```text
+biblioforge/
+├── main.py                       # CLI entry point (Run dashboard or ingest books)
+├── controllers/
+│   └── pipeline_controller.py    # Orchestrates normalization, enrichment, and AI insights
+├── services/
+│   ├── normalization_service.py  # Cleans raw strings/titles
+│   ├── crawling_service.py       # Fetches Google Books metadata & Goodreads data
+│   └── ai_service.py             # Builds Gemini prompts and parses JSON responses
+├── repositories/
+│   └── book_repository.py        # JSON-backed storage (data/processed/books.json)
+├── views/
+│   └── dashboard.py              # Streamlit UI for HITL review
+└── data/
+    ├── clean_books.py            # One-off script to structure raw XLSX inventory
+    └── CLEAN_BOOKS_README.md     # Documentation for data transformations
+```
+
+---
+
+## Getting Started
+
+### 1. Prerequisites
+Ensure you have **Python 3.11+** installed. It is highly recommended to use a virtual environment.
+
+### 2. Installation
+Clone the repository and set up your environment:
+
 ```bash
+# Create and activate virtual environment
+python -m venv .venv
+
+# On MacOS/Linux:
+source .venv/bin/activate  
+
+# On Windows:
+.venv\Scripts\activate
+
+# Install dependencies
 pip install streamlit httpx pydantic pandas openpyxl
 ```
 
-Optional environment variables:
-- `GOOGLE_BOOKS_API_KEY` for richer metadata
-- `GEMINI_API_KEY` for LLM insights (otherwise a deterministic fallback is used)
+### 3. Environment Variables (Optional but Recommended)
+For the full experience, set up your API keys in your terminal or via a `.env` file in the root directory:
+* `GOOGLE_BOOKS_API_KEY`: Enables richer and more reliable metadata extraction.
+* `GEMINI_API_KEY`: Enables LLM insights. Without this, the app gracefully falls back to deterministic, hardcoded summaries/tags for demonstration purposes.
 
-## Quick start
+---
+
+## Usage
+
+You can interact with BiblioForge via the CLI or the Web Dashboard.
+
+### Launch the Dashboard (Recommended)
+Fire up the Streamlit UI to review pending books, edit AI-generated summaries, adjust tags, and approve records:
+
 ```bash
-# 1) Activate your venv and install deps
-source .venv/bin/activate
-pip install streamlit httpx pydantic pandas openpyxl
-
-# 2) Launch the dashboard
 python main.py dashboard
+```
+*The dashboard will run locally at `http://localhost:8501`.*
 
-# 3) Or ingest from CLI (adds a book and queues it for review)
+### Ingest Data via CLI
+To manually add a book to the pipeline and queue it for dashboard review:
+
+```bash
 python main.py ingest "The Name of the Rose - Umberto Eco" "Umberto Eco"
 ```
 
-The dashboard runs on Streamlit (default http://localhost:8501). Pending books appear in the dropdown; you can edit summaries, adjust tags, approve, or mark for re-run.
+---
 
-## Data cleaning helper
-The legacy catalog lives in `biblioforge/data/raw/Stampa_Libri_Interni_RAW.xlsx`. To produce a cleaned spreadsheet:
+## Data Cleaning Helper
+
+The legacy catalog is located at `biblioforge/data/raw/Stampa_Libri_Interni_RAW.xlsx`. 
+To produce a cleaned, structured spreadsheet ready for ingestion:
+
 ```bash
 python biblioforge/data/clean_books.py
 ```
-See `biblioforge/data/CLEAN_BOOKS_README.md` for the exact transformations (column renames, title/author split, price formatting, quantity normalization).
+*Note: Check `biblioforge/data/CLEAN_BOOKS_README.md` for exact transformation rules (e.g., column renames, title/author split, price formatting, quantity normalization).*
 
-## Notes and limitations
-- Storage is a JSON file aimed at demo usage; replace `BookRepository` with a real database for production.
-- Network calls (Google Books, Goodreads) are best-effort and may be rate-limited; the pipeline falls back to safe defaults on errors.
-- Gemini requests require a valid API key; without it, the app returns a deterministic fallback summary and tags.
+---
 
-## Credits
-Created by **Francesco Caldarelli** and **Claudio Cozzolino** for the Big Data Management exam.
+## Notes & Limitations
+
+* **Storage:** Currently, persistence is handled via a local JSON file (`books.json`) designed for demonstration and academic purposes. For a production environment, `BookRepository` should be refactored to connect to a relational database (e.g., PostgreSQL).
+* **Network Reliability:** External calls (Google Books, Goodreads) are "best-effort" and subject to rate limits. The pipeline is designed with fallbacks to prevent crashes.
+* **AI Capabilities:** Full summarization and dynamic tagging require a valid Gemini API key.
+
+---
+
+## 🎓 Credits
+Developed by **Francesco Caldarelli** and **Claudio Cozzolino** for the **Big Data Management** exam.
