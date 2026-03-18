@@ -50,4 +50,6 @@ For the full experience, set up your API keys in your terminal or via a `.env` f
 ---
 
 ## Credits
-Developed by **Francesco Caldarelli** and **Claudio Cozzolino** for the **Big Data Management** exam.
+Developed for the **Big Data Management** exam by:
+* **Francesco Caldarelli** - francesco.caldarelli@studenti.unicam.it
+* **Claudio Cozzolino** - claudio.cozzolino@studenti.unicam.it
