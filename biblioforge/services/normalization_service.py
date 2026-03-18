@@ -1,5 +1,38 @@
 import re
+import unicodedata
 from typing import Optional
+
+
+def _repair_text_noise(text: str) -> str:
+    if not text:
+        return ""
+
+    cleaned = unicodedata.normalize("NFKC", str(text))
+    replacements = {
+        "Â«": '"',
+        "Â»": '"',
+        "«": '"',
+        "»": '"',
+        "“": '"',
+        "”": '"',
+        "„": '"',
+        "‟": '"',
+        "’": "'",
+        "‘": "'",
+        "‚": "'",
+        "‛": "'",
+        "`": "'",
+        "´": "'",
+        "Â": "",
+    }
+    for old, new in replacements.items():
+        cleaned = cleaned.replace(old, new)
+
+    # Split glued words like "COSECaproni" that often come from OCR/encoding noise.
+    cleaned = re.sub(r"\b([A-ZÀ-ÖØ-Ý]{3,})([A-Z][a-zà-öø-ÿ]+)\b", r"\1 \2", cleaned)
+
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
 
 
 def _remove_embedded_author(title: str, author: Optional[str]) -> str:
@@ -12,9 +45,13 @@ def _remove_embedded_author(title: str, author: Optional[str]) -> str:
         return title
 
     escaped_author = re.escape(author_text)
+    author_tokens = [token for token in re.split(r"\s+", author_text) if token]
+    flexible_author_pattern = r"[\s\.,]+".join(re.escape(token) for token in author_tokens) if author_tokens else escaped_author
+
     patterns = [
         rf"^\s*{escaped_author}\s*[-|:,]\s*",
         rf"\s*[-|:,]\s*{escaped_author}\s*$",
+        rf"\s*[-|:,]?\s*{flexible_author_pattern}\s*$",
         rf"^\s*{escaped_author}\s*$",
     ]
     cleaned = title
@@ -47,7 +84,10 @@ def normalize_title(raw_title: Optional[str], author: Optional[str] = None) -> s
     if not raw_title:
         return ""
 
-    title = raw_title
+    title = _repair_text_noise(raw_title)
+    # Remove decorative quotes around chunks while keeping the inner text.
+    title = title.replace('"', " ")
+    title = title.replace("'", " ")
     title = re.sub(r"\([^)]*\)|\[[^]]*\]", "", title)  # remove bracketed notes
     title = _strip_edition_noise(title)
     title = _remove_embedded_author(title, author)

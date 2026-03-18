@@ -96,9 +96,10 @@ class PipelineController:
         normalized_input_title = normalized_catalog.get("title") or raw_title
         normalized_input_author = normalized_catalog.get("author") or cleaned_author
         normalized_title = normalize_title(normalized_input_title, normalized_input_author)
+        canonical_title = normalized_title or normalize_title(raw_title, normalized_input_author)
         book = Book(
-            raw_title=raw_title,
-            normalized_title=normalized_title,
+            raw_title=canonical_title,
+            normalized_title=canonical_title,
             author=normalized_input_author,
             catalog_ean=catalog_ean,
             catalog_publisher=normalized_catalog.get("publisher") or catalog_publisher,
@@ -282,7 +283,9 @@ class PipelineController:
             book.author = refreshed_catalog.get("author") or book.author
             inferred_title = refreshed_catalog.get("title") or book.raw_title
             if inferred_title:
-                book.normalized_title = normalize_title(inferred_title, book.author)
+                canonical_title = normalize_title(inferred_title, book.author)
+                book.raw_title = canonical_title
+                book.normalized_title = canonical_title
 
         previous_summary = book.insights.summary if book.insights else None
         regeneration_token = str(uuid4())

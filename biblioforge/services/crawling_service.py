@@ -14,6 +14,7 @@ from urllib.parse import quote_plus
 import httpx
 
 from biblioforge.models.book import Book, BookStatus, ReviewSample
+from biblioforge.services.normalization_service import normalize_title
 
 
 GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes"
@@ -85,7 +86,19 @@ def _pick_best_google_books_match(items: List[dict], normalized_title: str, auth
     return best_item or {}
 
 
-async def _fetch_google_books(normalized_title: str, author: Optional[str], publisher: Optional[str] = None) -> dict:
+def _normalize_catalog_code(code: Optional[str]) -> str:
+    if not code:
+        return ""
+    compact = re.sub(r"[^0-9Xx]", "", str(code)).upper()
+    return compact
+
+
+async def _fetch_google_books(
+    normalized_title: str,
+    author: Optional[str],
+    publisher: Optional[str] = None,
+    catalog_ean: Optional[str] = None,
+) -> dict:
     strict_query_parts = [f'intitle:"{normalized_title}"']
     if author:
         strict_query_parts.append(f'inauthor:"{author}"')
@@ -106,6 +119,25 @@ async def _fetch_google_books(normalized_title: str, author: Optional[str], publ
         common_params = {"orderBy": "relevance"}
         if api_key:
             common_params["key"] = api_key
+
+        # Emergency exact lookup by ISBN/EAN when title/author are too noisy.
+        normalized_code = _normalize_catalog_code(catalog_ean)
+        if normalized_code:
+            code_resp = await client.get(
+                GOOGLE_BOOKS_URL,
+                params={
+                    **common_params,
+                    "q": f"isbn:{normalized_code}",
+                    "maxResults": 5,
+                },
+            )
+            code_resp.raise_for_status()
+            code_items = code_resp.json().get("items", [])
+            code_pick = _pick_best_google_books_match(code_items, normalized_title, author)
+            if code_pick:
+                return code_pick
+            if code_items:
+                return code_items[0]
 
         all_items: List[dict] = []
         seen_ids = set()
@@ -553,6 +585,7 @@ async def enrich_book(book: Book) -> Book:
             book.normalized_title,
             book.author,
             getattr(book, "catalog_publisher", None),
+            getattr(book, "catalog_ean", None),
         )
         meta = _extract_metadata(item, book.normalized_title)
         book.isbn = meta.get("isbn")
@@ -572,7 +605,14 @@ async def enrich_book(book: Book) -> Book:
         book.canonical_volume_link = meta.get("canonical_volume_link")
         book.average_rating = meta.get("average_rating")
         book.ratings_count = int(meta.get("ratings_count") or 0)
-        book.author = book.author or meta.get("author")
+        if getattr(book, "catalog_ean", None):
+            book.author = meta.get("author") or book.author
+        else:
+            book.author = book.author or meta.get("author")
+        canonical_meta_title = normalize_title(meta.get("title"), book.author) if meta.get("title") else ""
+        if canonical_meta_title:
+            book.raw_title = canonical_meta_title
+            book.normalized_title = canonical_meta_title
         book.positive_ratio = meta.get("positive_ratio")
         book.review_samples, discarded = _reviews_from_snippet_with_discarded(meta.get("snippet"))
         discarded_examples.extend(discarded)

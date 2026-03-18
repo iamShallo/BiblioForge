@@ -337,8 +337,24 @@ def _looks_like_person_name(text: str) -> bool:
     if any(token in lowered for token in forbidden):
         return False
 
+    stopwords = {"del", "della", "dello", "dei", "degli", "di", "da", "e", "ed", "al", "alla"}
+
     tokens = [t for t in re.split(r"\s+", text.strip()) if t]
     if len(tokens) < 2 or len(tokens) > 8:
+        return False
+    if any(token.strip(".,'").lower() in stopwords for token in tokens):
+        return False
+
+    def _token_is_name_like(token: str) -> bool:
+        stripped = token.strip(".,'")
+        if not stripped:
+            return False
+        # Initials such as "R." are allowed.
+        if re.fullmatch(r"[A-ZÀ-ÖØ-Ý]\.?", stripped):
+            return True
+        return bool(re.fullmatch(r"[A-ZÀ-ÖØ-Ý][a-zà-öø-ÿ]+", stripped))
+
+    if not all(_token_is_name_like(token) for token in tokens):
         return False
 
     alpha_tokens = [t for t in tokens if re.search(r"[a-zA-Z]", t)]
@@ -370,6 +386,17 @@ def _extract_embedded_author(raw_title: str, raw_author: Optional[str] = None) -
         candidate_author = _simple_cleanup_author(match.group("author"))
         if candidate_author and _looks_like_person_name(candidate_author) and candidate_title:
             return candidate_title, candidate_author
+
+    # Fallback for noisy rows where author is appended at the end without separators.
+    tokens = [token for token in re.split(r"\s+", title_text) if token]
+    if len(tokens) >= 4:
+        for author_len in [4, 3, 2]:
+            if len(tokens) <= author_len + 1:
+                continue
+            candidate_author = _simple_cleanup_author(" ".join(tokens[-author_len:]))
+            candidate_title = re.sub(r"\s+", " ", " ".join(tokens[:-author_len])).strip(" -_\t\n,;")
+            if candidate_author and _looks_like_person_name(candidate_author) and candidate_title:
+                return candidate_title, candidate_author
 
     return title_text, None
 

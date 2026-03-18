@@ -238,17 +238,49 @@ def render_editing_column(book: Book) -> None:
 
 def render_ingestion_box():
     st.markdown("### Add a Book")
+    if "show_isbn_ean_fallback" not in st.session_state:
+        st.session_state["show_isbn_ean_fallback"] = False
+    if "ingestion_error_message" not in st.session_state:
+        st.session_state["ingestion_error_message"] = ""
+
+    if st.session_state.get("ingestion_error_message"):
+        st.error(st.session_state["ingestion_error_message"])
+        st.session_state["ingestion_error_message"] = ""
+
+    default_title = st.session_state.get("last_failed_title", "The Name of the Rose")
+    default_author = st.session_state.get("last_failed_author", "")
+    default_catalog_code = st.session_state.get("last_failed_catalog_code", "")
+
     with st.form("ingestion-form"):
-        title = st.text_input("Raw Title", value="The Name of the Rose")
-        author = st.text_input("Author (optional)", value="")
+        title = st.text_input("Raw Title", value=default_title)
+        author = st.text_input("Author (optional)", value=default_author)
         st.caption("You can type only the title: the pipeline will try to resolve the author automatically.")
+
+        fallback_catalog_code = ""
+        if st.session_state.get("show_isbn_ean_fallback"):
+            st.warning("Book not found. As a last resort, insert ISBN or EAN to resolve the exact edition.")
+            fallback_catalog_code = st.text_input("ISBN or EAN (shown only after error)", value=default_catalog_code)
+
         submitted = st.form_submit_button("Ingest and Enrich")
         if submitted:
             try:
-                book = controller.ingest_raw_book(title, author or None)
+                book = controller.ingest_raw_book(
+                    title,
+                    author or None,
+                    catalog_ean=fallback_catalog_code or None,
+                )
                 st.success(f"Book queued for review: {book.normalized_title}")
+                st.session_state["show_isbn_ean_fallback"] = False
+                st.session_state["last_failed_title"] = "The Name of the Rose"
+                st.session_state["last_failed_author"] = ""
+                st.session_state["last_failed_catalog_code"] = ""
             except BookNotFoundError as exc:
-                st.error(str(exc))
+                st.session_state["show_isbn_ean_fallback"] = True
+                st.session_state["last_failed_title"] = title
+                st.session_state["last_failed_author"] = author
+                st.session_state["last_failed_catalog_code"] = fallback_catalog_code
+                st.session_state["ingestion_error_message"] = str(exc)
+                st.rerun()
 
 
 def render_excel_ingestion_box() -> None:
