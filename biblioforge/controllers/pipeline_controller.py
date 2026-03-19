@@ -1,4 +1,6 @@
 import asyncio
+import copy
+import os
 import re
 from pathlib import Path
 from typing import List, Optional, Union
@@ -166,10 +168,14 @@ class PipelineController:
         return self.repository.list_books(BookStatus.TO_APPROVE)
 
     def approve(self, book_id: str) -> Optional[Book]:
-        book = self.repository.update_status(book_id, BookStatus.APPROVED)
+        # Move a book from the review queue to the final DB and remove it from the queue file.
+        book = self.repository.get_book(book_id)
         if not book:
             return None
+
+        book.status = BookStatus.APPROVED
         self.approved_repository.upsert_book(book)
+        self.repository.delete_book(book_id)
         return book
 
     def approve_with_edits(self, book_id: str, summary: str, tags: List[str]) -> Optional[Book]:
@@ -182,6 +188,9 @@ class PipelineController:
             book.insights.tags = tags
             self.repository.upsert_book(book)
         return self.approve(book_id)
+
+    def clear_approved(self) -> int:
+        return self.approved_repository.clear_books()
 
     def trust_process(self) -> int:
         pending = self.list_pending()
@@ -314,6 +323,8 @@ class PipelineController:
             except ValueError:
                 return None
 
+        entries: List[dict] = []
+
         for _, frame in workbook.items():
             if frame is None or frame.empty:
                 continue
@@ -368,26 +379,75 @@ class PipelineController:
                     raw_publisher=publisher_value or None,
                 )
 
-                # Fast path: enqueue skeleton books without slow enrichment to handle thousands of rows quickly.
-                canonical_title = normalize_title(
-                    normalized_catalog.get("title") or title_value,
-                    normalized_catalog.get("author") or author,
-                ) or title_value
+                entries.append(
+                    {
+                        "title": normalized_catalog.get("title") or title_value,
+                        "author": normalized_catalog.get("author") or author,
+                        "publisher": normalized_catalog.get("publisher") or publisher_value or None,
+                        "ean": ean_value or None,
+                        "quantity": quantity_value,
+                        "price": price_value,
+                    }
+                )
 
-                try:
-                    # Full enrichment path (slower) to ensure AI/crawling runs like manual ingestion.
-                    self.ingest_raw_book(
-                        normalized_catalog.get("title") or title_value,
-                        normalized_catalog.get("author") or author,
-                        catalog_ean=ean_value or None,
-                        catalog_publisher=normalized_catalog.get("publisher") or publisher_value or None,
-                        catalog_quantity=quantity_value,
-                        catalog_price=price_value,
-                    )
-                    queued += 1
-                except BookNotFoundError:
-                    skipped += 1
-                    continue
+        if not entries:
+            self.last_import_skipped = skipped
+            return queued
+
+        async def _process_entries(items: List[dict]) -> None:
+            nonlocal queued, skipped
+            max_concurrency = max(1, int(os.getenv("BIBLIOFORGE_IMPORT_CONCURRENCY", "20")))
+            batch_size = max(20, int(os.getenv("BIBLIOFORGE_IMPORT_BATCH", "200")))
+            semaphore = asyncio.Semaphore(max_concurrency)
+            cache = {}
+
+            async def _enrich_one(entry: dict) -> Optional[Book]:
+                key = (entry.get("title", "").casefold(), (entry.get("author") or "").casefold())
+
+                # Serve from cache when the same title/author repeats.
+                if key in cache:
+                    cached = copy.deepcopy(cache[key])
+                    cached.id = str(uuid4())
+                    cached.catalog_ean = entry.get("ean")
+                    cached.catalog_publisher = entry.get("publisher")
+                    cached.catalog_quantity = entry.get("quantity")
+                    cached.catalog_price = entry.get("price")
+                    cached.status = BookStatus.TO_APPROVE
+                    return cached
+
+                async with semaphore:
+                    try:
+                        book = Book(
+                            raw_title=entry.get("title"),
+                            normalized_title=normalize_title(entry.get("title"), entry.get("author")),
+                            author=entry.get("author"),
+                            catalog_ean=entry.get("ean"),
+                            catalog_publisher=entry.get("publisher"),
+                            catalog_quantity=entry.get("quantity"),
+                            catalog_price=entry.get("price"),
+                            status=BookStatus.IN_PROGRESS,
+                        )
+                        book = await enrich_book(book)
+                        if not self._is_reliably_enriched(book):
+                            return None
+                        book = generate_insights(book)
+                        book.status = BookStatus.TO_APPROVE
+                        cache[key] = book
+                        return book
+                    except Exception:
+                        return None
+
+            for idx in range(0, len(items), batch_size):
+                chunk = items[idx : idx + batch_size]
+                tasks = [_enrich_one(entry) for entry in chunk]
+                results = await asyncio.gather(*tasks)
+                to_insert = [b for b in results if b]
+                queued += len(to_insert)
+                skipped += len(chunk) - len(to_insert)
+                if to_insert:
+                    self.repository.upsert_many(to_insert)
+
+        asyncio.run(_process_entries(entries))
 
         self.last_import_skipped = skipped
         return queued

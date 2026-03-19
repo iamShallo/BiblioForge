@@ -1,3 +1,5 @@
+import time
+
 import streamlit as st
 
 from biblioforge.controllers.pipeline_controller import BookNotFoundError, PipelineController
@@ -34,6 +36,52 @@ st.markdown(
 )
 
 
+def process_pending_approval() -> None:
+    """Run a queued approval (set in session) outside the form to avoid double clicks."""
+    request = st.session_state.get("approve_request")
+    if not request:
+        return
+
+    with st.spinner("Saving and approving..."):
+        approved_book = controller.approve_with_edits(
+            request.get("book_id"),
+            request.get("summary", ""),
+            request.get("tags", []),
+        )
+
+    if not approved_book:
+        st.session_state["last_approve_message"] = "Could not approve: book not found or already processed."
+    else:
+        refreshed_pending = controller.list_pending()
+        if refreshed_pending:
+            st.session_state["selected_book_id"] = refreshed_pending[0].id
+        else:
+            st.session_state.pop("selected_book_id", None)
+
+        st.session_state["last_approve_message"] = "Book approved and saved to the new final DB."
+
+    st.session_state.pop("approve_request", None)
+    st.rerun()
+
+
+def format_duration(seconds: float) -> str:
+    seconds = max(seconds, 0)
+    minutes, secs = divmod(int(seconds), 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h {minutes}m {secs}s"
+    if minutes:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
+
+
+def bust_cache(url: str, token: str) -> str:
+    if not url:
+        return url
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}cb={token}"
+
+
 def status_label(status: BookStatus) -> str:
     labels = {
         BookStatus.TO_CLEAN: "To Clean",
@@ -66,7 +114,7 @@ def render_context_column(book: Book) -> None:
     cols = st.columns([1, 2])
     with cols[0]:
         if book.cover_url:
-            st.image(book.cover_url, width=160)
+            st.image(bust_cache(book.cover_url, book.id), width=160)
         else:
             st.image("https://via.placeholder.com/160x240?text=No+Cover", width=160)
     with cols[1]:
@@ -211,7 +259,7 @@ def render_context_column(book: Book) -> None:
         st.info("No rejected items recorded.")
 
 
-def render_editing_column(book: Book) -> None:
+def render_editing_column(book: Book, pending_ids: list[str]) -> None:
     st.markdown("### Report Editing")
     if not book.insights:
         st.warning("No AI insights available for this book yet.")
@@ -235,8 +283,12 @@ def render_editing_column(book: Book) -> None:
         reject = col_reject.form_submit_button("Reject & Redo Search", use_container_width=True)
 
         if approve:
-            controller.approve_with_edits(book.id, summary, tags)
-            st.success("Book approved and saved to the new final DB.")
+            st.session_state["approve_request"] = {
+                "book_id": book.id,
+                "summary": summary,
+                "tags": tags,
+            }
+            st.rerun()
         if reject:
             with st.spinner("Rejecting and regenerating..."):
                 updated = controller.reject_and_retry(book.id)
@@ -247,6 +299,8 @@ def render_editing_column(book: Book) -> None:
                 st.error("Reject failed: selected book was not found.")
 
     trust_col, remove_col = st.columns([4, 1])
+    remaining = len(pending_ids)
+    trust_col.caption(f"Pending to approve: {remaining}")
     if trust_col.button("Trust the Process", help="Approve all pending books in one batch."):
         approved = controller.trust_process()
         st.success(f"Process trusted: {approved} books saved to the final DB in one batch.")
@@ -383,7 +437,10 @@ def render_excel_ingestion_box() -> None:
     st.caption(f"Resolved import source: {resolved_path}")
     if not resolved_path.exists():
         st.warning("Excel path does not exist. Update the path before importing.")
+    timer_placeholder = st.empty()
     if st.button("Load into review queue", use_container_width=True):
+        start = time.perf_counter()
+        timer_placeholder.info("⏱️ Import in corso...")
         try:
             total = controller.ingest_books_from_excel(excel_path_input)
             st.success(f"Imported {total} books into review queue.")
@@ -391,22 +448,39 @@ def render_excel_ingestion_box() -> None:
                 st.warning(
                     f"Skipped {controller.last_import_skipped} rows because the book could not be resolved confidently."
                 )
+            timer_placeholder.success(f"⏱️ Import terminato in {format_duration(time.perf_counter() - start)}")
         except Exception as exc:
+            timer_placeholder.error(
+                f"⏱️ Import fallito dopo {format_duration(time.perf_counter() - start)}: {exc}"
+            )
             st.error(f"Excel import failed: {exc}")
 
 
 def main():
+    process_pending_approval()
+
     st.title("BiblioForge")
     st.caption("Workflow states: To Clean -> In Progress -> To Approve -> Approved")
     render_ingestion_box()
     render_excel_ingestion_box()
 
-    top_right = st.columns([1, 1])[1]
-    top_right.metric("Approved in final DB", len(controller.list_approved()))
+    summary_col, _ = st.columns([1, 3])
+    summary_col.metric("Approved in final DB", len(controller.list_approved()))
+    if summary_col.button("Clear approved DB", use_container_width=True):
+        if hasattr(controller, "clear_approved"):
+            removed = controller.clear_approved()
+        else:
+            removed = controller.approved_repository.clear_books()
+        st.success(f"Cleared {removed} books from the approved DB.")
+        st.rerun()
 
     if st.session_state.get("last_reject_message"):
         st.warning(st.session_state["last_reject_message"])
         st.session_state["last_reject_message"] = ""
+
+    if st.session_state.get("last_approve_message"):
+        st.success(st.session_state["last_approve_message"])
+        st.session_state["last_approve_message"] = ""
 
     pending = controller.list_pending()
     if not pending:
@@ -415,14 +489,19 @@ def main():
 
     st.markdown("Select a book to review")
     select_col, clear_col = st.columns([3, 1])
+    pending_ids = [book.id for book in pending]
+    if st.session_state.get("selected_book_id") not in pending_ids:
+        st.session_state["selected_book_id"] = pending_ids[0]
+
     selected_id = select_col.selectbox(
         "Select a book to review",
-        options=[book.id for book in pending],
+        options=pending_ids,
         format_func=lambda bid: next(
             (normalize_title(b.raw_title or b.normalized_title, b.author) for b in pending if b.id == bid),
             bid,
         ),
         label_visibility="collapsed",
+        key="selected_book_id",
     )
     with clear_col:
         if st.button("Clear queue", use_container_width=True):
@@ -435,7 +514,7 @@ def main():
     with left:
         render_context_column(book)
     with right:
-        render_editing_column(book)
+        render_editing_column(book, pending_ids)
 
 
 if __name__ == "__main__":
