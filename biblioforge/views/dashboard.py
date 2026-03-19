@@ -52,7 +52,6 @@ def render_context_column(book: Book) -> None:
     edition_count = getattr(book, "edition_count", None)
     language = getattr(book, "language", None)
     print_type = getattr(book, "print_type", None)
-    maturity_rating = getattr(book, "maturity_rating", None)
     openlibrary_key = getattr(book, "openlibrary_key", None)
     info_link = getattr(book, "info_link", None)
     preview_link = getattr(book, "preview_link", None)
@@ -68,6 +67,8 @@ def render_context_column(book: Book) -> None:
     with cols[0]:
         if book.cover_url:
             st.image(book.cover_url, width=160)
+        else:
+            st.image("https://via.placeholder.com/160x240?text=No+Cover", width=160)
     with cols[1]:
         st.markdown(f"#### {book.normalized_title} - {book.author or 'Unknown Author'}")
         st.caption(book.raw_title)
@@ -109,8 +110,6 @@ def render_context_column(book: Book) -> None:
         metric_items.append(("Language", language))
     if print_type:
         metric_items.append(("Print Type", print_type))
-    if maturity_rating:
-        metric_items.append(("Maturity", maturity_rating))
     if openlibrary_key:
         metric_items.append(("OpenLibrary Key", openlibrary_key))
 
@@ -189,9 +188,9 @@ def render_editing_column(book: Book) -> None:
             ),
             default=book.insights.tags,
         )
-        col_approve, col_reject = st.columns([4, 1])
+        col_approve, col_reject = st.columns([1, 1])
         approve = col_approve.form_submit_button("Approve and Save", use_container_width=True)
-        reject = col_reject.form_submit_button("Reject", use_container_width=True)
+        reject = col_reject.form_submit_button("Reject & Redo Search", use_container_width=True)
 
         if approve:
             controller.approve_with_edits(book.id, summary, tags)

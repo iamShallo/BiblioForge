@@ -395,7 +395,6 @@ def _extract_metadata(item: dict, normalized_title: str) -> dict:
         "publisher": volume.get("publisher"),
         "categories": list(volume.get("categories", [])),
         "language": volume.get("language"),
-        "maturity_rating": volume.get("maturityRating"),
         "print_type": volume.get("printType"),
         "info_link": volume.get("infoLink"),
         "preview_link": volume.get("previewLink"),
@@ -528,24 +527,6 @@ def _looks_promotional(text: str) -> bool:
     return False
 
 
-def _normalize_maturity_rating(raw_rating: Optional[str], book: Book) -> str:
-    normalized = (raw_rating or "").strip().upper()
-    if normalized == "MATURE":
-        return "Mature"
-    if normalized == "NOT_MATURE":
-        return "General"
-
-    text = " ".join(
-        [
-            (book.fetched_summary or ""),
-            " ".join(getattr(book, "categories", []) or []),
-        ]
-    ).lower()
-    mature_signals = ["violence", "explicit", "erotic", "adult", "graphic", "horror"]
-    if any(token in text for token in mature_signals):
-        return "Mature"
-    return "General"
-
 
 def _reviews_from_rating_signal(rating: Optional[float], count: int) -> List[ReviewSample]:
     if rating is None and not count:
@@ -598,7 +579,6 @@ async def enrich_book(book: Book) -> Book:
         book.categories = meta.get("categories", [])
         book.subtitle = meta.get("subtitle")
         book.language = meta.get("language")
-        book.maturity_rating = _normalize_maturity_rating(meta.get("maturity_rating"), book)
         book.print_type = meta.get("print_type")
         book.info_link = meta.get("info_link")
         book.preview_link = meta.get("preview_link")
@@ -704,6 +684,18 @@ async def enrich_book(book: Book) -> Book:
             deduped.append(sample)
         if not deduped:
             deduped = _reviews_from_rating_signal(book.average_rating, book.ratings_count)
+        if not deduped and book.positive_ratio:
+            inferred_rating = round(min(max(book.positive_ratio * 5, 0), 5), 2)
+            deduped = _reviews_from_rating_signal(inferred_rating, book.ratings_count)
+        if not deduped:
+            deduped = [
+                ReviewSample(
+                    reviewer="Review Signal",
+                    rating=float(book.average_rating or 3.5),
+                    text="User review snippets unavailable; showing rating signal instead.",
+                )
+            ]
+
         book.review_samples = deduped[:3]
         book.discarded_information_examples = [x[:260] for x in discarded_examples if x][:5]
 
@@ -718,7 +710,6 @@ async def enrich_book(book: Book) -> Book:
         book.categories = book.categories or ["Unknown Genre"]
         book.subtitle = book.subtitle or None
         book.language = book.language or "en"
-        book.maturity_rating = book.maturity_rating or "General"
         book.print_type = book.print_type or "BOOK"
         book.info_link = book.info_link or None
         book.preview_link = book.preview_link or None

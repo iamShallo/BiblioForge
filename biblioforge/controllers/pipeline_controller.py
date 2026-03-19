@@ -1,6 +1,6 @@
 import asyncio
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 from uuid import uuid4
 
 import pandas as pd
@@ -54,7 +54,7 @@ class PipelineController:
         # Require at least one trusted external anchor and meaningful bibliographic evidence.
         return has_trusted_link and (has_real_author or has_real_categories or has_summary or has_isbn)
 
-    def resolve_excel_path(self, excel_path: Optional[Path | str] = None) -> Path:
+    def resolve_excel_path(self, excel_path: Optional[Union[Path, str]] = None) -> Path:
         """Resolve Excel path from absolute or common relative locations."""
         if excel_path is None:
             return self.default_cleaned_excel_path
@@ -152,7 +152,7 @@ class PipelineController:
 
     def ingest_books_from_excel(
         self,
-        excel_path: Path | str,
+        excel_path: Union[Path, str],
     ) -> int:
         resolved_excel_path = self.resolve_excel_path(excel_path)
         if not resolved_excel_path.exists():
@@ -290,6 +290,39 @@ class PipelineController:
         previous_summary = book.insights.summary if book.insights else None
         regeneration_token = str(uuid4())
         book.reject_attempts = int(book.reject_attempts or 0) + 1
+
+        # Reset enrichment-derived fields so stale metadata/summary are not reused.
+        for attr in [
+            "fetched_summary",
+            "summary_source",
+            "isbn",
+            "isbn_10",
+            "published_date",
+            "publication_year",
+            "pages",
+            "cover_url",
+            "publisher",
+            "categories",
+            "subtitle",
+            "language",
+            "print_type",
+            "info_link",
+            "preview_link",
+            "canonical_volume_link",
+            "openlibrary_key",
+            "first_publish_year",
+            "edition_count",
+            "average_rating",
+            "ratings_count",
+            "positive_ratio",
+            "review_samples",
+            "discarded_information_examples",
+            "insights",
+        ]:
+            if attr in {"categories", "review_samples", "discarded_information_examples"}:
+                setattr(book, attr, [])
+            else:
+                setattr(book, attr, None)
 
         book.status = BookStatus.IN_PROGRESS
         self.repository.upsert_book(book)

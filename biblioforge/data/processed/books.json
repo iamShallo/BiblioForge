@@ -314,8 +314,8 @@
     "id": "f6ada4b7-f8ae-4477-b926-a5638b9c7f80"
   },
   {
-    "raw_title": "Cronache del Ghiaccio e del Fuoco (Il trono di spade)",
-    "normalized_title": "Cronache Del Ghiaccio E Del Fuoco",
+    "raw_title": "Le Cronache Del Ghiaccio E Del Fuoco",
+    "normalized_title": "Le Cronache Del Ghiaccio E Del Fuoco",
     "author": "George R. R. Martin",
     "fetched_summary": "Metadata summary unavailable for Cronache Del Ghiaccio E Del Fuoco.",
     "summary_source": "local_fallback",
@@ -323,43 +323,47 @@
     "catalog_publisher": null,
     "catalog_quantity": null,
     "catalog_price": null,
-    "isbn": "9788804631897",
-    "isbn_10": "8804631899",
-    "published_date": "2013",
-    "publication_year": 2013,
-    "pages": 500,
-    "cover_url": "http://books.google.com/books/content?id=XHhYmwEACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "publisher": "Unknown Publisher",
+    "isbn": "9788804519652",
+    "isbn_10": "8804519657",
+    "published_date": "2003",
+    "publication_year": 2003,
+    "pages": 475,
+    "cover_url": "http://books.google.com/books/content?id=Mi7CPAAACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
+    "publisher": null,
     "categories": [
       "Fiction"
     ],
-    "subtitle": null,
+    "subtitle": "Tempesta di spade",
     "language": "it",
     "maturity_rating": "General",
     "print_type": "BOOK",
-    "info_link": "http://books.google.it/books?id=XHhYmwEACAAJ&dq=intitle:%22Cronache+Del+Ghiaccio+E+Del+Fuoco%22+inauthor:%22George+R.+R.+Martin%22&hl=&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=XHhYmwEACAAJ&dq=intitle:%22Cronache+Del+Ghiaccio+E+Del+Fuoco%22+inauthor:%22George+R.+R.+Martin%22&hl=&cd=1&source=gbs_api",
-    "canonical_volume_link": "https://books.google.com/books/about/La_danza_dei_draghi_Le_Cronache_del_ghia.html?hl=&id=XHhYmwEACAAJ",
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": 3.3,
-    "ratings_count": 1902,
-    "positive_ratio": 0.636,
+    "info_link": "http://books.google.it/books?id=Mi7CPAAACAAJ&dq=intitle:%22Cronache+Del+Ghiaccio+E+Del+Fuoco%22+inauthor:%22George+R.+R.+Martin%22&hl=&source=gbs_api",
+    "preview_link": "http://books.google.it/books?id=Mi7CPAAACAAJ&dq=intitle:%22Cronache+Del+Ghiaccio+E+Del+Fuoco%22+inauthor:%22George+R.+R.+Martin%22&hl=&cd=3&source=gbs_api",
+    "canonical_volume_link": "https://books.google.com/books/about/Le_cronache_del_Ghiaccio_e_del_Fuoco.html?hl=&id=Mi7CPAAACAAJ",
+    "openlibrary_key": "OL29022114W",
+    "first_publish_year": 2012,
+    "edition_count": 1,
+    "average_rating": 4.0,
+    "ratings_count": 1,
+    "positive_ratio": 0.7453629009295781,
     "review_samples": [
       {
         "reviewer": "Public Rating Signal",
-        "rating": 3.3,
-        "text": "Average reader score 3.30/5 over 1902 ratings."
+        "rating": 4.0,
+        "text": "Average reader score 4.00/5 over 1 ratings."
+      },
+      {
+        "reviewer": "Goodreads User Review 1",
+        "rating": 4.0,
+        "text": "Books with known authors are imported from Amazon to this profile. Please do not merge this profile into Unknown."
       }
     ],
     "discarded_information_examples": [],
     "insights": {
-      "summary": "Cronache Del Ghiaccio E Del Fuoco frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict rather than plot revelations.",
+      "summary": "Le Cronache Del Ghiaccio E Del Fuoco introduces its central conflict through atmosphere, stakes, and character tension, keeping key revelations undisclosed while highlighting the themes that define the reading experience.",
       "tags": [
         "Fiction",
         "Contemporary",
-        "Long Read",
         "Character-Driven",
         "Atmospheric",
         "High Stakes",
@@ -372,7 +376,7 @@
         }
       ]
     },
-    "reject_attempts": 1,
+    "reject_attempts": 2,
     "status": "to_approve",
     "id": "b72fb29e-4803-4050-ac41-a3cf66fa5b13"
   },
@@ -950,5 +954,131 @@
     "reject_attempts": 2,
     "status": "to_approve",
     "id": "d58d2eff-6f7b-4315-b14a-60363958baa6"
+  },
+  {
+    "raw_title": "Cesare. La Conquista Dell Eternit\u00e0",
+    "normalized_title": "Cesare. La Conquista Dell Eternit\u00e0",
+    "author": "Alberto Angela",
+    "fetched_summary": null,
+    "summary_source": null,
+    "catalog_ean": null,
+    "catalog_publisher": null,
+    "catalog_quantity": null,
+    "catalog_price": null,
+    "isbn": "9788804810995",
+    "isbn_10": "8804810998",
+    "published_date": "2025",
+    "publication_year": 2025,
+    "pages": 0,
+    "cover_url": "http://books.google.com/books/content?id=huuz0QEACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
+    "publisher": null,
+    "categories": [
+      "Biography & Autobiography"
+    ],
+    "subtitle": null,
+    "language": "it",
+    "maturity_rating": "General",
+    "print_type": "BOOK",
+    "info_link": "http://books.google.it/books?id=huuz0QEACAAJ&dq=Cesare.+La+Conquista+Dell+Eternit%C3%A0+Alberto+Angela&hl=&source=gbs_api",
+    "preview_link": "http://books.google.it/books?id=huuz0QEACAAJ&dq=Cesare.+La+Conquista+Dell+Eternit%C3%A0+Alberto+Angela&hl=&cd=2&source=gbs_api",
+    "canonical_volume_link": "https://books.google.com/books/about/Cesare_La_conquista_dell_eternit%C3%A0.html?hl=&id=huuz0QEACAAJ",
+    "openlibrary_key": null,
+    "first_publish_year": null,
+    "edition_count": null,
+    "average_rating": null,
+    "ratings_count": 0,
+    "positive_ratio": 0.632,
+    "review_samples": [],
+    "discarded_information_examples": [],
+    "insights": {
+      "summary": "Cesare. La Conquista Dell Eternit\u00e0 frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict rather than plot revelations.",
+      "tags": [
+        "Biography & Autobiography",
+        "Contemporary",
+        "Character-Driven",
+        "Atmospheric",
+        "High Stakes",
+        "Plot-Driven"
+      ],
+      "rejected_information": [
+        {
+          "reason": "No direct user reviews",
+          "detail": "Excluded reader-opinion claims because no review samples were available."
+        },
+        {
+          "reason": "Insufficient synopsis",
+          "detail": "Avoided plot-specific statements because no trusted summary was fetched."
+        }
+      ]
+    },
+    "reject_attempts": 1,
+    "status": "to_approve",
+    "id": "c89a30f1-9b25-41c3-b1dc-3e10d5b30acd"
+  },
+  {
+    "raw_title": "Il Decamero",
+    "normalized_title": "Il Decamero",
+    "author": "Giovanni Boccaccio",
+    "fetched_summary": null,
+    "summary_source": null,
+    "catalog_ean": null,
+    "catalog_publisher": null,
+    "catalog_quantity": null,
+    "catalog_price": null,
+    "isbn": "OCLC:1089970395",
+    "isbn_10": null,
+    "published_date": "1827",
+    "publication_year": 1827,
+    "pages": 910,
+    "cover_url": null,
+    "publisher": null,
+    "categories": [],
+    "subtitle": null,
+    "language": "it",
+    "maturity_rating": "General",
+    "print_type": "BOOK",
+    "info_link": "http://books.google.it/books?id=S7mHwwEACAAJ&dq=intitle:%22Il+Decamero%22+inauthor:%22Giovanni+Boccaccio%22&hl=&source=gbs_api",
+    "preview_link": "http://books.google.it/books?id=S7mHwwEACAAJ&dq=intitle:%22Il+Decamero%22+inauthor:%22Giovanni+Boccaccio%22&hl=&cd=1&source=gbs_api",
+    "canonical_volume_link": "https://books.google.com/books/about/Il_decamero.html?hl=&id=S7mHwwEACAAJ",
+    "openlibrary_key": "OL44628709W",
+    "first_publish_year": 1518,
+    "edition_count": 1,
+    "average_rating": null,
+    "ratings_count": 0,
+    "positive_ratio": 0.704,
+    "review_samples": [
+      {
+        "reviewer": "Goodreads User Review 1",
+        "rating": 4.0,
+        "text": "Leather Binding on Spine and Corners with Golden Leaf Printing on round Spine (extra customization on request like complete leather, Golden Screen printing in Front, Color Leather, Colored book etc.) Reprinted in 2022 with the help of original edition published long back [1924]. This book is printed in black & white, s"
+      },
+      {
+        "reviewer": "Goodreads User Review 2",
+        "rating": 4.0,
+        "text": "Giovanni Boccaccio (1313 - 1375) was an Italian author and poet, a friend and correspondent of Petrarch , and an important Renaissance humanist in his own right and author of a number of notable works including the Decameron , On Famous Women , and his poetry in the Italian vernacular. Boccaccio is particularly notable"
+      }
+    ],
+    "discarded_information_examples": [],
+    "insights": {
+      "summary": "Il Decamero introduces its central conflict through atmosphere, stakes, and character tension, keeping key revelations undisclosed while highlighting the themes that define the reading experience.",
+      "tags": [
+        "20th Century",
+        "Classic",
+        "Long Read",
+        "Character-Driven",
+        "Atmospheric",
+        "High Stakes",
+        "Plot-Driven"
+      ],
+      "rejected_information": [
+        {
+          "reason": "Insufficient synopsis",
+          "detail": "Avoided plot-specific statements because no trusted summary was fetched."
+        }
+      ]
+    },
+    "reject_attempts": 2,
+    "status": "to_approve",
+    "id": "28b59810-ebd0-405b-aba7-425c6ee43e04"
   }
 ]

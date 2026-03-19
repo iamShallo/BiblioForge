@@ -131,8 +131,6 @@ def _derive_tags(book: Book) -> List[str]:
             if keyword in review_text:
                 candidates.append(tag)
 
-    if getattr(book, "maturity_rating", "") == "Mature":
-        candidates.append("Mature Themes")
     if book.pages and book.pages >= 500:
         candidates.append("Long Read")
 

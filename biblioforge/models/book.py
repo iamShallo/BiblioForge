@@ -52,7 +52,6 @@ class Book:
     categories: List[str] = field(default_factory=list)
     subtitle: Optional[str] = None
     language: Optional[str] = None
-    maturity_rating: Optional[str] = None
     print_type: Optional[str] = None
     info_link: Optional[str] = None
     preview_link: Optional[str] = None
