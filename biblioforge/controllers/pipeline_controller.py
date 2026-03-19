@@ -1,6 +1,9 @@
 import asyncio
+import copy
+import os
+import re
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Callable, List, Optional, Union
 from uuid import uuid4
 
 import pandas as pd
@@ -165,10 +168,14 @@ class PipelineController:
         return self.repository.list_books(BookStatus.TO_APPROVE)
 
     def approve(self, book_id: str) -> Optional[Book]:
-        book = self.repository.update_status(book_id, BookStatus.APPROVED)
+        # Move a book from the review queue to the final DB and remove it from the queue file.
+        book = self.repository.get_book(book_id)
         if not book:
             return None
+
+        book.status = BookStatus.APPROVED
         self.approved_repository.upsert_book(book)
+        self.repository.delete_book(book_id)
         return book
 
     def approve_with_edits(self, book_id: str, summary: str, tags: List[str]) -> Optional[Book]:
@@ -181,6 +188,9 @@ class PipelineController:
             book.insights.tags = tags
             self.repository.upsert_book(book)
         return self.approve(book_id)
+
+    def clear_approved(self) -> int:
+        return self.approved_repository.clear_books()
 
     def trust_process(self) -> int:
         pending = self.list_pending()
@@ -199,6 +209,7 @@ class PipelineController:
     def ingest_books_from_excel(
         self,
         excel_path: Union[Path, str],
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> int:
         resolved_excel_path = self.resolve_excel_path(excel_path)
         if not resolved_excel_path.exists():
@@ -237,6 +248,57 @@ class PipelineController:
                         return original
             return None
 
+        def _fix_mojibake(text: str) -> str:
+            """Fix common mojibake (UTF-8 mis-decoded as Latin-1) and stray chars."""
+            if not text:
+                return ""
+
+            # Try to reverse common mojibake (Ã, ã) by re-decoding.
+            decoded = text
+            try:
+                decoded = text.encode("latin1", errors="ignore").decode("utf-8", errors="ignore")
+            except Exception:
+                decoded = text
+
+            replacements = {
+                "Â«": "«",
+                "Â»": "»",
+                "Â": "",
+                "â€™": "'",
+                "â€œ": "\"",
+                "â€": "\"",
+                "â€“": "-",
+                "ã€€": " ",
+                "ãœ": "Ü",
+                "ã¼": "ü",
+                "ã¶": "ö",
+                "ã¤": "ä",
+                "ã‰": "É",
+                "ã©": "é",
+                "ã¨": "è",
+                "ã²": "ò",
+                "ã¹": "ù",
+            }
+            for bad, good in replacements.items():
+                decoded = decoded.replace(bad, good)
+
+            decoded = re.sub(r"\s+", " ", decoded)
+            return decoded.strip(" \"'“”‘’””")
+
+        def _clean_title(text: str) -> str:
+            text = _fix_mojibake(text)
+            text = re.sub(r"^[\W_]+", "", text)
+            return text.strip()
+
+        def _clean_author(text: str) -> str:
+            text = _fix_mojibake(text)
+            return text
+
+        def _clean_publisher(text: str) -> str:
+            text = _fix_mojibake(text)
+            text = re.sub(r"^[Vv]\s*-\s*", "", text)
+            return text
+
         def _cell_to_text(value) -> str:
             if value is None or pd.isna(value):
                 return ""
@@ -262,6 +324,8 @@ class PipelineController:
             except ValueError:
                 return None
 
+        entries: List[dict] = []
+
         for _, frame in workbook.items():
             if frame is None or frame.empty:
                 continue
@@ -275,14 +339,33 @@ class PipelineController:
             quantity_col = _pick_column(frame.columns, quantity_candidates)
             price_col = _pick_column(frame.columns, price_candidates)
 
+            noise_markers = (
+                "totale",
+                "attenzione",
+                "pvp",
+                "n.b",
+                "nb:",
+                "note",
+                "avviso",
+            )
+
             for _, row in frame.iterrows():
-                title_value = _cell_to_text(row.get(title_col))
+                raw_title_value = _cell_to_text(row.get(title_col))
+                title_value = _clean_title(raw_title_value)
                 if not title_value:
                     continue
 
-                author_value = _cell_to_text(row.get(author_col)) if author_col is not None else ""
+                title_lower = title_value.lower()
+                if any(title_lower.startswith(marker) for marker in noise_markers):
+                    continue
+                if len(re.sub(r"[^a-z0-9]+", "", title_lower)) < 3:
+                    continue
+
+                author_raw = _cell_to_text(row.get(author_col)) if author_col is not None else ""
+                author_value = _clean_author(author_raw) if author_raw else ""
                 ean_value = _cell_to_text(row.get(ean_col)) if ean_col is not None else ""
-                publisher_value = _cell_to_text(row.get(publisher_col)) if publisher_col is not None else ""
+                publisher_raw = _cell_to_text(row.get(publisher_col)) if publisher_col is not None else ""
+                publisher_value = _clean_publisher(publisher_raw) if publisher_raw else ""
                 quantity_value = _to_int(row.get(quantity_col)) if quantity_col is not None else None
                 price_value = _to_float(row.get(price_col)) if price_col is not None else None
                 dedupe_key = (title_value.casefold(), author_value.casefold())
@@ -297,19 +380,86 @@ class PipelineController:
                     raw_publisher=publisher_value or None,
                 )
 
-                try:
-                    self.ingest_raw_book(
-                        normalized_catalog.get("title") or title_value,
-                        normalized_catalog.get("author") or author,
-                        catalog_ean=ean_value or None,
-                        catalog_publisher=normalized_catalog.get("publisher") or publisher_value or None,
-                        catalog_quantity=quantity_value,
-                        catalog_price=price_value,
-                    )
-                    queued += 1
-                except BookNotFoundError:
-                    skipped += 1
-                    continue
+                entries.append(
+                    {
+                        "title": normalized_catalog.get("title") or title_value,
+                        "author": normalized_catalog.get("author") or author,
+                        "publisher": normalized_catalog.get("publisher") or publisher_value or None,
+                        "ean": ean_value or None,
+                        "quantity": quantity_value,
+                        "price": price_value,
+                    }
+                )
+
+        if not entries:
+            self.last_import_skipped = skipped
+            if progress_callback:
+                progress_callback(0, 0)
+            return queued
+
+        async def _process_entries(items: List[dict]) -> None:
+            nonlocal queued, skipped
+            processed = 0
+            total = len(items)
+            max_concurrency = max(1, int(os.getenv("BIBLIOFORGE_IMPORT_CONCURRENCY", "20")))
+            batch_size = max(20, int(os.getenv("BIBLIOFORGE_IMPORT_BATCH", "200")))
+            semaphore = asyncio.Semaphore(max_concurrency)
+            cache = {}
+
+            async def _enrich_one(entry: dict) -> Optional[Book]:
+                key = (entry.get("title", "").casefold(), (entry.get("author") or "").casefold())
+
+                # Serve from cache when the same title/author repeats.
+                if key in cache:
+                    cached = copy.deepcopy(cache[key])
+                    cached.id = str(uuid4())
+                    cached.catalog_ean = entry.get("ean")
+                    cached.catalog_publisher = entry.get("publisher")
+                    cached.catalog_quantity = entry.get("quantity")
+                    cached.catalog_price = entry.get("price")
+                    cached.status = BookStatus.TO_APPROVE
+                    return cached
+
+                async with semaphore:
+                    try:
+                        book = Book(
+                            raw_title=entry.get("title"),
+                            normalized_title=normalize_title(entry.get("title"), entry.get("author")),
+                            author=entry.get("author"),
+                            catalog_ean=entry.get("ean"),
+                            catalog_publisher=entry.get("publisher"),
+                            catalog_quantity=entry.get("quantity"),
+                            catalog_price=entry.get("price"),
+                            status=BookStatus.IN_PROGRESS,
+                        )
+                        book = await enrich_book(book)
+                        if not self._is_reliably_enriched(book):
+                            return None
+                        book = generate_insights(book)
+                        book.status = BookStatus.TO_APPROVE
+                        cache[key] = book
+                        return book
+                    except Exception:
+                        return None
+
+            for idx in range(0, len(items), batch_size):
+                chunk = items[idx : idx + batch_size]
+                tasks = [_enrich_one(entry) for entry in chunk]
+                results = await asyncio.gather(*tasks)
+                to_insert = [b for b in results if b]
+                queued += len(to_insert)
+                skipped += len(chunk) - len(to_insert)
+                processed += len(chunk)
+                if to_insert:
+                    self.repository.upsert_many(to_insert)
+
+                if progress_callback:
+                    try:
+                        progress_callback(processed, total)
+                    except Exception:
+                        pass
+
+        asyncio.run(_process_entries(entries))
 
         self.last_import_skipped = skipped
         return queued
