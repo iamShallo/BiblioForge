@@ -57,6 +57,23 @@ class BookRepository:
         self._persist()
         return book
 
+    def upsert_many(self, books: List[Book]) -> int:
+        """Upsert a batch of books with a single disk write for speed."""
+        self._refresh_from_disk()
+        cache_map = {b.id: idx for idx, b in enumerate(self._cache)}
+        new_count = 0
+        for book in books:
+            idx = cache_map.get(book.id)
+            if idx is not None:
+                self._cache[idx] = book
+            else:
+                cache_map[book.id] = len(self._cache)
+                self._cache.append(book)
+                new_count += 1
+        if books:
+            self._persist()
+        return new_count
+
     def update_status(self, book_id: str, status: BookStatus) -> Optional[Book]:
         self._refresh_from_disk()
         book = self.get_book(book_id)

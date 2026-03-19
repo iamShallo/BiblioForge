@@ -426,7 +426,7 @@ def main():
     )
     with clear_col:
         if st.button("Clear queue", use_container_width=True):
-            removed = controller.repository.clear_books(BookStatus.TO_APPROVE)
+            removed = controller.repository.clear_books()
             st.success(f"Cleared {removed} books from the review queue.")
             st.rerun()
     book = next(b for b in pending if b.id == selected_id)

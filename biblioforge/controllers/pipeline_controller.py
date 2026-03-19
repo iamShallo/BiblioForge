@@ -1,4 +1,5 @@
 import asyncio
+import re
 from pathlib import Path
 from typing import List, Optional, Union
 from uuid import uuid4
@@ -237,6 +238,57 @@ class PipelineController:
                         return original
             return None
 
+        def _fix_mojibake(text: str) -> str:
+            """Fix common mojibake (UTF-8 mis-decoded as Latin-1) and stray chars."""
+            if not text:
+                return ""
+
+            # Try to reverse common mojibake (Ã, ã) by re-decoding.
+            decoded = text
+            try:
+                decoded = text.encode("latin1", errors="ignore").decode("utf-8", errors="ignore")
+            except Exception:
+                decoded = text
+
+            replacements = {
+                "Â«": "«",
+                "Â»": "»",
+                "Â": "",
+                "â€™": "'",
+                "â€œ": "\"",
+                "â€": "\"",
+                "â€“": "-",
+                "ã€€": " ",
+                "ãœ": "Ü",
+                "ã¼": "ü",
+                "ã¶": "ö",
+                "ã¤": "ä",
+                "ã‰": "É",
+                "ã©": "é",
+                "ã¨": "è",
+                "ã²": "ò",
+                "ã¹": "ù",
+            }
+            for bad, good in replacements.items():
+                decoded = decoded.replace(bad, good)
+
+            decoded = re.sub(r"\s+", " ", decoded)
+            return decoded.strip(" \"'“”‘’””")
+
+        def _clean_title(text: str) -> str:
+            text = _fix_mojibake(text)
+            text = re.sub(r"^[\W_]+", "", text)
+            return text.strip()
+
+        def _clean_author(text: str) -> str:
+            text = _fix_mojibake(text)
+            return text
+
+        def _clean_publisher(text: str) -> str:
+            text = _fix_mojibake(text)
+            text = re.sub(r"^[Vv]\s*-\s*", "", text)
+            return text
+
         def _cell_to_text(value) -> str:
             if value is None or pd.isna(value):
                 return ""
@@ -275,14 +327,33 @@ class PipelineController:
             quantity_col = _pick_column(frame.columns, quantity_candidates)
             price_col = _pick_column(frame.columns, price_candidates)
 
+            noise_markers = (
+                "totale",
+                "attenzione",
+                "pvp",
+                "n.b",
+                "nb:",
+                "note",
+                "avviso",
+            )
+
             for _, row in frame.iterrows():
-                title_value = _cell_to_text(row.get(title_col))
+                raw_title_value = _cell_to_text(row.get(title_col))
+                title_value = _clean_title(raw_title_value)
                 if not title_value:
                     continue
 
-                author_value = _cell_to_text(row.get(author_col)) if author_col is not None else ""
+                title_lower = title_value.lower()
+                if any(title_lower.startswith(marker) for marker in noise_markers):
+                    continue
+                if len(re.sub(r"[^a-z0-9]+", "", title_lower)) < 3:
+                    continue
+
+                author_raw = _cell_to_text(row.get(author_col)) if author_col is not None else ""
+                author_value = _clean_author(author_raw) if author_raw else ""
                 ean_value = _cell_to_text(row.get(ean_col)) if ean_col is not None else ""
-                publisher_value = _cell_to_text(row.get(publisher_col)) if publisher_col is not None else ""
+                publisher_raw = _cell_to_text(row.get(publisher_col)) if publisher_col is not None else ""
+                publisher_value = _clean_publisher(publisher_raw) if publisher_raw else ""
                 quantity_value = _to_int(row.get(quantity_col)) if quantity_col is not None else None
                 price_value = _to_float(row.get(price_col)) if price_col is not None else None
                 dedupe_key = (title_value.casefold(), author_value.casefold())
@@ -297,7 +368,14 @@ class PipelineController:
                     raw_publisher=publisher_value or None,
                 )
 
+                # Fast path: enqueue skeleton books without slow enrichment to handle thousands of rows quickly.
+                canonical_title = normalize_title(
+                    normalized_catalog.get("title") or title_value,
+                    normalized_catalog.get("author") or author,
+                ) or title_value
+
                 try:
+                    # Full enrichment path (slower) to ensure AI/crawling runs like manual ingestion.
                     self.ingest_raw_book(
                         normalized_catalog.get("title") or title_value,
                         normalized_catalog.get("author") or author,
