@@ -438,11 +438,21 @@ def render_excel_ingestion_box() -> None:
     if not resolved_path.exists():
         st.warning("Excel path does not exist. Update the path before importing.")
     timer_placeholder = st.empty()
+    progress_placeholder = st.empty()
     if st.button("Load into review queue", use_container_width=True):
         start = time.perf_counter()
         timer_placeholder.info("⏱️ Import in corso...")
+        progress_bar = progress_placeholder.progress(0, text="Preparazione import...")
+
+        def _on_progress(processed: int, total: int) -> None:
+            pct = 0 if total == 0 else int((processed / total) * 100)
+            pct = max(0, min(pct, 100))
+            text = f"Import in corso... {processed}/{total}" if total else "Import in corso..."
+            progress_bar.progress(pct, text=text)
+
         try:
-            total = controller.ingest_books_from_excel(excel_path_input)
+            total = controller.ingest_books_from_excel(excel_path_input, progress_callback=_on_progress)
+            progress_bar.progress(100, text="Import completato")
             st.success(f"Imported {total} books into review queue.")
             if getattr(controller, "last_import_skipped", 0):
                 st.warning(
@@ -450,6 +460,7 @@ def render_excel_ingestion_box() -> None:
                 )
             timer_placeholder.success(f"⏱️ Import terminato in {format_duration(time.perf_counter() - start)}")
         except Exception as exc:
+            progress_bar.progress(0.0, text="Import fallito")
             timer_placeholder.error(
                 f"⏱️ Import fallito dopo {format_duration(time.perf_counter() - start)}: {exc}"
             )

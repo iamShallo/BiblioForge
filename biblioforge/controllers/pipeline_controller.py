@@ -3,7 +3,7 @@ import copy
 import os
 import re
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Callable, List, Optional, Union
 from uuid import uuid4
 
 import pandas as pd
@@ -209,6 +209,7 @@ class PipelineController:
     def ingest_books_from_excel(
         self,
         excel_path: Union[Path, str],
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> int:
         resolved_excel_path = self.resolve_excel_path(excel_path)
         if not resolved_excel_path.exists():
@@ -392,10 +393,14 @@ class PipelineController:
 
         if not entries:
             self.last_import_skipped = skipped
+            if progress_callback:
+                progress_callback(0, 0)
             return queued
 
         async def _process_entries(items: List[dict]) -> None:
             nonlocal queued, skipped
+            processed = 0
+            total = len(items)
             max_concurrency = max(1, int(os.getenv("BIBLIOFORGE_IMPORT_CONCURRENCY", "20")))
             batch_size = max(20, int(os.getenv("BIBLIOFORGE_IMPORT_BATCH", "200")))
             semaphore = asyncio.Semaphore(max_concurrency)
@@ -444,8 +449,15 @@ class PipelineController:
                 to_insert = [b for b in results if b]
                 queued += len(to_insert)
                 skipped += len(chunk) - len(to_insert)
+                processed += len(chunk)
                 if to_insert:
                     self.repository.upsert_many(to_insert)
+
+                if progress_callback:
+                    try:
+                        progress_callback(processed, total)
+                    except Exception:
+                        pass
 
         asyncio.run(_process_entries(entries))
 
