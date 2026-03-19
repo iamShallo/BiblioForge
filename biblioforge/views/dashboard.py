@@ -70,8 +70,8 @@ def render_context_column(book: Book) -> None:
         else:
             st.image("https://via.placeholder.com/160x240?text=No+Cover", width=160)
     with cols[1]:
-        st.markdown(f"#### {book.normalized_title} - {book.author or 'Unknown Author'}")
-        st.caption(book.raw_title)
+        st.markdown(f"#### {book.normalized_title}")
+        st.caption(book.author or "Unknown Author")
         st.button("AI_PROCESSED", disabled=True, use_container_width=False)
         st.caption(f"Current status: {status_label(book.status)}")
 
@@ -136,9 +136,51 @@ def render_context_column(book: Book) -> None:
     if reject_attempts:
         st.caption(f"Reject attempts: {reject_attempts}")
 
-    if book.positive_ratio is not None:
-        ratio = f"{(book.positive_ratio or 0) * 100:.1f}%"
-        st.markdown(f"## {ratio}\n% Positive Reviews")
+    ratio_val = book.positive_ratio if book.positive_ratio is not None else (
+        (book.average_rating / 5) if book.average_rating is not None else None
+    )
+    if ratio_val is not None:
+        ratio_pct = ratio_val * 100
+
+        # Derive positive/negative counts either from total ratings or review samples.
+        pos = neg = None
+        if book.ratings_count:
+            pos = int(round(ratio_val * book.ratings_count))
+            neg = max(book.ratings_count - pos, 0)
+        elif book.review_samples:
+            sample_ratings = [s.rating for s in book.review_samples if isinstance(getattr(s, "rating", None), (int, float))]
+            if sample_ratings:
+                pos = sum(1 for r in sample_ratings if r >= 3.5)
+                neg = sum(1 for r in sample_ratings if r < 3.5)
+
+        sources = set()
+        for sample in book.review_samples or []:
+            name = (sample.reviewer or "").lower()
+            if "goodreads" in name:
+                sources.add("Goodreads")
+            elif "amazon" in name:
+                sources.add("Amazon")
+            elif "google" in name:
+                sources.add("Google Books")
+            elif "rating signal" in name:
+                sources.add("Rating Signal")
+            elif "editorial" in name:
+                sources.add("Editorial Extract")
+
+        if ratio_val >= 0.75:
+            color = "#1b8f3b"  # green
+        elif ratio_val >= 0.5:
+            color = "#c79a00"  # yellow
+        else:
+            color = "#c23b22"  # red
+
+        ratio_html = f"<span style='color:{color}; font-size:30px; font-weight:800;'>{ratio_pct:.1f}%</span>"
+        src_text = f"Sources: {', '.join(sorted(sources))}" if sources else ""
+
+        parts = [ratio_html, "Positive Reviews"]
+        if src_text:
+            parts.append(src_text)
+        st.markdown(" &nbsp; ".join(parts), unsafe_allow_html=True)
 
     if book.review_samples:
         st.markdown("### Review Samples")
@@ -161,7 +203,7 @@ def render_context_column(book: Book) -> None:
                 st.caption(detail)
             if example:
                 st.markdown(
-                    f"<div class='rejected-example'><strong>Removed example:</strong> {example}</div>",
+                    f"<div class='rejected-example'><strong>Removed example:</strong> <span style='text-decoration: line-through;'>{example}</span></div>",
                     unsafe_allow_html=True,
                 )
             st.markdown("</div>", unsafe_allow_html=True)
@@ -209,7 +251,7 @@ def render_editing_column(book: Book) -> None:
         approved = controller.trust_process()
         st.success(f"Process trusted: {approved} books saved to the final DB in one batch.")
 
-    if remove_col.button("x", help="Remove this book from the review queue."):
+    if remove_col.button("Remove", help="Remove this book from the review queue."):
         if hasattr(controller, "remove_from_queue"):
             removed = controller.remove_from_queue(book.id)
         elif hasattr(controller.repository, "delete_book"):
@@ -241,6 +283,10 @@ def render_ingestion_box():
         st.session_state["show_isbn_ean_fallback"] = False
     if "ingestion_error_message" not in st.session_state:
         st.session_state["ingestion_error_message"] = ""
+    if "ingest_candidates" not in st.session_state:
+        st.session_state["ingest_candidates"] = []
+    if "ingest_input" not in st.session_state:
+        st.session_state["ingest_input"] = {}
 
     if st.session_state.get("ingestion_error_message"):
         st.error(st.session_state["ingestion_error_message"])
@@ -260,24 +306,71 @@ def render_ingestion_box():
             st.warning("Book not found. As a last resort, insert ISBN or EAN to resolve the exact edition.")
             fallback_catalog_code = st.text_input("ISBN or EAN (shown only after error)", value=default_catalog_code)
 
-        submitted = st.form_submit_button("Ingest and Enrich")
+        submitted = st.form_submit_button("Find Matches")
         if submitted:
+            candidates = controller.find_candidates(
+                title,
+                author or None,
+                catalog_publisher=None,
+                catalog_ean=fallback_catalog_code or None,
+            )
+            st.session_state["ingest_candidates"] = candidates
+            st.session_state["ingest_input"] = {
+                "title": title,
+                "author": author,
+                "catalog_ean": fallback_catalog_code,
+            }
+            if not candidates:
+                try:
+                    book = controller.ingest_raw_book(
+                        title,
+                        author or None,
+                        catalog_ean=fallback_catalog_code or None,
+                    )
+                    st.success(f"Book queued for review: {book.normalized_title}")
+                    st.session_state["show_isbn_ean_fallback"] = False
+                    st.session_state["last_failed_title"] = "The Name of the Rose"
+                    st.session_state["last_failed_author"] = ""
+                    st.session_state["last_failed_catalog_code"] = ""
+                    st.session_state["ingest_candidates"] = []
+                    st.session_state["ingest_input"] = {}
+                except BookNotFoundError as exc:
+                    st.session_state["show_isbn_ean_fallback"] = True
+                    st.session_state["last_failed_title"] = title
+                    st.session_state["last_failed_author"] = author
+                    st.session_state["last_failed_catalog_code"] = fallback_catalog_code
+                    st.session_state["ingestion_error_message"] = str(exc)
+                    st.rerun()
+
+    # Post-form selection step
+    candidates = st.session_state.get("ingest_candidates", [])
+    ingest_input = st.session_state.get("ingest_input", {})
+    if candidates:
+        st.markdown("### Select a match to ingest")
+        choice = st.radio(
+            "Candidates",
+            options=list(range(len(candidates))),
+            format_func=lambda idx: f"{candidates[idx].get('title') or 'Unknown title'} — {candidates[idx].get('authors') or 'Unknown author'}",
+            key="ingest_choice",
+        )
+        if st.button("Use selection and ingest", use_container_width=True):
+            selected = candidates[choice] if isinstance(choice, int) and choice < len(candidates) else None
+            sel_title = selected.get("title") if selected else ingest_input.get("title")
+            sel_author = selected.get("authors") if selected else ingest_input.get("author")
             try:
                 book = controller.ingest_raw_book(
-                    title,
-                    author or None,
-                    catalog_ean=fallback_catalog_code or None,
+                    sel_title or ingest_input.get("title"),
+                    sel_author or None,
+                    catalog_ean=ingest_input.get("catalog_ean") or None,
                 )
                 st.success(f"Book queued for review: {book.normalized_title}")
                 st.session_state["show_isbn_ean_fallback"] = False
+                st.session_state["ingest_candidates"] = []
+                st.session_state["ingest_input"] = {}
                 st.session_state["last_failed_title"] = "The Name of the Rose"
                 st.session_state["last_failed_author"] = ""
                 st.session_state["last_failed_catalog_code"] = ""
             except BookNotFoundError as exc:
-                st.session_state["show_isbn_ean_fallback"] = True
-                st.session_state["last_failed_title"] = title
-                st.session_state["last_failed_author"] = author
-                st.session_state["last_failed_catalog_code"] = fallback_catalog_code
                 st.session_state["ingestion_error_message"] = str(exc)
                 st.rerun()
 
@@ -320,14 +413,22 @@ def main():
         st.info("No books pending review. Add one above to start.")
         return
 
-    selected_id = st.selectbox(
+    st.markdown("Select a book to review")
+    select_col, clear_col = st.columns([3, 1])
+    selected_id = select_col.selectbox(
         "Select a book to review",
         options=[book.id for book in pending],
         format_func=lambda bid: next(
             (normalize_title(b.raw_title or b.normalized_title, b.author) for b in pending if b.id == bid),
             bid,
         ),
+        label_visibility="collapsed",
     )
+    with clear_col:
+        if st.button("Clear queue", use_container_width=True):
+            removed = controller.repository.clear_books(BookStatus.TO_APPROVE)
+            st.success(f"Cleared {removed} books from the review queue.")
+            st.rerun()
     book = next(b for b in pending if b.id == selected_id)
 
     left, right = st.columns([1, 1])

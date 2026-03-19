@@ -8,7 +8,7 @@ import pandas as pd
 from biblioforge.models.book import Book, BookStatus
 from biblioforge.repositories.book_repository import BookRepository
 from biblioforge.services.ai_service import generate_insights, normalize_catalog_entry
-from biblioforge.services.crawling_service import enrich_book
+from biblioforge.services.crawling_service import enrich_book, search_candidates
 from biblioforge.services.normalization_service import normalize_title
 
 
@@ -109,12 +109,58 @@ class PipelineController:
         )
         book = asyncio.run(enrich_book(book))
         if not self._is_reliably_enriched(book):
-            raise BookNotFoundError(
-                "Book not found with sufficient confidence. Please correct title/author and try again."
+            suggestions = asyncio.run(
+                search_candidates(
+                    book.normalized_title,
+                    book.author,
+                    getattr(book, "catalog_publisher", None),
+                    getattr(book, "catalog_ean", None),
+                )
             )
+            suggestion_lines = []
+            for idx, item in enumerate(suggestions, start=1):
+                title = item.get("title") or "Unknown title"
+                authors = item.get("authors") or "Unknown author"
+                info_link = item.get("info_link") or ""
+                if info_link:
+                    suggestion_lines.append(f"{idx}. {title} — {authors} ({info_link})")
+                else:
+                    suggestion_lines.append(f"{idx}. {title} — {authors}")
+            extra = "\n".join(suggestion_lines) if suggestion_lines else ""
+            msg = "Book not found with sufficient confidence. Please correct title/author and try again."
+            if extra:
+                msg = f"{msg}\nPossible matches:\n{extra}"
+            raise BookNotFoundError(msg)
         book = generate_insights(book)
         return self.repository.upsert_book(book)
 
+    def find_candidates(
+        self,
+        raw_title: str,
+        author: Optional[str] = None,
+        catalog_publisher: Optional[str] = None,
+        catalog_ean: Optional[str] = None,
+        limit: int = 6,
+    ) -> List[dict]:
+        """Return candidate matches for a raw query (title/author/publisher/ean)."""
+        cleaned_author = (author or "").strip() or None
+        normalized_catalog = normalize_catalog_entry(
+            raw_title=raw_title,
+            raw_author=cleaned_author,
+            raw_publisher=catalog_publisher,
+        )
+        normalized_input_title = normalized_catalog.get("title") or raw_title
+        normalized_input_author = normalized_catalog.get("author") or cleaned_author
+        canonical_title = normalize_title(normalized_input_title, normalized_input_author)
+        return asyncio.run(
+            search_candidates(
+                canonical_title,
+                normalized_input_author,
+                catalog_publisher,
+                catalog_ean,
+                limit=limit,
+            )
+        )
     def list_pending(self) -> List[Book]:
         return self.repository.list_books(BookStatus.TO_APPROVE)
 

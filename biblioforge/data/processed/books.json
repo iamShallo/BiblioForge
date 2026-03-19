@@ -1,68 +1,5 @@
 [
   {
-    "raw_title": "The Name of the Rose - Umberto Eco",
-    "normalized_title": "The Name Of The Rose",
-    "author": "Umberto Eco",
-    "fetched_summary": "The year is 1327. Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Baskerville arrives to investigate. His delicate mission is suddenly overshadowed by seven bizarre deaths that take place in seven days and nights of apocalyptic terror. The body of one monk is found in a cask of pigs' blood, another is floating in a bathhouse, still another is crushed at the foot of a cliff.",
-    "summary_source": "google_books_api",
-    "catalog_ean": null,
-    "catalog_publisher": null,
-    "catalog_quantity": null,
-    "catalog_price": null,
-    "isbn": "9780330284783",
-    "isbn_10": "0330284789",
-    "published_date": "1984",
-    "publication_year": 1984,
-    "pages": 516,
-    "cover_url": "http://books.google.com/books/content?id=KAgbmUnR2EQC&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "publisher": "Unknown Publisher",
-    "categories": [
-      "Detective and mystery stories"
-    ],
-    "subtitle": null,
-    "language": "en",
-    "maturity_rating": "General",
-    "print_type": "BOOK",
-    "info_link": "http://books.google.it/books?id=KAgbmUnR2EQC&dq=intitle:%22The+Name+Of+The+Rose%22+inauthor:%22Umberto+Eco%22&hl=&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=KAgbmUnR2EQC&dq=intitle:%22The+Name+Of+The+Rose%22+inauthor:%22Umberto+Eco%22&hl=&cd=1&source=gbs_api",
-    "canonical_volume_link": "https://books.google.com/books/about/The_Name_of_the_Rose.html?hl=&id=KAgbmUnR2EQC",
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": 3.24,
-    "ratings_count": 1546,
-    "positive_ratio": 0.674,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "The year is 1327."
-      }
-    ],
-    "discarded_information_examples": [],
-    "insights": {
-      "summary": "The year is 1327. Franciscans in a wealthy Italian abbey are suspected of heresy, and Brother William of Baskerville arrives to investigate. His delicate mission is suddenly overshadowed by seven bizarre deaths that take place in seven days and nights of apocalyptic terror. The body of one monk is found in a cask of pigs' blood, another is floating in a bathhouse, still another is crushed at the foot of a cliff. Readers describe it as The year is 1327.",
-      "tags": [
-        "Detective and mystery stories",
-        "Classic",
-        "Long Read",
-        "Character-Driven",
-        "Atmospheric",
-        "High Stakes",
-        "Plot-Driven"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Marketing language filtered",
-          "detail": "Removed promotional wording to keep the report factual and source-grounded."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "to_approve",
-    "id": "65c22be6-437f-4693-b1d6-2e4984f0cbfa"
-  },
-  {
     "raw_title": "A Sud Del Confine, A Ovest Del Sole",
     "normalized_title": "A Sud Del Confine, A Ovest Del Sole",
     "author": "MURAKAMI HARUKI; PASTORE A. (CUR.)",
@@ -84,7 +21,6 @@
     ],
     "subtitle": null,
     "language": "en",
-    "maturity_rating": "General",
     "print_type": "BOOK",
     "info_link": null,
     "preview_link": null,
@@ -146,7 +82,6 @@
     ],
     "subtitle": null,
     "language": "it",
-    "maturity_rating": "General",
     "print_type": "BOOK",
     "info_link": "http://books.google.it/books?id=irHPywEACAAJ&dq=intitle:%22Dune%22+inauthor:%22Frank+Herbert%22&hl=&source=gbs_api",
     "preview_link": "http://books.google.it/books?id=irHPywEACAAJ&dq=intitle:%22Dune%22+inauthor:%22Frank+Herbert%22&hl=&cd=1&source=gbs_api",
@@ -188,883 +123,103 @@
     "id": "eca5380d-57ca-4f92-ba60-3285caf9ac9b"
   },
   {
-    "raw_title": "Il Signore degli Anelli",
+    "raw_title": "Il Signore Degli Anelli",
     "normalized_title": "Il Signore Degli Anelli",
-    "author": "J. R. R. Tolkien",
-    "fetched_summary": "La nuova edizione del classico di J.R.R. Tolkien nella traduzione di Ottavio Fatica arricchita da 50 tavole illustrate dal pluripremiato artista Alan Lee. In un unico volume La compagnia dell'anello, Le due torri, Il ritorno del re. Il Signore degli Anelli \u00e8 un romanzo d'eccezione, al di fuori del tempo: chiarissimo ed enigmatico, semplice e sublime. Dona alla felicit\u00e0 del lettore ci\u00f2 che la narrativa del nostro secolo sembrava incapace di offrire: avventure in luoghi remoti e terribili, episodi d'inesauribile allegria, segreti paurosi che si svelano a poco a poco, draghi crudeli e alberi che camminano, citt\u00e0 d'argento e di diamante poco lontane da necropoli tenebrose in cui dimorano esseri che spaventano solo al nominarli, urti giganteschi di eserciti luminosi e oscuri; e tutto questo in un mondo immaginario ma ricostruito con cura meticolosa, e in effetti assolutamente verosimile, perch\u00e9 dietro i suoi simboli si nasconde una realt\u00e0 che dura oltre e malgrado la storia: la lotta, senza tregua, fra il bene e il male. Leggenda e fiaba, tragedia e poema cavalleresco, il romanzo di Tolkien \u00e8 in realt\u00e0 un'allegoria della condizione umana che ripropone in chiave moderna i miti antichi.",
-    "summary_source": "google_books_api",
-    "catalog_ean": null,
-    "catalog_publisher": null,
-    "catalog_quantity": null,
-    "catalog_price": null,
-    "isbn": "9788858790304",
-    "isbn_10": "8858790308",
-    "published_date": "2020-10-28",
-    "publication_year": 2020,
-    "pages": 1349,
-    "cover_url": "http://books.google.com/books/content?id=m0gAEAAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
-    "publisher": "Bompiani",
-    "categories": [
-      "Fiction"
-    ],
-    "subtitle": null,
-    "language": "it",
-    "maturity_rating": "General",
-    "print_type": "BOOK",
-    "info_link": "https://play.google.com/store/books/details?id=m0gAEAAAQBAJ&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=m0gAEAAAQBAJ&printsec=frontcover&dq=intitle:%22Il+Signore+Degli+Anelli%22+inauthor:%22J.+R.+R.+Tolkien%22&hl=&cd=1&source=gbs_api",
-    "canonical_volume_link": "https://play.google.com/store/books/details?id=m0gAEAAAQBAJ",
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": 4.56,
-    "ratings_count": 1431,
-    "positive_ratio": 0.613,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "La nuova edizione del classico di J.R.R. Tolkien nella traduzione di Ottavio Fatica arricchita da 50 tavole illustrate dal pluripremiato artista Alan Lee."
-      }
-    ],
-    "discarded_information_examples": [],
-    "insights": {
-      "summary": "Il Signore Degli Anelli frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict rather than plot revelations.",
-      "tags": [
-        "Fiction",
-        "Contemporary",
-        "Long Read",
-        "Character-Driven",
-        "Atmospheric",
-        "High Stakes",
-        "Plot-Driven"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Marketing language filtered",
-          "detail": "Removed promotional wording to keep the report factual and source-grounded."
-        }
-      ]
-    },
-    "reject_attempts": 1,
-    "status": "to_approve",
-    "id": "fe19d3ba-b267-494d-b12f-3a2f5eada879"
-  },
-  {
-    "raw_title": "Cronache del Ghiaccio e del F",
-    "normalized_title": "Cronache Del Ghiaccio E Del F",
-    "author": null,
-    "fetched_summary": "Metadata summary unavailable for Cronache Del Ghiaccio E Del F.",
-    "summary_source": "local_fallback",
-    "catalog_ean": null,
-    "catalog_publisher": null,
-    "catalog_quantity": null,
-    "catalog_price": null,
-    "isbn": "31213663101",
-    "isbn_10": "8820645610",
-    "published_date": "2010",
-    "publication_year": 2010,
-    "pages": 400,
-    "cover_url": "https://picsum.photos/seed/48/320/480",
-    "publisher": "Unknown Publisher",
-    "categories": [
-      "Unknown Genre"
-    ],
-    "subtitle": null,
-    "language": "en",
-    "maturity_rating": "General",
-    "print_type": "BOOK",
-    "info_link": null,
-    "preview_link": null,
-    "canonical_volume_link": null,
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": 4.32,
-    "ratings_count": 1324,
-    "positive_ratio": 0.878,
-    "review_samples": [
-      {
-        "reviewer": "Public Rating Signal",
-        "rating": 4.32,
-        "text": "Average reader score 4.32/5 over 1324 ratings."
-      }
-    ],
-    "discarded_information_examples": [],
-    "insights": {
-      "summary": "Cronache Del Ghiaccio E Del F introduces its central conflict through atmosphere, stakes, and character tension, keeping key revelations undisclosed while highlighting the themes that define the reading experience.",
-      "tags": [
-        "Unknown Genre",
-        "Contemporary",
-        "Highly Rated",
-        "Character-Driven",
-        "Atmospheric",
-        "High Stakes",
-        "Plot-Driven"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Marketing language filtered",
-          "detail": "Removed promotional wording to keep the report factual and source-grounded."
-        }
-      ]
-    },
-    "reject_attempts": 2,
-    "status": "to_approve",
-    "id": "f6ada4b7-f8ae-4477-b926-a5638b9c7f80"
-  },
-  {
-    "raw_title": "Le Cronache Del Ghiaccio E Del Fuoco",
-    "normalized_title": "Le Cronache Del Ghiaccio E Del Fuoco",
-    "author": "George R. R. Martin",
-    "fetched_summary": "Metadata summary unavailable for Cronache Del Ghiaccio E Del Fuoco.",
-    "summary_source": "local_fallback",
-    "catalog_ean": null,
-    "catalog_publisher": null,
-    "catalog_quantity": null,
-    "catalog_price": null,
-    "isbn": "9788804519652",
-    "isbn_10": "8804519657",
-    "published_date": "2003",
-    "publication_year": 2003,
-    "pages": 475,
-    "cover_url": "http://books.google.com/books/content?id=Mi7CPAAACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "publisher": null,
-    "categories": [
-      "Fiction"
-    ],
-    "subtitle": "Tempesta di spade",
-    "language": "it",
-    "maturity_rating": "General",
-    "print_type": "BOOK",
-    "info_link": "http://books.google.it/books?id=Mi7CPAAACAAJ&dq=intitle:%22Cronache+Del+Ghiaccio+E+Del+Fuoco%22+inauthor:%22George+R.+R.+Martin%22&hl=&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=Mi7CPAAACAAJ&dq=intitle:%22Cronache+Del+Ghiaccio+E+Del+Fuoco%22+inauthor:%22George+R.+R.+Martin%22&hl=&cd=3&source=gbs_api",
-    "canonical_volume_link": "https://books.google.com/books/about/Le_cronache_del_Ghiaccio_e_del_Fuoco.html?hl=&id=Mi7CPAAACAAJ",
-    "openlibrary_key": "OL29022114W",
-    "first_publish_year": 2012,
-    "edition_count": 1,
-    "average_rating": 4.0,
-    "ratings_count": 1,
-    "positive_ratio": 0.7453629009295781,
-    "review_samples": [
-      {
-        "reviewer": "Public Rating Signal",
-        "rating": 4.0,
-        "text": "Average reader score 4.00/5 over 1 ratings."
-      },
-      {
-        "reviewer": "Goodreads User Review 1",
-        "rating": 4.0,
-        "text": "Books with known authors are imported from Amazon to this profile. Please do not merge this profile into Unknown."
-      }
-    ],
-    "discarded_information_examples": [],
-    "insights": {
-      "summary": "Le Cronache Del Ghiaccio E Del Fuoco introduces its central conflict through atmosphere, stakes, and character tension, keeping key revelations undisclosed while highlighting the themes that define the reading experience.",
-      "tags": [
-        "Fiction",
-        "Contemporary",
-        "Character-Driven",
-        "Atmospheric",
-        "High Stakes",
-        "Plot-Driven"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Marketing language filtered",
-          "detail": "Removed promotional wording to keep the report factual and source-grounded."
-        }
-      ]
-    },
-    "reject_attempts": 2,
-    "status": "to_approve",
-    "id": "b72fb29e-4803-4050-ac41-a3cf66fa5b13"
-  },
-  {
-    "raw_title": "Cronache del Ghiaccio ",
-    "normalized_title": "Cronache Del Ghiaccio",
-    "author": "George R. R. Martin",
-    "fetched_summary": "Metadata summary unavailable for Cronache Del Ghiaccio.",
-    "summary_source": "local_fallback",
-    "catalog_ean": null,
-    "catalog_publisher": null,
-    "catalog_quantity": null,
-    "catalog_price": null,
-    "isbn": "9788804666936",
-    "isbn_10": "8804666935",
-    "published_date": "2016",
-    "publication_year": 2016,
-    "pages": 400,
-    "cover_url": "http://books.google.com/books/content?id=xMsRDQEACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "publisher": "Unknown Publisher",
-    "categories": [
-      "Fiction"
-    ],
-    "subtitle": null,
-    "language": "it",
-    "maturity_rating": "General",
-    "print_type": "BOOK",
-    "info_link": "http://books.google.it/books?id=xMsRDQEACAAJ&dq=intitle:%22Cronache+Del+Ghiaccio%22+inauthor:%22George+R.+R.+Martin%22&hl=&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=xMsRDQEACAAJ&dq=intitle:%22Cronache+Del+Ghiaccio%22+inauthor:%22George+R.+R.+Martin%22&hl=&cd=1&source=gbs_api",
-    "canonical_volume_link": "https://books.google.com/books/about/Il_trono_di_spade_Libro_quinto_delle_Cro.html?hl=&id=xMsRDQEACAAJ",
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": 4.14,
-    "ratings_count": 1360,
-    "positive_ratio": 0.741,
-    "review_samples": [
-      {
-        "reviewer": "Public Rating Signal",
-        "rating": 4.14,
-        "text": "Average reader score 4.14/5 over 1360 ratings."
-      }
-    ],
-    "discarded_information_examples": [],
-    "insights": {
-      "summary": "Cronache Del Ghiaccio frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict rather than plot revelations.",
-      "tags": [
-        "Fiction",
-        "Contemporary",
-        "Character-Driven",
-        "Atmospheric",
-        "High Stakes",
-        "Plot-Driven"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Marketing language filtered",
-          "detail": "Removed promotional wording to keep the report factual and source-grounded."
-        }
-      ]
-    },
-    "reject_attempts": 1,
-    "status": "to_approve",
-    "id": "095123c8-c79a-42aa-badf-c939a33c60fb"
-  },
-  {
-    "raw_title": "Cronache del Ghia",
-    "normalized_title": "Cronache Del Ghia",
-    "author": null,
-    "fetched_summary": "Metadata summary unavailable for Cronache Del Ghia.",
-    "summary_source": "local_fallback",
-    "catalog_ean": null,
-    "catalog_publisher": null,
-    "catalog_quantity": null,
-    "catalog_price": null,
-    "isbn": "31213663131",
-    "isbn_10": "8874851976",
-    "published_date": "2010",
-    "publication_year": 2010,
-    "pages": 355,
-    "cover_url": "https://picsum.photos/seed/17/320/480",
-    "publisher": "Unknown Publisher",
-    "categories": [
-      "Unknown Genre"
-    ],
-    "subtitle": null,
-    "language": "en",
-    "maturity_rating": "General",
-    "print_type": "BOOK",
-    "info_link": null,
-    "preview_link": null,
-    "canonical_volume_link": null,
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": 3.6,
-    "ratings_count": 1770,
-    "positive_ratio": 0.844,
-    "review_samples": [
-      {
-        "reviewer": "Public Rating Signal",
-        "rating": 3.6,
-        "text": "Average reader score 3.60/5 over 1770 ratings."
-      }
-    ],
-    "discarded_information_examples": [],
-    "insights": {
-      "summary": "Cronache Del Ghia introduces its central conflict through atmosphere, stakes, and character tension, keeping key revelations undisclosed while highlighting the themes that define the reading experience.",
-      "tags": [
-        "Unknown Genre",
-        "Contemporary",
-        "Character-Driven",
-        "Atmospheric",
-        "High Stakes",
-        "Plot-Driven"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Marketing language filtered",
-          "detail": "Removed promotional wording to keep the report factual and source-grounded."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "to_approve",
-    "id": "b2e3dc9a-58bd-48db-9b46-c0c15ada2058"
-  },
-  {
-    "raw_title": "",
-    "normalized_title": "",
-    "author": "George R. R. Martin",
-    "fetched_summary": "Using the frameworks of literary theory relevant to modern fantasy, Dr. Joseph Young undertakes a compelling examination of George R. R. Martin\u2019s A Song of Ice and Fire and his employment of the structural demands and thematic aptitudes of his chosen genre. Examining Martin\u2019s approaches to his obligations and licenses as a fantasist, Young persuasively argues that the power of A Song of Ice and Fire derives not from Martin\u2019s abandonment of genre convention, as is sometimes asserted, but from his ability to employ those conventions in ways that further, rather than constrain, his authorial program. Written in clear and accessible prose, George R. R. Martin and the Fantasy Form is a timely work which encourages a reassessment of Martin and his approach to his most famous novels. This is an important work for both students and critics of Martin\u2019s work and argues for a reading of A Song of Ice and Fire as a wide-ranging example of what modern fantasy can accomplish when employed with an eye to its capabilities and purpose.",
-    "summary_source": "google_books_api",
-    "catalog_ean": null,
-    "catalog_publisher": null,
-    "catalog_quantity": null,
-    "catalog_price": null,
-    "isbn": "9781351384599",
-    "isbn_10": "1351384597",
-    "published_date": "2019-03-13",
-    "publication_year": 2019,
-    "pages": 360,
-    "cover_url": "http://books.google.com/books/content?id=Ti2NDwAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
-    "publisher": "Routledge",
-    "categories": [
-      "Literary Criticism"
-    ],
-    "subtitle": null,
-    "language": "en",
-    "maturity_rating": "General",
-    "print_type": "BOOK",
-    "info_link": "https://play.google.com/store/books/details?id=Ti2NDwAAQBAJ&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=Ti2NDwAAQBAJ&printsec=frontcover&dq=intitle:%22%22+inauthor:%22George+R.+R.+Martin%22&hl=&cd=1&source=gbs_api",
-    "canonical_volume_link": "https://play.google.com/store/books/details?id=Ti2NDwAAQBAJ",
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": 3.85,
-    "ratings_count": 1077,
-    "positive_ratio": 0.75,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "This is an important work for both students and critics of Martin\u2019s work and argues for a reading of A Song of Ice and Fire as a wide-ranging example of what modern fantasy can accomplish when employed with an eye to its capabilities and ..."
-      }
-    ],
-    "discarded_information_examples": [],
-    "insights": {
-      "summary": " frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict rather than plot revelations.",
-      "tags": [
-        "Literary Criticism",
-        "Contemporary",
-        "Fantasy",
-        "Character-Driven",
-        "Atmospheric",
-        "High Stakes",
-        "Plot-Driven"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Marketing language filtered",
-          "detail": "Removed promotional wording to keep the report factual and source-grounded."
-        }
-      ]
-    },
-    "reject_attempts": 1,
-    "status": "to_approve",
-    "id": "627ed578-6d56-4c8f-9211-103833acaaeb"
-  },
-  {
-    "raw_title": "Cronache del Ghiaccio e del Fu",
-    "normalized_title": "Cronache Del Ghiaccio E Del Fu",
-    "author": "George R.R. Martin, Elio M. Garc\u00eda Jr., Linda Antonsson",
-    "fetched_summary": "Se il passato \u00e8 il prologo, allora l'opera primaria di George R.R. Martin - la pi\u00f9 innovativa e formidabile saga fantasy del nostro tempo - necessita di una introduzione ugualmente formidabile. E alla fine, eccola: Il Mondo del Ghiaccio e del Fuoco. Questo volume, riccamente illustrato da oltre centosettanta tavole originali a colori, \u00e8 la storia completa dei Sette Regni, incentrata sulla vivida ricostruzione delle epiche battaglie, delle brutali rivalit\u00e0 e delle temerarie ribellioni che hanno condotto agli eventi narrati ne \u00abLe Cronache del Ghiaccio e del Fuoco\u00bb e nella serie HBO \u00abGame of Thrones\u00bb. In una collaborazione durata interi anni, George R.R. Martin ha coniugato il proprio lavoro con quello di Elio M. Garc\u00eda Jr. e Linda Antonsson, fondatori del celebre sito web westeros.org, forse le uniche due persone che di questo mondo fantastico hanno una conoscenza approfondita quanto quella del suo stesso eccezionale creatore. Racchiuse in questo testo si sovrappongono conoscenze accumulate, speculazioni accademiche e leggende popolari tramandate da maestri e septon, negromanti e cantastorie. \u00c8 una cronaca che si dipana dal Tempo dell'Alba all'Et\u00e0 degli Eroi, dalla venuta dei primi uomini all'arrivo di Aegon il Conquistatore, dall'ascesa di Aegon stesso al Trono di Spade fino alla Ribellione di Robert e alla susseguente caduta di Aerys II Targaryen, il Re Folle, l'evento che ha messo in movimento le lotte \u00abdi oggi\u00bb tra Stark, Lannister, Baratheon e Targaryen. Fondamentale opera di sostegno per l'intero, ipnotico universo concepito da George R.R. Martin, Il Mondo del Ghiaccio e del Fuoco \u00e8 la prova provata che la penna \u00e8 davvero pi\u00f9 poderosa di una tempesta di spade.",
-    "summary_source": "google_books_api",
-    "catalog_ean": null,
-    "catalog_publisher": null,
-    "catalog_quantity": null,
-    "catalog_price": null,
-    "isbn": "9788852057182",
-    "isbn_10": "8852057188",
-    "published_date": "2014-10-28",
-    "publication_year": 2014,
-    "pages": 840,
-    "cover_url": "http://books.google.com/books/content?id=vxbUBAAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
-    "publisher": "Edizioni Mondadori",
-    "categories": [
-      "Fiction"
-    ],
-    "subtitle": null,
-    "language": "it",
-    "maturity_rating": "General",
-    "print_type": "BOOK",
-    "info_link": "https://play.google.com/store/books/details?id=vxbUBAAAQBAJ&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=vxbUBAAAQBAJ&pg=PT148&dq=Cronache+Del+Ghiaccio+E+Del+Fu+George+R.R.+Martin,+Elio+M.+Garc%C3%ADa+Jr.,+Linda+Antonsson&hl=&cd=1&source=gbs_api",
-    "canonical_volume_link": "https://play.google.com/store/books/details?id=vxbUBAAAQBAJ",
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.62,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "George R.R. Martin , Elio M . Garc\u00eda Jr ., Linda Antonsson . Non appena Aenys fu sepolto, Visenya mont\u00f2 su Vhagar e vol\u00f2 a est, verso Pentos, per richiamare il figlio Maegor nei Sette Regni dall'esilio. Maegor attravers\u00f2 il Mare Stretto sulle ..."
-      }
-    ],
-    "discarded_information_examples": [],
-    "insights": {
-      "summary": "Cronache Del Ghiaccio E Del Fu frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict rather than plot revelations.",
-      "tags": [
-        "Fiction",
-        "Contemporary",
-        "Fantasy",
-        "Long Read",
-        "Character-Driven",
-        "Atmospheric",
-        "High Stakes",
-        "Plot-Driven"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Marketing language filtered",
-          "detail": "Removed promotional wording to keep the report factual and source-grounded."
-        }
-      ]
-    },
-    "reject_attempts": 1,
-    "status": "to_approve",
-    "id": "0db84f62-a15a-457e-8d43-274a0b672bac"
-  },
-  {
-    "raw_title": "Saga di Geralt di Riv",
-    "normalized_title": "Saga Di Geralt Di Riv",
-    "author": "Andrzej Sapkowski",
-    "fetched_summary": "LA SAGA CHE HA ISPIRATO THE WITCHER LA SERIE EVENTO DI NETFLIX \u00abLa serie di romanzi di Andrzej Sapkowski ritorna (finalmente) ad essere un caso letterario.\u00bb Mondo Fox \u00abUno dei migliori esempi di fantasy moderno.\u00bb Wired \u00abLeggere Sapkowski \u00e8 come farsi ammaliare da un potente incantesimo. \u00bb Time \u00abGeralt di Rivia \u00e8 il Witcher creato dalla penna raffinata di Andrzej Sapkowski, autore polacco di una delle saghe fantasy di maggior successo.\u00bb il venerd\u00ec la Repubblica - Matteo Strukul \u00abUn mondo fantasy che gareggia per dimensioni e importanza con quello del Trono di Spade.\u00bb la Repubblica \u00abUn vero fenomeno letterario.\u00bb Livres Hebdo \u00abLa saga completa di The Witcher \u00e8 una delle pietre angolari di ogni collezione del fantastico che si rispetti.\u00bb tuttolibri \u2013 la Stampa - Pierdomenico Baccalario Geralt di Rivia \u00e8 uno strigo, un assassino di mostri. Ed \u00e8 il migliore: solo lui pu\u00f2 sopraffare un basilisco, sopravvivere a un incontro con una sirena, sgominare un'orda di goblin o portare un messaggio alla regina delle driadi, fiere guerriere dei boschi che uccidono chiunque si avventuri nel loro territorio\u2026 Geralt per\u00f2 non \u00e8 un mercenario senza scrupoli, disposto a compiere qualsiasi atrocit\u00e0 dietro adeguato compenso: al pari dei cavalieri, ha un codice da rispettare. Ecco perch\u00e9 re Niedamir \u00e8 sorpreso di vederlo tra i cacciatori da lui radunati per eliminare un drago grigio, un essere intoccabile per gli strighi. E, in effetti, Geralt \u00e8 l\u00ec per un motivo ben diverso: ha infatti scoperto che il re ha convocato pure la maga Yennefer, l'unica donna che lui abbia mai amato. Lo strigo sar\u00e0 dunque obbligato a fare una dolorosa scelta: difendere il drago e perdere Yennefer per sempre, o infrangere il codice degli strighi pur di riconquistare il suo cuore...",
-    "summary_source": "google_books_api",
-    "catalog_ean": null,
-    "catalog_publisher": null,
-    "catalog_quantity": null,
-    "catalog_price": null,
-    "isbn": "9788842920618",
-    "isbn_10": "8842920614",
-    "published_date": "2012-01-19T00:00:00+01:00",
-    "publication_year": 2012,
-    "pages": 329,
-    "cover_url": "http://books.google.com/books/content?id=79rw-RuetYwC&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
-    "publisher": "Editrice Nord",
-    "categories": [
-      "Fiction"
-    ],
-    "subtitle": "The Witcher 2",
-    "language": "it",
-    "maturity_rating": "General",
-    "print_type": "BOOK",
-    "info_link": "https://play.google.com/store/books/details?id=79rw-RuetYwC&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=79rw-RuetYwC&printsec=frontcover&dq=Saga+Di+Geralt+Di+Riv+Andrzej+Sapkowski&hl=&cd=1&source=gbs_api",
-    "canonical_volume_link": "https://play.google.com/store/books/details?id=79rw-RuetYwC",
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": 5.0,
-    "ratings_count": 5,
-    "positive_ratio": 0.8752138676339356,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "LA SAGA CHE HA ISPIRATO THE WITCHER LA SERIE EVENTO DI NETFLIX \u00abLa serie di romanzi di Andrzej Sapkowski ritorna (finalmente) ad essere un caso letterario.\u00bb Mondo Fox \u00abUno dei migliori esempi di fantasy moderno.\u00bb Wired \u00abLeggere ..."
-      }
-    ],
-    "discarded_information_examples": [],
-    "insights": {
-      "summary": "Saga Di Geralt Di Riv frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict rather than plot revelations.",
-      "tags": [
-        "Fiction",
-        "Contemporary",
-        "Highly Rated",
-        "Fantasy",
-        "Character-Driven",
-        "Atmospheric",
-        "High Stakes",
-        "Plot-Driven"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Marketing language filtered",
-          "detail": "Removed promotional wording to keep the report factual and source-grounded."
-        }
-      ]
-    },
-    "reject_attempts": 1,
-    "status": "to_approve",
-    "id": "18d53ebe-72ec-4cb0-9f0a-9849ae808cf2"
-  },
-  {
-    "raw_title": "Saga di Geralt di Riv",
-    "normalized_title": "Saga Di Geralt Di Riv",
-    "author": "Andrzej Sapkowski",
-    "fetched_summary": "LA SAGA CHE HA ISPIRATO THE WITCHER LA SERIE EVENTO DI NETFLIX \u00abLa serie di romanzi di Andrzej Sapkowski ritorna (finalmente) ad essere un caso letterario.\u00bb Mondo Fox \u00abUno dei migliori esempi di fantasy moderno.\u00bb Wired \u00abLeggere Sapkowski \u00e8 come farsi ammaliare da un potente incantesimo. \u00bb Time \u00abGeralt di Rivia \u00e8 il Witcher creato dalla penna raffinata di Andrzej Sapkowski, autore polacco di una delle saghe fantasy di maggior successo.\u00bb il venerd\u00ec la Repubblica - Matteo Strukul \u00abUn mondo fantasy che gareggia per dimensioni e importanza con quello del Trono di Spade.\u00bb la Repubblica \u00abUn vero fenomeno letterario.\u00bb Livres Hebdo \u00abLa saga completa di The Witcher \u00e8 una delle pietre angolari di ogni collezione del fantastico che si rispetti.\u00bb tuttolibri \u2013 la Stampa - Pierdomenico Baccalario Geralt di Rivia \u00e8 uno strigo, un assassino di mostri. Ed \u00e8 il migliore: solo lui pu\u00f2 sopraffare un basilisco, sopravvivere a un incontro con una sirena, sgominare un'orda di goblin o portare un messaggio alla regina delle driadi, fiere guerriere dei boschi che uccidono chiunque si avventuri nel loro territorio\u2026 Geralt per\u00f2 non \u00e8 un mercenario senza scrupoli, disposto a compiere qualsiasi atrocit\u00e0 dietro adeguato compenso: al pari dei cavalieri, ha un codice da rispettare. Ecco perch\u00e9 re Niedamir \u00e8 sorpreso di vederlo tra i cacciatori da lui radunati per eliminare un drago grigio, un essere intoccabile per gli strighi. E, in effetti, Geralt \u00e8 l\u00ec per un motivo ben diverso: ha infatti scoperto che il re ha convocato pure la maga Yennefer, l'unica donna che lui abbia mai amato. Lo strigo sar\u00e0 dunque obbligato a fare una dolorosa scelta: difendere il drago e perdere Yennefer per sempre, o infrangere il codice degli strighi pur di riconquistare il suo cuore...",
-    "summary_source": "google_books_api",
-    "catalog_ean": null,
-    "catalog_publisher": null,
-    "catalog_quantity": null,
-    "catalog_price": null,
-    "isbn": "9788842920618",
-    "isbn_10": "8842920614",
-    "published_date": "2012-01-19T00:00:00+01:00",
-    "publication_year": 2012,
-    "pages": 329,
-    "cover_url": "http://books.google.com/books/content?id=79rw-RuetYwC&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
-    "publisher": "Editrice Nord",
-    "categories": [
-      "Fiction"
-    ],
-    "subtitle": "The Witcher 2",
-    "language": "it",
-    "maturity_rating": "General",
-    "print_type": "BOOK",
-    "info_link": "https://play.google.com/store/books/details?id=79rw-RuetYwC&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=79rw-RuetYwC&printsec=frontcover&dq=Saga+Di+Geralt+Di+Riv+Andrzej+Sapkowski&hl=&cd=1&source=gbs_api",
-    "canonical_volume_link": "https://play.google.com/store/books/details?id=79rw-RuetYwC",
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": 5.0,
-    "ratings_count": 5,
-    "positive_ratio": 0.9056913750355071,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "LA SAGA CHE HA ISPIRATO THE WITCHER LA SERIE EVENTO DI NETFLIX \u00abLa serie di romanzi di Andrzej Sapkowski ritorna (finalmente) ad essere un caso letterario.\u00bb Mondo Fox \u00abUno dei migliori esempi di fantasy moderno.\u00bb Wired \u00abLeggere ..."
-      }
-    ],
-    "discarded_information_examples": [],
-    "insights": {
-      "summary": "Saga Di Geralt Di Riv frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict rather than plot revelations.",
-      "tags": [
-        "Fiction",
-        "Contemporary",
-        "Highly Rated",
-        "Fantasy",
-        "Character-Driven",
-        "Atmospheric",
-        "High Stakes",
-        "Plot-Driven"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Marketing language filtered",
-          "detail": "Removed promotional wording to keep the report factual and source-grounded."
-        }
-      ]
-    },
-    "reject_attempts": 1,
-    "status": "to_approve",
-    "id": "872b2e15-495c-4c4b-8f45-729f6efc40e8"
-  },
-  {
-    "raw_title": "Il Terzo Libro E Altre Cose",
-    "normalized_title": "Il Terzo Libro E Altre Cose",
-    "author": "Giorgio Caproni",
-    "fetched_summary": "Cristo ogni tanto torna, se ne va, chi l'ascolta... Il cuore della citt\u00e0 \u00e8 morto, la folla passa e schiaccia - \u00e8 buia massa compatta, \u00e8 cecit\u00e0...",
-    "summary_source": "google_books_api",
-    "catalog_ean": null,
-    "catalog_publisher": null,
-    "catalog_quantity": null,
-    "catalog_price": null,
-    "isbn": "9788858422144",
-    "isbn_10": "8858422147",
-    "published_date": "2016-02-23",
-    "publication_year": 2016,
-    "pages": 101,
-    "cover_url": "http://books.google.com/books/content?id=vsyaCwAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
-    "publisher": "Giulio Einaudi Editore",
-    "categories": [
-      "Poetry"
-    ],
-    "subtitle": null,
-    "language": "it",
-    "maturity_rating": "General",
-    "print_type": "BOOK",
-    "info_link": "https://play.google.com/store/books/details?id=vsyaCwAAQBAJ&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=vsyaCwAAQBAJ&printsec=frontcover&dq=Il+Terzo+Libro+E+Altre+Cose+Giorgio+Caproni&hl=&cd=1&source=gbs_api",
-    "canonical_volume_link": "https://play.google.com/store/books/details?id=vsyaCwAAQBAJ",
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.922,
-    "review_samples": [
-      {
-        "reviewer": "Google Books Snippet",
-        "rating": 4.5,
-        "text": "Cristo ogni tanto torna, se ne va, chi l'ascolta... Il cuore della citt\u00e0 \u00e8 morto, la folla passa e schiaccia - \u00e8 buia massa compatta, \u00e8 cecit\u00e0..."
-      },
-      {
-        "reviewer": "Goodreads User Review 1",
-        "rating": 4.0,
-        "text": "La guerra / penetrata nell'ossa L'asse portante di questo volume di Caproni \u00e8 \"l'incombenza, la presenza e il retaggio della guerra\" - Caproni \u00e8 nato durante una guerra (nel 1912), ha avuto giovinezza ed et\u00e0 adulta condizionate e stravolte da guerre e la sua opera poetica si pu\u00f2 comprendere solo in questa prospettiva."
-      },
-      {
-        "reviewer": "Goodreads User Review 2",
-        "rating": 4.0,
-        "text": "ARPEGGIO Cristo ogni tanto torna, se ne va, chi l\u2019ascolta \u2026 Il cuore della citt\u00e0 \u00e8 morto, la folla passa e schiaccia \u2013 \u00e8 buia massa compatta, \u00e8 cecit\u00e0\u2026 ALBA Amore mio, nei vapori d\u2019un bar all\u2019alba, amore mio che inverno lungo e che brividi attenderti! Qua dove il marmo nel sangue \u00e8 gelo, e sa di rifresco anche l\u2019occhio"
-      }
-    ],
-    "discarded_information_examples": [],
-    "insights": {
-      "summary": "Cristo ogni tanto torna, se ne va, chi l'ascolta... Il cuore della citt\u00e0 \u00e8 morto, la folla passa e schiaccia - \u00e8 buia massa compatta, \u00e8 cecit\u00e0... Readers describe it as Cristo ogni tanto torna, se ne va, chi l'ascolta... Il cuore della citt\u00e0 \u00e8 morto, la folla passa e schiaccia - \u00e8 buia massa compat",
-      "tags": [
-        "Poetry",
-        "Contemporary",
-        "Highly Rated",
-        "Character-Driven",
-        "Atmospheric",
-        "High Stakes",
-        "Plot-Driven"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Marketing language filtered",
-          "detail": "Removed promotional wording to keep the report factual and source-grounded."
-        }
-      ]
-    },
-    "reject_attempts": 1,
-    "status": "to_approve",
-    "id": "760c931c-4f6a-47c3-b8c4-f1e99e14c588"
-  },
-  {
-    "raw_title": "The Na+/H+ Exchanger",
-    "normalized_title": "The Na+/H+ Exchanger",
-    "author": "Larry Fliegel",
+    "author": "John Ronald Reuel Tolkien, Vicky Alliata di Villafranca, Antonio Lugli",
     "fetched_summary": null,
     "summary_source": null,
     "catalog_ean": null,
     "catalog_publisher": null,
     "catalog_quantity": null,
     "catalog_price": null,
-    "isbn": "UOM:39015037480137",
+    "isbn": null,
     "isbn_10": null,
-    "published_date": "1996",
-    "publication_year": 1996,
-    "pages": 358,
-    "cover_url": "http://books.google.com/books/content?id=6fNqAAAAMAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "publisher": "New York : Springer",
-    "categories": [
-      "Medical"
-    ],
-    "subtitle": null,
-    "language": "en",
-    "maturity_rating": "General",
-    "print_type": "BOOK",
-    "info_link": "http://books.google.it/books?id=6fNqAAAAMAAJ&dq=intitle:%22The+Na%22&hl=&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=6fNqAAAAMAAJ&dq=intitle:%22The+Na%22&hl=&cd=3&source=gbs_api",
-    "canonical_volume_link": "https://books.google.com/books/about/The_Na+_H+_Exchanger.html?hl=&id=6fNqAAAAMAAJ",
-    "openlibrary_key": "OL12319075W",
-    "first_publish_year": 1996,
-    "edition_count": 1,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.654,
-    "review_samples": [
-      {
-        "reviewer": "Goodreads User Review 1",
-        "rating": 4.0,
-        "text": "Section one contains articles on the biochemistry and molecular biology of the Na+/H+ exchanger, including a summary of recent work on regulation of NHE1 gene expression. Section two reviews the role in the myocardium. Section three reviews the new information on other forms of the Na+/H+ exchanger, while section four"
-      }
-    ],
-    "discarded_information_examples": [],
-    "insights": {
-      "summary": "The Na+/H+ Exchanger introduces its central conflict through atmosphere, stakes, and character tension, keeping key revelations undisclosed while highlighting the themes that define the reading experience.",
-      "tags": [
-        "Medical",
-        "Classic",
-        "Character-Driven",
-        "Atmospheric",
-        "High Stakes",
-        "Plot-Driven"
-      ],
-      "rejected_information": [
-        {
-          "reason": "Insufficient synopsis",
-          "detail": "Avoided plot-specific statements because no trusted summary was fetched."
-        }
-      ]
-    },
-    "reject_attempts": 0,
-    "status": "to_approve",
-    "id": "b512d591-6cd0-400c-a20a-4d1081250565"
-  },
-  {
-    "raw_title": "A",
-    "normalized_title": "A",
-    "author": "Francesca Gironi",
-    "fetched_summary": null,
-    "summary_source": null,
-    "catalog_ean": "9788898165179",
-    "catalog_publisher": null,
-    "catalog_quantity": null,
-    "catalog_price": null,
-    "isbn": "9788898165179",
-    "isbn_10": "889816517X",
-    "published_date": "2024",
-    "publication_year": 2024,
-    "pages": 0,
-    "cover_url": null,
-    "publisher": null,
-    "categories": [
-      "Literary Collections"
-    ],
-    "subtitle": null,
-    "language": "it",
-    "maturity_rating": "General",
-    "print_type": "BOOK",
-    "info_link": "http://books.google.it/books?id=fmG30AEACAAJ&dq=isbn:9788898165179&hl=&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=fmG30AEACAAJ&dq=isbn:9788898165179&hl=&cd=1&source=gbs_api",
-    "canonical_volume_link": "https://books.google.com/books/about/A.html?hl=&id=fmG30AEACAAJ",
-    "openlibrary_key": "OL42485468W",
-    "first_publish_year": 2024,
-    "edition_count": 1,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.935,
-    "review_samples": [],
-    "discarded_information_examples": [],
-    "insights": {
-      "summary": "A introduces its central conflict through atmosphere, stakes, and character tension, keeping key revelations undisclosed while highlighting the themes that define the reading experience.",
-      "tags": [
-        "Literary Collections",
-        "Contemporary",
-        "Highly Rated",
-        "Character-Driven",
-        "Atmospheric",
-        "High Stakes",
-        "Plot-Driven"
-      ],
-      "rejected_information": [
-        {
-          "reason": "No direct user reviews",
-          "detail": "Excluded reader-opinion claims because no review samples were available."
-        },
-        {
-          "reason": "Insufficient synopsis",
-          "detail": "Avoided plot-specific statements because no trusted summary was fetched."
-        }
-      ]
-    },
-    "reject_attempts": 2,
-    "status": "to_approve",
-    "id": "d58d2eff-6f7b-4315-b14a-60363958baa6"
-  },
-  {
-    "raw_title": "Cesare. La Conquista Dell Eternit\u00e0",
-    "normalized_title": "Cesare. La Conquista Dell Eternit\u00e0",
-    "author": "Alberto Angela",
-    "fetched_summary": null,
-    "summary_source": null,
-    "catalog_ean": null,
-    "catalog_publisher": null,
-    "catalog_quantity": null,
-    "catalog_price": null,
-    "isbn": "9788804810995",
-    "isbn_10": "8804810998",
-    "published_date": "2025",
-    "publication_year": 2025,
-    "pages": 0,
-    "cover_url": "http://books.google.com/books/content?id=huuz0QEACAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api",
-    "publisher": null,
-    "categories": [
-      "Biography & Autobiography"
-    ],
-    "subtitle": null,
-    "language": "it",
-    "maturity_rating": "General",
-    "print_type": "BOOK",
-    "info_link": "http://books.google.it/books?id=huuz0QEACAAJ&dq=Cesare.+La+Conquista+Dell+Eternit%C3%A0+Alberto+Angela&hl=&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=huuz0QEACAAJ&dq=Cesare.+La+Conquista+Dell+Eternit%C3%A0+Alberto+Angela&hl=&cd=2&source=gbs_api",
-    "canonical_volume_link": "https://books.google.com/books/about/Cesare_La_conquista_dell_eternit%C3%A0.html?hl=&id=huuz0QEACAAJ",
-    "openlibrary_key": null,
-    "first_publish_year": null,
-    "edition_count": null,
-    "average_rating": null,
-    "ratings_count": 0,
-    "positive_ratio": 0.632,
-    "review_samples": [],
-    "discarded_information_examples": [],
-    "insights": {
-      "summary": "Cesare. La Conquista Dell Eternit\u00e0 frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict rather than plot revelations.",
-      "tags": [
-        "Biography & Autobiography",
-        "Contemporary",
-        "Character-Driven",
-        "Atmospheric",
-        "High Stakes",
-        "Plot-Driven"
-      ],
-      "rejected_information": [
-        {
-          "reason": "No direct user reviews",
-          "detail": "Excluded reader-opinion claims because no review samples were available."
-        },
-        {
-          "reason": "Insufficient synopsis",
-          "detail": "Avoided plot-specific statements because no trusted summary was fetched."
-        }
-      ]
-    },
-    "reject_attempts": 1,
-    "status": "to_approve",
-    "id": "c89a30f1-9b25-41c3-b1dc-3e10d5b30acd"
-  },
-  {
-    "raw_title": "Il Decamero",
-    "normalized_title": "Il Decamero",
-    "author": "Giovanni Boccaccio",
-    "fetched_summary": null,
-    "summary_source": null,
-    "catalog_ean": null,
-    "catalog_publisher": null,
-    "catalog_quantity": null,
-    "catalog_price": null,
-    "isbn": "OCLC:1089970395",
-    "isbn_10": null,
-    "published_date": "1827",
-    "publication_year": 1827,
-    "pages": 910,
+    "published_date": null,
+    "publication_year": null,
+    "pages": null,
     "cover_url": null,
     "publisher": null,
     "categories": [],
     "subtitle": null,
-    "language": "it",
-    "maturity_rating": "General",
-    "print_type": "BOOK",
-    "info_link": "http://books.google.it/books?id=S7mHwwEACAAJ&dq=intitle:%22Il+Decamero%22+inauthor:%22Giovanni+Boccaccio%22&hl=&source=gbs_api",
-    "preview_link": "http://books.google.it/books?id=S7mHwwEACAAJ&dq=intitle:%22Il+Decamero%22+inauthor:%22Giovanni+Boccaccio%22&hl=&cd=1&source=gbs_api",
-    "canonical_volume_link": "https://books.google.com/books/about/Il_decamero.html?hl=&id=S7mHwwEACAAJ",
-    "openlibrary_key": "OL44628709W",
-    "first_publish_year": 1518,
-    "edition_count": 1,
+    "language": null,
+    "print_type": null,
+    "info_link": null,
+    "preview_link": null,
+    "canonical_volume_link": null,
+    "openlibrary_key": null,
+    "first_publish_year": null,
+    "edition_count": null,
     "average_rating": null,
     "ratings_count": 0,
-    "positive_ratio": 0.704,
+    "positive_ratio": null,
+    "review_samples": [],
+    "discarded_information_examples": [],
+    "insights": null,
+    "reject_attempts": 1,
+    "status": "in_progress",
+    "id": "2b67b699-57cb-4015-9aed-c850c1e58918"
+  },
+  {
+    "raw_title": "Twilight",
+    "normalized_title": "Twilight",
+    "author": "Stephenie Meyer",
+    "fetched_summary": "Per il ventesimo anniversario dalla pubblicazione di Twilight, una nuova edizione speciale. Il primo libro di una saga da cinque milioni di copie vendute in Italia: un fenomeno che a distanza di vent\u2019anni non si \u00e8 mai esaurito. Bella si \u00e8 appena trasferita a Forks, la citt\u00e0 pi\u00f9 piovosa d\u2019America. \u00c8 il primo giorno nella nuova scuola e, quando incontra Edward Cullen, la sua vita prende una piega inaspettata e pericolosa. Con la pelle diafana, i capelli di bronzo, i denti luccicanti, gli occhi color oro, Edward \u00e8 algido e impenetrabile, talmente bello da sembrare irreale. Tra i due nasce un\u2019amicizia dapprima sospettosa, poi pi\u00f9 intima, che presto si trasforma in un\u2019attrazione travolgente. Finora Edward \u00e8 riuscito a tenere nascosto il suo segreto, ma Bella \u00e8 intenzionata a scoprirlo. Quello che ancora non sa \u00e8 che pi\u00f9 gli si avvicina maggiori sono i rischi per lei e per chi le sta accanto... Mentre nella vicina riserva indiana riprendono a circolare inquietanti leggende, un dubbio si fa strada nella mente di Bella. Il sogno romantico che sta vivendo potrebbe essere in realt\u00e0 l\u2019incubo che popola le sue notti. Profondamente seducente e intriso di una suspense straordinaria, Twilight \u00e8 diventato un classico moderno, ridefinendo i generi all\u2019interno della letteratura young adult e dando vita a un vero e proprio fenomeno di culto. Di nuovo il crepuscolo. Un\u2019altra fine. Ogni giorno deve finire, anche il pi\u00f9 perfetto.",
+    "summary_source": "google_books_api",
+    "catalog_ean": null,
+    "catalog_publisher": null,
+    "catalog_quantity": null,
+    "catalog_price": null,
+    "isbn": "9791259678287",
+    "isbn_10": null,
+    "published_date": "2025-09-30T00:00:00+02:00",
+    "publication_year": 2025,
+    "pages": 313,
+    "cover_url": "http://books.google.com/books/content?id=J1WJEQAAQBAJ&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api",
+    "publisher": "Fazi Editore",
+    "categories": [
+      "Fiction"
+    ],
+    "subtitle": "Edizione Deluxe ventesimo anniversario",
+    "language": "it",
+    "print_type": "BOOK",
+    "info_link": "https://play.google.com/store/books/details?id=J1WJEQAAQBAJ&source=gbs_api",
+    "preview_link": "http://books.google.it/books?id=J1WJEQAAQBAJ&printsec=frontcover&dq=intitle:%22Twilight%22+inauthor:%22Stephenie+Meyer%22&hl=&cd=1&source=gbs_api",
+    "canonical_volume_link": "https://play.google.com/store/books/details?id=J1WJEQAAQBAJ",
+    "openlibrary_key": "OL5720023W",
+    "first_publish_year": 2005,
+    "edition_count": 131,
+    "average_rating": null,
+    "ratings_count": 0,
+    "positive_ratio": 0.825,
     "review_samples": [
+      {
+        "reviewer": "Google Books Snippet",
+        "rating": 4.5,
+        "text": "Per il ventesimo anniversario dalla pubblicazione di Twilight, una nuova edizione speciale."
+      },
       {
         "reviewer": "Goodreads User Review 1",
         "rating": 4.0,
-        "text": "Leather Binding on Spine and Corners with Golden Leaf Printing on round Spine (extra customization on request like complete leather, Golden Screen printing in Front, Color Leather, Colored book etc.) Reprinted in 2022 with the help of original edition published long back [1924]. This book is printed in black & white, s"
+        "text": "It\u2019s always Team Edward this and Team Jacob that, but there\u2019s only one real team when it comes to reading the Twilight series. And that\u2019s Team Suffering. Honorable mention to Team Alice. The only character I respect. Everyone else is a nightmare gremlin demon, and also somehow the plot isn\u2019t even fun, and also this boo"
       },
       {
         "reviewer": "Goodreads User Review 2",
         "rating": 4.0,
-        "text": "Giovanni Boccaccio (1313 - 1375) was an Italian author and poet, a friend and correspondent of Petrarch , and an important Renaissance humanist in his own right and author of a number of notable works including the Decameron , On Famous Women , and his poetry in the Italian vernacular. Boccaccio is particularly notable"
+        "text": "\"Isabella Swan? I promise to love you forever - every single day of forever. Will you marry me?\" I can feel my teenage heart quivering \"I'm gonna fight for you, until your heart stops beating.\" That heart just exploded Whewwwww. Ten years ago, I would've fought anyone who challenged Edward and Bella's love. Nowadays? N"
+      },
+      {
+        "reviewer": "Goodreads User Review 3",
+        "rating": 4.0,
+        "text": "\"You gave it three stars?\" she asked me, biting her lip and holding her breath. \"Yes,\" I finally answered with my marble lips, cold yet strangely comforting, even warm. \"Stephenie, don't forget to breathe.\" \"Oh, of course.\" A storm seemed to rage in her for just a moment. \"I gave it a three. It's good.\" I would never l"
       }
     ],
     "discarded_information_examples": [],
     "insights": {
-      "summary": "Il Decamero introduces its central conflict through atmosphere, stakes, and character tension, keeping key revelations undisclosed while highlighting the themes that define the reading experience.",
+      "summary": "Twilight frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict rather than plot revelations.",
       "tags": [
-        "20th Century",
-        "Classic",
-        "Long Read",
+        "Fiction",
+        "Contemporary",
+        "War",
         "Character-Driven",
         "Atmospheric",
         "High Stakes",
@@ -1072,13 +227,13 @@
       ],
       "rejected_information": [
         {
-          "reason": "Insufficient synopsis",
-          "detail": "Avoided plot-specific statements because no trusted summary was fetched."
+          "reason": "Marketing language filtered",
+          "detail": "Removed promotional wording to keep the report factual and source-grounded."
         }
       ]
     },
-    "reject_attempts": 2,
+    "reject_attempts": 1,
     "status": "to_approve",
-    "id": "28b59810-ebd0-405b-aba7-425c6ee43e04"
+    "id": "a35a99b3-7c76-4bc2-a734-aaabb52ca48f"
   }
 ]

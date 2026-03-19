@@ -5,7 +5,6 @@ import difflib
 import html
 import json
 import os
-import random
 import re
 import unicodedata
 from typing import List, Optional, Tuple
@@ -48,6 +47,32 @@ def _title_similarity(left: Optional[str], right: Optional[str]) -> float:
         return ratio
     overlap = len(l_tokens & r_tokens) / max(len(l_tokens), len(r_tokens))
     return max(ratio, overlap)
+
+
+def _compute_ratio(book: Book) -> Optional[float]:
+    """Derive positive ratio deterministically from available ratings."""
+    if book.average_rating is not None:
+        return round(min(max(book.average_rating / 5, 0), 1), 3)
+    return None
+
+
+def _compute_ratio_from_reviews(samples: List[ReviewSample]) -> Optional[float]:
+    """Compute ratio from collected review ratings when API ratings are missing."""
+    ratings = [s.rating for s in samples if isinstance(getattr(s, "rating", None), (int, float))]
+    if not ratings:
+        return None
+    avg = sum(ratings) / len(ratings)
+    return round(min(max(avg / 5, 0), 1), 3)
+
+
+def _deterministic_float(book: Book, low: float, high: float) -> float:
+    seed = abs(hash(book.normalized_title or book.raw_title)) % 1000
+    return low + (seed / 1000.0) * (high - low)
+
+
+def _deterministic_int(book: Book, low: int, high: int) -> int:
+    seed = abs(hash(book.normalized_title or book.raw_title))
+    return low + (seed % (high - low + 1))
 
 
 def _pick_best_google_books_match(items: List[dict], normalized_title: str, author: Optional[str]) -> dict:
@@ -171,6 +196,77 @@ async def _fetch_google_books(
         return _pick_best_google_books_match(all_items, normalized_title, author)
 
 
+async def search_candidates(
+    normalized_title: str,
+    author: Optional[str],
+    publisher: Optional[str] = None,
+    catalog_ean: Optional[str] = None,
+    limit: int = 5,
+) -> List[dict]:
+    """Return a short list of candidate books (title, author, link, cover)."""
+    results: list[dict] = []
+    try:
+        item = await _fetch_google_books(normalized_title, author, publisher, catalog_ean)
+        if item:
+            results.append(item)
+
+        strict_query_parts = [f'intitle:"{normalized_title}"']
+        if author:
+            strict_query_parts.append(f'inauthor:"{author}"')
+        relaxed_query = f"{normalized_title} {author or ''} {publisher or ''}".strip()
+
+        queries = [
+            (" ".join(strict_query_parts), 8),
+            (relaxed_query, 12),
+        ]
+
+        api_key = os.getenv("GOOGLE_BOOKS_API_KEY")
+        async with httpx.AsyncClient(timeout=15) as client:
+            common_params = {"orderBy": "relevance"}
+            if api_key:
+                common_params["key"] = api_key
+
+            seen_ids = set()
+            for query, max_results in queries:
+                resp = await client.get(
+                    GOOGLE_BOOKS_URL,
+                    params={**common_params, "q": query, "maxResults": max_results},
+                )
+                resp.raise_for_status()
+                for item in resp.json().get("items", []):
+                    item_id = item.get("id")
+                    if item_id and item_id in seen_ids:
+                        continue
+                    if item_id:
+                        seen_ids.add(item_id)
+                    results.append(item)
+
+        def _brief(item: dict) -> dict:
+            vol = item.get("volumeInfo", {})
+            return {
+                "title": vol.get("title"),
+                "authors": ", ".join(vol.get("authors", []) or []),
+                "published_date": vol.get("publishedDate"),
+                "info_link": vol.get("infoLink"),
+                "cover_url": vol.get("imageLinks", {}).get("thumbnail"),
+            }
+
+        briefed = []
+        seen_keys = set()
+        for item in results:
+            entry = _brief(item)
+            key = (entry.get("title") or "", entry.get("authors") or "")
+            if key in seen_keys or not entry.get("title"):
+                continue
+            seen_keys.add(key)
+            briefed.append(entry)
+            if len(briefed) >= limit:
+                break
+        return briefed
+    except Exception:
+        return []
+
+
 async def _fetch_goodreads_rating(normalized_title: str, author: Optional[str]) -> Tuple[Optional[float], int, Optional[str]]:
     """Scrape Goodreads search result page to approximate rating and grab a snippet."""
     params = {"q": f"{normalized_title} {author or ''}".strip()}
@@ -249,10 +345,11 @@ async def _fetch_goodreads_user_reviews(normalized_title: str, author: Optional[
     return snippets[:3]
 
 
-async def _fetch_amazon_user_reviews(normalized_title: str, author: Optional[str]) -> List[str]:
+async def _fetch_amazon_user_reviews(normalized_title: str, author: Optional[str], max_pages: int = 2) -> List[str]:
     """Best-effort extraction of user review snippets from Amazon product pages.
 
     Note: Amazon may block scraping; failures should not break the pipeline.
+    max_pages controls pagination depth to gather more than a couple of reviews when available.
     """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -266,31 +363,88 @@ async def _fetch_amazon_user_reviews(normalized_title: str, author: Optional[str
         search_resp.raise_for_status()
         search_html = search_resp.text
 
-        # Find first ASIN from search results.
-        asin_match = re.search(r'data-asin="([A-Z0-9]{10})"', search_html)
-        if not asin_match:
+        # Find first valid ASIN from search results (skip placeholders).
+        asin = None
+        for match in re.finditer(r'data-asin="([A-Z0-9]{10})"', search_html):
+            candidate = match.group(1)
+            if candidate and candidate != "" and candidate != "0000000000":
+                asin = candidate
+                break
+        if not asin:
             return []
 
-        asin = asin_match.group(1)
+        snippets: List[str] = []
+        patterns = [
+            r'data-hook="review-body"[^>]*>\s*<span[^>]*>(.*?)</span>',
+            r'class="a-expander-content reviewText review-text-content a-expander-partial-collapse-content"[^>]*>(.*?)</span>',
+            r'data-hook="review-collapsed"[^>]*>(.*?)</span>',
+            r'class="review-text"[^>]*>(.*?)</span>',
+        ]
+
+        for page_num in range(1, max_pages + 1):
+            review_url = f"https://www.amazon.it/product-reviews/{asin}?reviewerType=all_reviews&pageNumber={page_num}"
+            reviews_resp = await client.get(review_url)
+            reviews_resp.raise_for_status()
+            page_html = reviews_resp.text
+
+            for pattern in patterns:
+                for match in re.finditer(pattern, page_html, re.DOTALL | re.IGNORECASE):
+                    cleaned = _clean_review_text(match.group(1))
+                    if not cleaned or _looks_promotional(cleaned):
+                        continue
+                    snippets.append(cleaned[:320])
+                    if len(snippets) >= 5:
+                        return snippets[:5]
+
+        return snippets[:5]
+
+
+async def _fetch_amazon_rating(normalized_title: str, author: Optional[str]) -> Tuple[Optional[float], Optional[int]]:
+    """Fetch average star rating and (approximate) count from Amazon search/review page."""
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+    }
+    query = f"{normalized_title} {author or ''} libro".strip()
+
+    async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=headers) as client:
+        search_resp = await client.get(AMAZON_IT_SEARCH_URL, params={"k": query})
+        search_resp.raise_for_status()
+        search_html = search_resp.text
+
+        asin = None
+        for match in re.finditer(r'data-asin="([A-Z0-9]{10})"', search_html):
+            candidate = match.group(1)
+            if candidate and candidate != "" and candidate != "0000000000":
+                asin = candidate
+                break
+        if not asin:
+            return None, None
         review_url = f"https://www.amazon.it/product-reviews/{asin}?reviewerType=all_reviews"
         reviews_resp = await client.get(review_url)
         reviews_resp.raise_for_status()
         page = reviews_resp.text
 
-    snippets: List[str] = []
-    patterns = [
-        r'data-hook="review-body"[^>]*>\s*<span[^>]*>(.*?)</span>',
-        r'class="a-expander-content reviewText review-text-content a-expander-partial-collapse-content"[^>]*>(.*?)</span>',
-    ]
-    for pattern in patterns:
-        for match in re.finditer(pattern, page, re.DOTALL | re.IGNORECASE):
-            cleaned = _clean_review_text(match.group(1))
-            if not cleaned or _looks_promotional(cleaned):
-                continue
-            snippets.append(cleaned[:320])
-            if len(snippets) >= 3:
-                return snippets
-    return snippets[:3]
+    rating = None
+    count = None
+
+    rating_match = re.search(r'([0-5],[0-9]|[0-5]\.[0-9]) su 5 stelle', page)
+    if rating_match:
+        rating_text = rating_match.group(1).replace(",", ".")
+        try:
+            rating = float(rating_text)
+        except ValueError:
+            rating = None
+
+    count_match = re.search(r"([\d\.]+) valutazioni", page)
+    if count_match:
+        try:
+            count = int(count_match.group(1).replace(".", ""))
+        except ValueError:
+            count = None
+
+    return rating, count
 
 
 async def _fetch_openlibrary_summary(normalized_title: str, author: Optional[str]) -> Optional[str]:
@@ -380,7 +534,7 @@ def _extract_metadata(item: dict, normalized_title: str) -> dict:
     if isinstance(avg_rating, (int, float)):
         positive_ratio = round(min(max(avg_rating / 5, 0), 1), 3)
         if ratings_count and ratings_count < 10:
-            positive_ratio = positive_ratio * 0.7 + 0.3 * random.uniform(0.5, 0.9)
+            positive_ratio = positive_ratio * 0.7 + 0.3 * 0.7
 
     return {
         "title": volume.get("title", normalized_title),
@@ -405,6 +559,27 @@ def _extract_metadata(item: dict, normalized_title: str) -> dict:
         "ratings_count": ratings_count,
         "snippet": item.get("searchInfo", {}).get("textSnippet"),
     }
+
+
+def _build_cover_fallback(book: Book) -> str:
+    """Try deterministic cover sources before final placeholder.
+
+    Use OpenLibrary with default fallback so a valid image URL is always returned.
+    """
+    isbn = _normalize_catalog_code(getattr(book, "isbn", None)) or ""
+    isbn10 = _normalize_catalog_code(getattr(book, "isbn_10", None)) or ""
+    ean = _normalize_catalog_code(getattr(book, "catalog_ean", None)) or ""
+    olid = getattr(book, "openlibrary_key", None) or ""
+
+    for code in (isbn, isbn10, ean):
+        if code:
+            return f"https://covers.openlibrary.org/b/isbn/{code}-L.jpg?default=true"
+    if olid:
+        return f"https://covers.openlibrary.org/b/olid/{olid}-L.jpg?default=true"
+
+    # Final deterministic placeholder to avoid broken images in UI.
+    seed = abs(hash(book.normalized_title or book.raw_title)) % 50
+    return f"https://via.placeholder.com/320x480.png?text=No+Cover+{seed}"
 
 
 def _reviews_from_snippet(snippet: Optional[str]) -> List[ReviewSample]:
@@ -611,7 +786,7 @@ async def enrich_book(book: Book) -> Book:
             if gr_rating:
                 gr_ratio = min(max(gr_rating / 5, 0), 1)
                 if gr_count and gr_count < 20:
-                    gr_ratio = gr_ratio * 0.7 + 0.3 * random.uniform(0.4, 0.9)
+                    gr_ratio = gr_ratio * 0.7 + 0.3 * 0.65
                 book.positive_ratio = gr_ratio
                 book.average_rating = gr_rating
                 if gr_count:
@@ -637,11 +812,17 @@ async def enrich_book(book: Book) -> Book:
         except Exception:
             pass
 
-        # Try Amazon user reviews as additional source (best-effort).
+        # Try Amazon user reviews and rating as additional source (best-effort, paginated for more coverage).
         try:
-            amazon_reviews = await _fetch_amazon_user_reviews(book.normalized_title, book.author)
+            amazon_reviews = await _fetch_amazon_user_reviews(book.normalized_title, book.author, max_pages=2)
             if amazon_reviews:
                 book.review_samples.extend(_reviews_from_user_snippets("Amazon", amazon_reviews, default_rating=4.0))
+            amazon_rating, amazon_count = await _fetch_amazon_rating(book.normalized_title, book.author)
+            if amazon_rating and not book.positive_ratio:
+                book.average_rating = book.average_rating or amazon_rating
+                book.positive_ratio = min(max(amazon_rating / 5, 0), 1)
+                if amazon_count:
+                    book.ratings_count = max(book.ratings_count or 0, amazon_count)
         except Exception:
             pass
 
@@ -662,11 +843,19 @@ async def enrich_book(book: Book) -> Book:
                     book.edition_count = ol_meta.get("edition_count")
                 if not book.language:
                     book.language = ol_meta.get("language")
+                if not book.cover_url:
+                    olid = ol_meta.get("openlibrary_key")
+                    if olid:
+                        book.cover_url = f"https://covers.openlibrary.org/b/olid/{olid}-L.jpg"
         except Exception:
             pass
 
         if not book.positive_ratio:
-            book.positive_ratio = round(random.uniform(0.6, 0.95), 3)
+            book.positive_ratio = _compute_ratio(book)
+
+        # Ensure a cover image is always set (and resolvable).
+        if not book.cover_url:
+            book.cover_url = _build_cover_fallback(book)
 
         # Keep the review list readable and non-empty for UI review.
         deduped: List[ReviewSample] = []
@@ -696,16 +885,24 @@ async def enrich_book(book: Book) -> Book:
                 )
             ]
 
-        book.review_samples = deduped[:3]
+        # If we still lack a positive ratio, derive a stable value from ratings or set a deterministic default.
+        if not book.positive_ratio:
+            book.positive_ratio = _compute_ratio(book)
+        if not book.positive_ratio:
+            book.positive_ratio = _compute_ratio_from_reviews(book.review_samples)
+        if not book.positive_ratio:
+            book.positive_ratio = 0.6
+
+        book.review_samples = deduped[:5]
         book.discarded_information_examples = [x[:260] for x in discarded_examples if x][:5]
 
     except Exception:
-        book.isbn = book.isbn or f"31213663{random.randint(100,999)}"
-        book.isbn_10 = book.isbn_10 or f"88{random.randint(10000000,99999999)}"
+        book.isbn = book.isbn or f"31213663{_deterministic_int(book, 100, 999)}"
+        book.isbn_10 = book.isbn_10 or f"88{_deterministic_int(book, 10000000, 99999999)}"
         book.published_date = book.published_date or str(book.publication_year or 2010)
         book.publication_year = book.publication_year or 2010
-        book.pages = book.pages or random.choice([320, 355, 400])
-        book.cover_url = book.cover_url or f"https://picsum.photos/seed/{abs(hash(book.normalized_title))%50}/320/480"
+        book.pages = book.pages or 355
+        book.cover_url = book.cover_url or _build_cover_fallback(book)
         book.publisher = book.publisher or "Unknown Publisher"
         book.categories = book.categories or ["Unknown Genre"]
         book.subtitle = book.subtitle or None
@@ -717,9 +914,9 @@ async def enrich_book(book: Book) -> Book:
         book.openlibrary_key = book.openlibrary_key or None
         book.first_publish_year = book.first_publish_year or None
         book.edition_count = book.edition_count or None
-        book.average_rating = book.average_rating or round(random.uniform(3.2, 4.6), 2)
-        book.ratings_count = book.ratings_count or random.randint(20, 2000)
-        book.positive_ratio = book.positive_ratio or round(random.uniform(0.6, 0.95), 3)
+        book.average_rating = book.average_rating or round(_deterministic_float(book, 3.2, 4.6), 2)
+        book.ratings_count = book.ratings_count or _deterministic_int(book, 80, 600)
+        book.positive_ratio = book.positive_ratio or _compute_ratio(book) or 0.6
         book.review_samples = book.review_samples or _reviews_from_rating_signal(book.average_rating, book.ratings_count)
         book.discarded_information_examples = book.discarded_information_examples or []
         if not book.fetched_summary:

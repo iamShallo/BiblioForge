@@ -26,7 +26,9 @@ class BookRepository:
             raw = json.loads(self.storage_path.read_text())
         except json.JSONDecodeError:
             return []
-        return [self._dict_to_book(item) for item in raw]
+        if not isinstance(raw, list):
+            return []
+        return [self._dict_to_book(item) for item in raw if isinstance(item, dict)]
 
     def _persist(self) -> None:
         payload = [book.to_dict() for book in self._cache]
@@ -185,9 +187,21 @@ class BookRepository:
 
     @staticmethod
     def _dict_to_book(data: dict) -> Book:
-        reviews = [ReviewSample(**item) for item in data.get("review_samples", [])]
-        rejected = [TransparencyNote(**item) for item in data.get("insights", {}).get("rejected_information", [])]
-        insights_data = data.get("insights")
+        if not isinstance(data, dict):
+            data = {}
+
+        reviews = []
+        for item in data.get("review_samples", []) or []:
+            if isinstance(item, dict):
+                reviews.append(ReviewSample(**item))
+
+        rejected: List[TransparencyNote] = []
+        insights_data = data.get("insights") if isinstance(data.get("insights"), dict) else None
+        if insights_data:
+            for item in insights_data.get("rejected_information", []) or []:
+                if isinstance(item, dict):
+                    rejected.append(TransparencyNote(**item))
+
         insights = None
         if insights_data:
             insights = BookInsights(
