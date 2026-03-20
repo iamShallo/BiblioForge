@@ -59,7 +59,75 @@ def _summary_is_acceptable(summary: str) -> bool:
         return False
 
     words = _word_count(summary)
-    return 55 <= words <= 170
+    return 45 <= words <= 180
+
+
+def _trim_to_word_limit(text: str, max_words: int) -> str:
+    words = re.findall(r"\S+", text or "")
+    if len(words) <= max_words:
+        return (text or "").strip()
+    return " ".join(words[:max_words]).strip()
+
+
+def _sanitize_summary_source_text(text: str) -> str:
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return ""
+
+    # Remove very common promo/noise fragments from metadata descriptions.
+    promo_patterns = [
+        r"(?i)\b(nuova edizione speciale|edizione speciale|fenomeno editoriale)\b",
+        r"(?i)\b([0-9]+\s*(milioni|mila)\s+di\s+copie\s+vendute)\b",
+        r"(?i)\b(bestseller(?:\s+internazionale)?)\b",
+        r"(?i)\b(per\s+il\s+\w+\s+anniversario[^\.,;:]*)",
+    ]
+    for pattern in promo_patterns:
+        cleaned = re.sub(pattern, "", cleaned)
+
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,;:-")
+    return cleaned
+
+
+def _build_story_summary(book: Book) -> str:
+    title = book.normalized_title or book.raw_title
+    source = _sanitize_summary_source_text(book.fetched_summary or "")
+
+    spoiler_markers = [
+        "killer is",
+        "turns out",
+        "ending",
+        "finale",
+        "twist",
+        "identity revealed",
+        "muore",
+        "assassino",
+        "colpo di scena finale",
+        "si scopre che",
+    ]
+
+    if source:
+        # Keep only early, spoiler-safe sentences to preserve story setup.
+        parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", source) if p.strip()]
+        kept: List[str] = []
+        for part in parts:
+            lower_part = part.lower()
+            if any(marker in lower_part for marker in spoiler_markers):
+                continue
+            kept.append(part)
+            if len(kept) >= 3:
+                break
+
+        candidate = " ".join(kept).strip() if kept else source
+        candidate = _trim_to_word_limit(candidate, 120)
+        if candidate and candidate[-1] not in ".!?":
+            candidate += "."
+        if _word_count(candidate) >= 25:
+            return candidate
+
+    return (
+        f"{title} introduce i personaggi principali e il conflitto di partenza, delineando ambientazione, "
+        "temi e posta in gioco senza rivelare snodi decisivi della trama."
+    )
 
 
 def _tags_are_acceptable(tags: List[str]) -> bool:
@@ -201,32 +269,7 @@ def _derive_rejected_information(book: Book) -> List[TransparencyNote]:
 
 
 def _fallback_insights(book: Book) -> BookInsights:
-    title = book.normalized_title or book.raw_title
-    base_summary = (book.fetched_summary or "").strip()
-
-    # Build a spoiler-safe editorial abstract from available evidence.
-    review_line = ""
-    if book.review_samples:
-        review_line = f" Readers describe it as {book.review_samples[0].text[:130]}"
-
-    if not base_summary:
-        base_summary = (
-            f"{title} is presented through its setting, themes, and tone, without revealing major plot turns."
-        )
-
-    spoiler_terms = ["dies", "killer", "ending", "finale", "murderer", "twist", "identity revealed"]
-    lowered = base_summary.lower()
-    if any(term in lowered for term in spoiler_terms):
-        base_summary = (
-            f"{title} explores its central conflict and themes with a focus on atmosphere and character stakes, "
-            "without disclosing key revelations."
-        )
-
-    summary_text = base_summary.rstrip()
-    if summary_text and summary_text[-1] not in ".!?":
-        summary_text += "."
-    if review_line:
-        summary_text = f"{summary_text}{review_line}"
+    summary_text = _build_story_summary(book)
 
     return BookInsights(
         summary=summary_text,
@@ -237,15 +280,16 @@ def _fallback_insights(book: Book) -> BookInsights:
 
 def _build_prompt(book: Book, regeneration_token: Optional[str] = None) -> str:
     rating_line = f"Positive ratio: {book.positive_ratio}" if book.positive_ratio else ""
-    reviews: List[str] = [f"- {r.reviewer}: {r.text} (rating {r.rating})" for r in book.review_samples]
-    reviews_block = "\n".join(reviews) if reviews else "- No review samples available."
     return (
         "You are generating an editorial report for a book. "
         "Return JSON with keys: summary (string), tags (array of strings), "
         "rejected_information (array of objects with reason and detail). "
         "Be concise; avoid opinions not grounded in provided inputs.\n"
-        "Summary constraints: 80-140 words, spoiler-free, no ending reveal, no killer reveal, no final twist reveal.\n"
-        "Write summary as a back-cover style abstract focused on setup, themes, atmosphere, and stakes.\n"
+        "Summary constraints: 70-140 words, spoiler-free, no ending reveal, no killer reveal, no final twist reveal.\n"
+        "Write summary as a story synopsis focused on setup, central conflict, characters, and early narrative arc.\n"
+        "Use only the Crawler/API Summary as factual source for plot information.\n"
+        "Do not include, quote, or paraphrase user reviews in the summary.\n"
+        "Keep the same language used by the source metadata/reviews whenever possible.\n"
         "Tag constraints: provide 5 to 8 high-quality tags (genre, tone, themes, audience, pacing), not author names.\n"
         "Do not append metadata fields like Author/Year/ISBN/Pages in the summary.\n"
         "Use fresh wording and sentence structure for each generation.\n"
@@ -259,8 +303,6 @@ def _build_prompt(book: Book, regeneration_token: Optional[str] = None) -> str:
         f"{rating_line}\n"
         f"Crawler/API Summary: {book.fetched_summary or '-'}\n"
         f"Crawler/API Source: {book.summary_source or '-'}\n"
-        "Reviews:\n"
-        f"{reviews_block}\n"
         "JSON only, no markdown, no prose."
     )
 
@@ -268,11 +310,33 @@ def _build_prompt(book: Book, regeneration_token: Optional[str] = None) -> str:
 def _enforce_summary_variation(summary: str, regeneration_token: Optional[str]) -> str:
     if not regeneration_token:
         return summary
-    variants = [
-        "The narrative emphasis stays on themes, atmosphere, and stakes without revealing decisive turns.",
-        "The description highlights tone and central conflict while keeping major revelations undisclosed.",
-        "The abstract prioritizes setting and tension, avoiding spoilers about late-story outcomes.",
+    lowered = (summary or "").lower()
+    italian_hints = [
+        " il ",
+        " lo ",
+        " la ",
+        " gli ",
+        " che ",
+        " con ",
+        " senza ",
+        " trama",
+        " personaggi",
+        " atmosfera",
     ]
+    is_italian = any(hint in f" {lowered} " for hint in italian_hints)
+
+    if is_italian:
+        variants = [
+            "L'attenzione resta su temi, atmosfera e posta in gioco, senza rivelare snodi decisivi.",
+            "La descrizione mette al centro tono e conflitto iniziale, evitando rivelazioni cruciali.",
+            "Il riassunto privilegia ambientazione e tensione narrativa, mantenendo riservati i passaggi chiave.",
+        ]
+    else:
+        variants = [
+            "The narrative emphasis stays on themes, atmosphere, and stakes without revealing decisive turns.",
+            "The description highlights tone and central conflict while keeping major revelations undisclosed.",
+            "The abstract prioritizes setting and tension, avoiding spoilers about late-story outcomes.",
+        ]
     idx = abs(hash(regeneration_token)) % len(variants)
     base = summary.strip()
     if base and base[-1] not in ".!?":
@@ -514,12 +578,7 @@ def generate_insights(
     if not insights:
         insights = _fallback_insights(book)
         if not _summary_is_acceptable(insights.summary):
-            # Last-resort normalized fallback to avoid legacy templated outputs.
-            title = book.normalized_title or book.raw_title
-            insights.summary = (
-                f"{title} introduces its central conflict through atmosphere, stakes, and character tension, "
-                "keeping key revelations undisclosed while highlighting the themes that define the reading experience."
-            )
+            insights.summary = _build_story_summary(book)
         if not _tags_are_acceptable(insights.tags):
             insights.tags = _derive_tags(book)
 
@@ -527,11 +586,7 @@ def generate_insights(
         token = regeneration_token or str(uuid4())
         insights.summary = _enforce_summary_variation(insights.summary, token)
         if not _summary_is_acceptable(insights.summary):
-            title = book.normalized_title or book.raw_title
-            insights.summary = (
-                f"{title} frames a high-stakes journey through its setting and themes, with an emphasis on mood and conflict "
-                "rather than plot revelations."
-            )
+            insights.summary = _build_story_summary(book)
 
     book.insights = insights
     book.status = BookStatus.TO_APPROVE

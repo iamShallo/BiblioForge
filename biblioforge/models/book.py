@@ -56,6 +56,7 @@ class Book:
     info_link: Optional[str] = None
     preview_link: Optional[str] = None
     canonical_volume_link: Optional[str] = None
+    goodreads_link: Optional[str] = None
     openlibrary_key: Optional[str] = None
     first_publish_year: Optional[int] = None
     edition_count: Optional[int] = None

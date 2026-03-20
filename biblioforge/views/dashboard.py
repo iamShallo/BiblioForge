@@ -1,4 +1,5 @@
 import time
+from urllib.parse import parse_qs, urlparse
 
 import streamlit as st
 
@@ -82,6 +83,17 @@ def bust_cache(url: str, token: str) -> str:
     return f"{url}{sep}cb={token}"
 
 
+def _normalize_source_link(url: str) -> str:
+    """Normalize links so equivalent book pages are shown once in UI."""
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query)
+    book_id = (query.get("id") or [""])[0]
+    path = parsed.path.rstrip("/")
+    if parsed.netloc.endswith("google.com") and book_id:
+        return f"google:{book_id}"
+    return f"{parsed.scheme}://{parsed.netloc}{path}"
+
+
 def status_label(status: BookStatus) -> str:
     labels = {
         BookStatus.TO_CLEAN: "To Clean",
@@ -104,6 +116,7 @@ def render_context_column(book: Book) -> None:
     info_link = getattr(book, "info_link", None)
     preview_link = getattr(book, "preview_link", None)
     canonical_volume_link = getattr(book, "canonical_volume_link", None)
+    goodreads_link = getattr(book, "goodreads_link", None)
     categories = getattr(book, "categories", [])
     reject_attempts = getattr(book, "reject_attempts", 0)
     catalog_ean = getattr(book, "catalog_ean", None)
@@ -146,10 +159,6 @@ def render_context_column(book: Book) -> None:
         metric_items.append(("ISBN", str(book.isbn)))
     if isbn_10:
         metric_items.append(("ISBN-10", str(isbn_10)))
-    if book.ratings_count:
-        metric_items.append(("Ratings Count", str(book.ratings_count)))
-    if book.average_rating:
-        metric_items.append(("Average Rating", f"{book.average_rating:.2f}"))
     if edition_count:
         metric_items.append(("Edition Count", str(edition_count)))
     if book.publisher:
@@ -175,88 +184,64 @@ def render_context_column(book: Book) -> None:
         st.caption(f"Summary Source: {book.summary_source}")
     if categories:
         st.caption(f"Categories: {', '.join(categories)}")
-    if info_link:
-        st.markdown(f"[Google Books Info]({info_link})")
-    if preview_link:
-        st.markdown(f"[Google Books Preview]({preview_link})")
-    if canonical_volume_link:
-        st.markdown(f"[Canonical Volume Page]({canonical_volume_link})")
+    source_links = [
+        ("Google Books Info", info_link),
+        ("Google Books Preview", preview_link),
+        ("Canonical Volume Page", canonical_volume_link),
+        ("Goodreads Page", goodreads_link),
+    ]
+    seen_links = set()
+    for label, link in source_links:
+        if not link:
+            continue
+        normalized = _normalize_source_link(link)
+        if normalized in seen_links:
+            continue
+        seen_links.add(normalized)
+        st.markdown(f"[{label}]({link})")
     if reject_attempts:
         st.caption(f"Reject attempts: {reject_attempts}")
 
-    ratio_val = book.positive_ratio if book.positive_ratio is not None else (
-        (book.average_rating / 5) if book.average_rating is not None else None
-    )
-    if ratio_val is not None:
-        ratio_pct = ratio_val * 100
-
-        # Derive positive/negative counts either from total ratings or review samples.
-        pos = neg = None
-        if book.ratings_count:
-            pos = int(round(ratio_val * book.ratings_count))
-            neg = max(book.ratings_count - pos, 0)
-        elif book.review_samples:
-            sample_ratings = [s.rating for s in book.review_samples if isinstance(getattr(s, "rating", None), (int, float))]
-            if sample_ratings:
-                pos = sum(1 for r in sample_ratings if r >= 3.5)
-                neg = sum(1 for r in sample_ratings if r < 3.5)
-
-        sources = set()
-        for sample in book.review_samples or []:
-            name = (sample.reviewer or "").lower()
-            if "goodreads" in name:
-                sources.add("Goodreads")
-            elif "amazon" in name:
-                sources.add("Amazon")
-            elif "google" in name:
-                sources.add("Google Books")
-            elif "rating signal" in name:
-                sources.add("Rating Signal")
-            elif "editorial" in name:
-                sources.add("Editorial Extract")
-
-        if ratio_val >= 0.75:
-            color = "#1b8f3b"  # green
-        elif ratio_val >= 0.5:
-            color = "#c79a00"  # yellow
-        else:
+    if book.average_rating is not None:
+        if book.average_rating <= 2.0:
             color = "#c23b22"  # red
+        elif book.average_rating <= 4.0:
+            color = "#d97706"  # orange
+        else:
+            color = "#1b8f3b"  # green
 
-        ratio_html = f"<span style='color:{color}; font-size:30px; font-weight:800;'>{ratio_pct:.1f}%</span>"
-        src_text = f"Sources: {', '.join(sorted(sources))}" if sources else ""
-
-        parts = [ratio_html, "Positive Reviews"]
-        if src_text:
-            parts.append(src_text)
-        st.markdown(" &nbsp; ".join(parts), unsafe_allow_html=True)
+        rating_html = f"<span style='color:{color}; font-size:30px; font-weight:800;'>{book.average_rating:.2f}</span>"
+        details = ["Goodreads rating"]
+        if book.ratings_count:
+            details.append(f"{book.ratings_count:,} ratings")
+        st.markdown(f"{rating_html} &nbsp; {' · '.join(details)}", unsafe_allow_html=True)
 
     if book.review_samples:
         st.markdown("### Review Samples")
-        for sample in book.review_samples:
-            st.markdown(f"- **{sample.reviewer}** ({sample.rating:.1f}/5): {sample.text}")
+        preview_chars = 260
+        for idx, sample in enumerate(book.review_samples):
+            full_text = (sample.text or "").strip()
+            expanded_key = f"review-expanded-{book.id}-{idx}"
+            if expanded_key not in st.session_state:
+                st.session_state[expanded_key] = False
 
-    st.markdown("### Rejected Information & Reasoning")
-    if book.insights and book.insights.rejected_information:
-        for note in book.insights.rejected_information:
-            detail = note.detail or ""
-            example = ""
-            if "Removed example:" in detail:
-                parts = detail.split("Removed example:", 1)
-                detail = parts[0].strip()
-                example = parts[1].strip().strip('"')
+            is_long = len(full_text) > preview_chars
+            shown_text = full_text
+            if is_long and not st.session_state[expanded_key]:
+                shown_text = full_text[:preview_chars].rsplit(" ", 1)[0] + "..."
 
-            st.markdown("<div class='rejected-item'>", unsafe_allow_html=True)
-            st.markdown(f"**{note.reason}**")
-            if detail:
-                st.caption(detail)
-            if example:
-                st.markdown(
-                    f"<div class='rejected-example'><strong>Removed example:</strong> <span style='text-decoration: line-through;'>{example}</span></div>",
-                    unsafe_allow_html=True,
-                )
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown(f"- **{sample.reviewer}** ({sample.rating:.1f}/5)")
+            st.markdown(shown_text)
+
+            if is_long:
+                toggle_label = "Comprimi" if st.session_state[expanded_key] else "Espandi"
+                if st.button(toggle_label, key=f"{expanded_key}-toggle"):
+                    st.session_state[expanded_key] = not st.session_state[expanded_key]
+                    st.rerun()
     else:
-        st.info("No rejected items recorded.")
+        st.warning("No user review data available for this book (Goodreads/Amazon).")
+
+    # Rejected-information audit remains stored in data, but is intentionally hidden in UI.
 
 
 def render_editing_column(book: Book, pending_ids: list[str]) -> None:
