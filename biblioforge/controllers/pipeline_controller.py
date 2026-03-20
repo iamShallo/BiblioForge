@@ -505,6 +505,7 @@ class PipelineController:
             "info_link",
             "preview_link",
             "canonical_volume_link",
+            "goodreads_link",
             "openlibrary_key",
             "first_publish_year",
             "edition_count",
