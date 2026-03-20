@@ -196,6 +196,44 @@ async def _fetch_google_books(
         return _pick_best_google_books_match(all_items, normalized_title, author)
 
 
+async def _fetch_google_books_page_count_by_isbn(*codes: Optional[str]) -> Optional[int]:
+    normalized_codes = []
+    for code in codes:
+        compact = _normalize_catalog_code(code)
+        if compact and compact not in normalized_codes:
+            normalized_codes.append(compact)
+
+    if not normalized_codes:
+        return None
+
+    api_key = os.getenv("GOOGLE_BOOKS_API_KEY")
+    common_params = {}
+    if api_key:
+        common_params["key"] = api_key
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        for code in normalized_codes:
+            try:
+                resp = await client.get(
+                    GOOGLE_BOOKS_URL,
+                    params={
+                        **common_params,
+                        "q": f"isbn:{code}",
+                        "maxResults": 3,
+                    },
+                )
+                resp.raise_for_status()
+                items = resp.json().get("items", [])
+                for item in items:
+                    page_count = item.get("volumeInfo", {}).get("pageCount")
+                    if isinstance(page_count, int) and 20 <= page_count <= 5000:
+                        return page_count
+            except Exception:
+                continue
+
+    return None
+
+
 async def _find_goodreads_book_url(normalized_title: str, author: Optional[str]) -> Optional[str]:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -1130,24 +1168,41 @@ def _extract_page_count_from_google_books_html(page_html: str) -> Optional[int]:
     if not page_html:
         return None
 
-    patterns = [
-        r'"numberOfPages"\s*:\s*"?(\d{2,5})"?',
-        r"\b(\d{2,5})\s+pagine\b",
-        r"\b(\d{2,5})\s+pages\b",
+    # Prefer page counts visible in UI labels (often edition-specific) over generic structured metadata.
+    ui_patterns = [
+        r"\b(\d{2,5})\s*pagine\b",
+        r"\b(\d{2,5})\s*pages\b",
+        r"(?i)ebook\s*(\d{2,5})\s*pagine\b",
+        r"(?i)ebook\s*(\d{2,5})\s*pages\b",
+        r"(?i)>\s*(\d{2,5})\s*</div>\s*<div[^>]*>\s*pagine\s*<",
+        r"(?i)>\s*(\d{2,5})\s*</div>\s*<div[^>]*>\s*pages\s*<",
+        r"\"Pagine\"\s*,\s*\[\[\[null,\"(\d{2,5})\"\]\]\]",
+        r"\"Pages\"\s*,\s*\[\[\[null,\"(\d{2,5})\"\]\]\]",
         r"(?i)pagine\s*</[^>]+>\s*<[^>]+>(\d{2,5})<",
         r"(?i)pages\s*</[^>]+>\s*<[^>]+>(\d{2,5})<",
     ]
+    ui_candidates: List[int] = []
+    for pattern in ui_patterns:
+        for match in re.finditer(pattern, page_html, re.IGNORECASE | re.DOTALL):
+            try:
+                value = int(match.group(1))
+            except Exception:
+                continue
+            if 20 <= value <= 5000:
+                ui_candidates.append(value)
 
-    for pattern in patterns:
-        match = re.search(pattern, page_html, re.IGNORECASE | re.DOTALL)
-        if not match:
-            continue
+    if ui_candidates:
+        # Keep the highest visible count to avoid undershooting on multi-edition pages.
+        return max(ui_candidates)
+
+    structured_match = re.search(r'"numberOfPages"\s*:\s*"?(\d{2,5})"?', page_html, re.IGNORECASE | re.DOTALL)
+    if structured_match:
         try:
-            value = int(match.group(1))
+            value = int(structured_match.group(1))
+            if 20 <= value <= 5000:
+                return value
         except Exception:
-            continue
-        if 20 <= value <= 5000:
-            return value
+            pass
 
     return None
 
@@ -1302,6 +1357,18 @@ async def enrich_book(book: Book) -> Book:
         if meta.get("description"):
             book.fetched_summary = str(meta.get("description")).strip()
             book.summary_source = "google_books_api"
+
+        # Prefer edition-accurate page count from explicit ISBN lookup when available.
+        try:
+            isbn_page_count = await _fetch_google_books_page_count_by_isbn(
+                book.isbn,
+                book.isbn_10,
+                getattr(book, "catalog_ean", None),
+            )
+            if isbn_page_count:
+                book.pages = isbn_page_count
+        except Exception:
+            pass
 
         # Prefer richer story summaries from Google Books web pages when available.
         try:
