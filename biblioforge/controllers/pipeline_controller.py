@@ -1,7 +1,9 @@
 import asyncio
 import copy
+import json
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, List, Optional, Union
 from uuid import uuid4
@@ -34,6 +36,7 @@ class PipelineController:
         self.approved_repository = BookRepository(approved_target)
         self.default_cleaned_excel_path = cleaned_dir / "books_cleaned.xlsx"
         self.last_import_skipped = 0
+        self.last_import_skipped_details: List[dict] = []
 
     @staticmethod
     def _is_reliably_enriched(book: Book) -> bool:
@@ -164,6 +167,39 @@ class PipelineController:
                 limit=limit,
             )
         )
+    
+    def _save_skipped_report(self, skipped_entries: List[dict]) -> str:
+        """Save skipped entries to a JSON report file."""
+        reports_dir = self.project_root / "artifacts" / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_path = reports_dir / f"import_skipped_{timestamp}.json"
+        
+        # Ensure EAN values are strings to prevent float conversion
+        cleaned_entries = []
+        for entry in skipped_entries:
+            cleaned_entry = entry.copy()
+            if cleaned_entry.get("ean"):
+                cleaned_entry["ean"] = str(cleaned_entry["ean"]).split('.')[0]  # Remove .0 if present
+            cleaned_entries.append(cleaned_entry)
+        
+        report_data = {
+            "timestamp": datetime.now().isoformat(),
+            "total_skipped": len(cleaned_entries),
+            "skipped_entries": cleaned_entries
+        }
+        
+        with open(report_path, 'w', encoding='utf-8') as f:
+            json.dump(report_data, f, indent=2, ensure_ascii=False)
+        
+        self.last_import_skipped_report_path = str(report_path)
+        return str(report_path)
+    
+    def get_last_skipped_report_path(self) -> Optional[str]:
+        """Get the path to the last generated skipped report."""
+        return getattr(self, "last_import_skipped_report_path", None)
+    
     def list_pending(self) -> List[Book]:
         return self.repository.list_books(BookStatus.TO_APPROVE)
 
@@ -220,6 +256,8 @@ class PipelineController:
         skipped = 0
         seen = set()
         self.last_import_skipped = 0
+        self.last_import_skipped_details = []
+        self.last_import_skipped_report_path = None
 
         title_candidates = ["Title", "Titolo", "Book Title", "Titolo Libro", "Libro", "Nome Libro"]
         author_candidates = ["Author", "Autore", "Authors", "Autori", "Writer"]
@@ -405,8 +443,9 @@ class PipelineController:
             batch_size = max(20, int(os.getenv("BIBLIOFORGE_IMPORT_BATCH", "200")))
             semaphore = asyncio.Semaphore(max_concurrency)
             cache = {}
+            skipped_entries = []
 
-            async def _enrich_one(entry: dict) -> Optional[Book]:
+            async def _enrich_one(entry: dict, entry_index: int) -> Optional[Book]:
                 key = (entry.get("title", "").casefold(), (entry.get("author") or "").casefold())
 
                 # Serve from cache when the same title/author repeats.
@@ -434,21 +473,67 @@ class PipelineController:
                         )
                         book = await enrich_book(book)
                         if not self._is_reliably_enriched(book):
+                            # Try fallback: search by EAN if available
+                            ean_value = (entry.get("ean") or "").strip()
+                            if ean_value and len(ean_value) >= 8:
+                                try:
+                                    # Search using EAN as primary identifier
+                                    ean_candidates = await search_candidates(
+                                        title="",
+                                        author="",
+                                        publisher=None,
+                                        ean=ean_value,
+                                        limit=1
+                                    )
+                                    if ean_candidates and len(ean_candidates) > 0:
+                                        # Found via EAN, try to enrich again with EAN search result
+                                        top_result = ean_candidates[0]
+                                        book.raw_title = top_result.get("title", book.raw_title)
+                                        book.normalized_title = top_result.get("title", book.normalized_title)
+                                        book.author = top_result.get("authors", book.author)
+                                        book = await enrich_book(book)
+                                        if self._is_reliably_enriched(book):
+                                            book = generate_insights(book)
+                                            book.status = BookStatus.TO_APPROVE
+                                            cache[key] = book
+                                            return book
+                                except Exception:
+                                    pass
+                            
+                            # Still not reliably enriched, mark as skipped
+                            skipped_entries.append({
+                                "index": entry_index,
+                                "title": entry.get("title"),
+                                "author": entry.get("author"),
+                                "ean": str(entry.get("ean")) if entry.get("ean") else None,
+                                "publisher": entry.get("publisher"),
+                                "reason": "Book could not be resolved confidently"
+                            })
                             return None
                         book = generate_insights(book)
                         book.status = BookStatus.TO_APPROVE
                         cache[key] = book
                         return book
-                    except Exception:
+                    except Exception as e:
+                        skipped_entries.append({
+                            "index": entry_index,
+                            "title": entry.get("title"),
+                            "author": entry.get("author"),
+                            "ean": entry.get("ean"),
+                            "publisher": entry.get("publisher"),
+                            "reason": f"Exception during enrichment: {str(e)}"
+                        })
                         return None
 
+            chunk_offset = 0
             for idx in range(0, len(items), batch_size):
                 chunk = items[idx : idx + batch_size]
-                tasks = [_enrich_one(entry) for entry in chunk]
+                tasks = [_enrich_one(entry, chunk_offset + i) for i, entry in enumerate(chunk)]
                 results = await asyncio.gather(*tasks)
                 to_insert = [b for b in results if b]
                 queued += len(to_insert)
                 skipped += len(chunk) - len(to_insert)
+                chunk_offset += len(chunk)
                 processed += len(chunk)
                 if to_insert:
                     self.repository.upsert_many(to_insert)
@@ -458,6 +543,11 @@ class PipelineController:
                         progress_callback(processed, total)
                     except Exception:
                         pass
+            
+            # Save skipped entries to a JSON report
+            if skipped_entries:
+                self.last_import_skipped_details = skipped_entries
+                self._save_skipped_report(skipped_entries)
 
         asyncio.run(_process_entries(entries))
 

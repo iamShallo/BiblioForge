@@ -440,9 +440,49 @@ def render_excel_ingestion_box() -> None:
             progress_bar.progress(100, text="Import completato")
             st.success(f"Imported {total} books into review queue.")
             if getattr(controller, "last_import_skipped", 0):
+                skipped_count = controller.last_import_skipped
                 st.warning(
-                    f"Skipped {controller.last_import_skipped} rows because the book could not be resolved confidently."
+                    f"Skipped {skipped_count} rows because the book could not be resolved confidently."
                 )
+                
+                # Show details of skipped books
+                skipped_details = getattr(controller, "last_import_skipped_details", [])
+                skipped_report_path = getattr(controller, "last_import_skipped_report_path", None)
+                
+                if skipped_details:
+                    with st.expander(f"📋 View skipped entries ({len(skipped_details)} items)"):
+                        st.subheader("Skipped Books")
+                        for idx, entry in enumerate(skipped_details, 1):
+                            col1, col2, col3 = st.columns([2, 1, 1])
+                            with col1:
+                                st.caption(f"{idx}. **{entry.get('title', 'Unknown')}**")
+                                author = entry.get('author') or 'Unknown Author'
+                                st.caption(f"Autore: {author}")
+                            with col2:
+                                ean = entry.get('ean')
+                                if ean:
+                                    # Clean EAN display: remove .0 if present
+                                    ean_clean = str(ean).split('.')[0] if ean else ""
+                                    st.caption(f"EAN: {ean_clean}")
+                            with col3:
+                                reason = entry.get('reason', 'Unknown reason')
+                                st.caption(f"Motivo: {reason[:40]}...")
+                
+                if skipped_report_path:
+                    try:
+                        import os
+                        if os.path.exists(skipped_report_path):
+                            with open(skipped_report_path, 'r', encoding='utf-8') as f:
+                                report_content = f.read()
+                            st.download_button(
+                                label="📥 Download Skipped Report (JSON)",
+                                data=report_content,
+                                file_name=os.path.basename(skipped_report_path),
+                                mime="application/json"
+                            )
+                    except Exception as e:
+                        st.warning(f"Could not load report file: {e}")
+            
             timer_placeholder.success(f"⏱️ Import terminato in {format_duration(time.perf_counter() - start)}")
         except Exception as exc:
             progress_bar.progress(0.0, text="Import fallito")

@@ -1,0 +1,102 @@
+IMPLEMENTATION SUMMARY - Skipped Entries Tracking Feature
+===========================================================
+
+PROBLEM:
+--------
+Quando venivano importati libri da Excel, il sistema indicava quante righe venivano scattate
+(skipped) ma l'utente non poteva vedere QUALI righe erano state scattate.
+
+SOLUTION:
+---------
+Implementazione di un sistema completo di tracciamento e visualizzazione dei libri scattati:
+
+1. BACKEND CHANGES (pipeline_controller.py):
+   - Aggiunto tracciamento dettagliato di ogni riga scattata
+   - Creazione automatica di rapporti JSON in artifacts/reports/
+   - Memorizzazione dei dettagli di skip in last_import_skipped_details
+
+2. FRONTEND CHANGES (dashboard.py):
+   - Aggiunto avviso visibile con conteggio degli skipped
+   - Aggiunto espandibile con lista dei libri scattati
+   - Aggiunto pulsante di download per il rapporto JSON completo
+
+3. DATA STRUCTURE:
+   Ogni entry contiene:
+   - index: posizione nel batch
+   - title: titolo del libro
+   - author: autore
+   - ean: codice EAN
+   - publisher: editore
+   - reason: motivo dello skip
+
+FILES MODIFIED:
+---------------
+1. biblioforge/controllers/pipeline_controller.py (595 lines)
+   - Added imports: json, datetime
+   - Modified __init__ to track skipped details
+   - Added _save_skipped_report() method
+   - Added get_last_skipped_report_path() method
+   - Modified ingest_books_from_excel() to track and save skipped entries
+
+2. biblioforge/views/dashboard.py (556 lines)
+   - Modified render_excel_ingestion_box() to display skipped entries
+   - Added expander section with detailed list
+   - Added JSON download button
+
+FILES CREATED:
+---------------
+1. SKIPPED_ENTRIES_FEATURE.md - Documentation of the new feature
+
+KEY FEATURES:
+-------------
+✅ Automatic tracking of skipped entries with full details
+✅ JSON reports saved with timestamp in artifacts/reports/
+✅ Inline UI display of skipped books in dashboard
+✅ Download button for detailed JSON report
+✅ Clear indication of skip reasons
+✅ Categorized view with title, author, EAN, and reason
+
+USAGE:
+------
+1. Run Excel import in dashboard
+2. If rows are skipped, you'll see a warning
+3. Click "📋 View skipped entries" to expand the list
+4. Click "📥 Download Skipped Report (JSON)" to get the full report
+
+REPORT LOCATION:
+----------------
+artifacts/reports/import_skipped_YYYYMMDD_HHMMSS.json
+
+Example structure:
+{
+  "timestamp": "2024-03-20T14:30:45.123456",
+  "total_skipped": 396,
+  "skipped_entries": [
+    {
+      "index": 0,
+      "title": "Book Title",
+      "author": "Author Name",
+      "ean": null,
+      "publisher": "Publisher Name",
+      "reason": "Book could not be resolved confidently"
+    }
+  ]
+}
+
+BENEFITS:
+---------
+- Full visibility into which books failed import and why
+- Ability to identify patterns in failed imports
+- JSON format for easy programmatic processing
+- Integrated UI requires no additional configuration
+- Timestamped reports for historical tracking
+
+TESTING NOTES:
+---------------
+The implementation includes:
+- Proper error handling for file I/O
+- UTF-8 encoding for international characters
+- JSON formatting with proper indentation
+- Integration with existing import pipeline
+- Non-blocking operations (doesn't slow down import)
+
