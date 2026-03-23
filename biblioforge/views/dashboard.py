@@ -239,7 +239,7 @@ def render_context_column(book: Book) -> None:
                     st.session_state[expanded_key] = not st.session_state[expanded_key]
                     st.rerun()
     else:
-        st.warning("No user review data available for this book (Goodreads/Amazon).")
+        st.warning("No user review data available for this book.")
 
     # Rejected-information audit remains stored in data, but is intentionally hidden in UI.
 
@@ -347,6 +347,7 @@ def render_ingestion_box():
 
         submitted = st.form_submit_button("Find Matches")
         if submitted:
+            st.session_state["ingestion_error_message"] = ""
             candidates = controller.find_candidates(
                 title,
                 author or None,
@@ -359,7 +360,9 @@ def render_ingestion_box():
                 "author": author,
                 "catalog_ean": fallback_catalog_code,
             }
-            if not candidates:
+            if candidates:
+                st.session_state["show_isbn_ean_fallback"] = False
+            elif fallback_catalog_code:
                 try:
                     book = controller.ingest_raw_book(
                         title,
@@ -380,6 +383,15 @@ def render_ingestion_box():
                     st.session_state["last_failed_catalog_code"] = fallback_catalog_code
                     st.session_state["ingestion_error_message"] = str(exc)
                     st.rerun()
+            else:
+                st.session_state["show_isbn_ean_fallback"] = True
+                st.session_state["last_failed_title"] = title
+                st.session_state["last_failed_author"] = author
+                st.session_state["last_failed_catalog_code"] = ""
+                st.session_state["ingestion_error_message"] = (
+                    "Nessun candidato trovato con solo titolo. Aggiungi autore oppure ISBN/EAN per restringere la ricerca."
+                )
+                st.rerun()
 
     # Post-form selection step
     candidates = st.session_state.get("ingest_candidates", [])
@@ -397,11 +409,20 @@ def render_ingestion_box():
             sel_title = selected.get("title") if selected else ingest_input.get("title")
             sel_author = selected.get("authors") if selected else ingest_input.get("author")
             try:
-                book = controller.ingest_raw_book(
-                    sel_title or ingest_input.get("title"),
-                    sel_author or None,
-                    catalog_ean=ingest_input.get("catalog_ean") or None,
-                )
+                if selected:
+                    book = controller.ingest_selected_candidate(
+                        selected,
+                        fallback_title=ingest_input.get("title"),
+                        fallback_author=ingest_input.get("author"),
+                        catalog_ean=ingest_input.get("catalog_ean") or None,
+                    )
+                else:
+                    book = controller.ingest_raw_book(
+                        sel_title or ingest_input.get("title"),
+                        sel_author or None,
+                        catalog_ean=ingest_input.get("catalog_ean") or None,
+                        allow_low_confidence=True,
+                    )
                 st.success(f"Book queued for review: {book.normalized_title}")
                 st.session_state["show_isbn_ean_fallback"] = False
                 st.session_state["ingest_candidates"] = []
@@ -416,6 +437,11 @@ def render_ingestion_box():
 
 def render_excel_ingestion_box() -> None:
     st.markdown("### Import from Excel")
+    if "persisted_skipped_entries" not in st.session_state:
+        st.session_state["persisted_skipped_entries"] = []
+    if "persisted_skipped_report_path" not in st.session_state:
+        st.session_state["persisted_skipped_report_path"] = None
+
     default_path = "biblioforge/data/cleaned/books_cleaned.xlsx"
     excel_path_input = st.text_input("Excel path", value=default_path)
     resolved_path = controller.resolve_excel_path(excel_path_input)
@@ -440,9 +466,19 @@ def render_excel_ingestion_box() -> None:
             progress_bar.progress(100, text="Import completato")
             st.success(f"Imported {total} books into review queue.")
             if getattr(controller, "last_import_skipped", 0):
+                skipped_count = controller.last_import_skipped
                 st.warning(
-                    f"Skipped {controller.last_import_skipped} rows because the book could not be resolved confidently."
+                    f"Skipped {skipped_count} rows because the book could not be resolved confidently."
                 )
+            st.session_state["persisted_skipped_entries"] = list(
+                getattr(controller, "last_import_skipped_details", []) or []
+            )
+            st.session_state["persisted_skipped_report_path"] = getattr(
+                controller,
+                "last_import_skipped_report_path",
+                None,
+            )
+            
             timer_placeholder.success(f"⏱️ Import terminato in {format_duration(time.perf_counter() - start)}")
         except Exception as exc:
             progress_bar.progress(0.0, text="Import fallito")
@@ -451,9 +487,123 @@ def render_excel_ingestion_box() -> None:
             )
             st.error(f"Excel import failed: {exc}")
 
+    skipped_details = st.session_state.get("persisted_skipped_entries", [])
+    skipped_report_path = st.session_state.get("persisted_skipped_report_path")
+
+    if skipped_details:
+        top_left, top_mid, top_right = st.columns([3, 2, 1])
+        top_left.warning(
+            f"Skipped persistenti: {len(skipped_details)} righe non risolte automaticamente."
+        )
+        retry_clicked = top_mid.button("Retry all skipped", use_container_width=True)
+        if top_right.button("Pulisci lista skipped", use_container_width=True):
+            st.session_state["persisted_skipped_entries"] = []
+            st.session_state["persisted_skipped_report_path"] = None
+            st.rerun()
+
+        if retry_clicked:
+            progress = st.progress(0, text="Retry skipped in progress...")
+            resolved = 0
+            still_skipped = []
+            total = len(skipped_details)
+
+            for idx, entry in enumerate(skipped_details, start=1):
+                entry_title = (entry.get("title") or "").strip()
+                entry_author = (entry.get("author") or "").strip()
+                entry_ean = str(entry.get("ean") or "").strip()
+                entry_publisher = (entry.get("publisher") or "").strip()
+                query_title = entry_title or entry_ean
+
+                pct = int((idx / total) * 100) if total else 100
+                progress.progress(pct, text=f"Retry skipped... {idx}/{total}")
+
+                if not query_title:
+                    entry_copy = entry.copy()
+                    entry_copy["reason"] = "Missing title/EAN for retry"
+                    still_skipped.append(entry_copy)
+                    continue
+
+                try:
+                    candidates = controller.find_candidates(
+                        query_title,
+                        entry_author or None,
+                        catalog_publisher=entry_publisher or None,
+                        catalog_ean=entry_ean or None,
+                    )
+
+                    if candidates:
+                        controller.ingest_selected_candidate(
+                            candidates[0],
+                            fallback_title=query_title,
+                            fallback_author=entry_author or None,
+                            catalog_ean=entry_ean or None,
+                            catalog_publisher=entry_publisher or None,
+                        )
+                        resolved += 1
+                        continue
+
+                    controller.ingest_raw_book(
+                        query_title,
+                        entry_author or None,
+                        catalog_ean=entry_ean or None,
+                        catalog_publisher=entry_publisher or None,
+                        allow_low_confidence=True,
+                    )
+                    resolved += 1
+                except BookNotFoundError as exc:
+                    entry_copy = entry.copy()
+                    entry_copy["reason"] = str(exc).split("\n")[0]
+                    still_skipped.append(entry_copy)
+                except Exception as exc:
+                    entry_copy = entry.copy()
+                    entry_copy["reason"] = f"Retry failed: {exc}"
+                    still_skipped.append(entry_copy)
+
+            progress.progress(100, text="Retry skipped completed")
+            st.session_state["persisted_skipped_entries"] = still_skipped
+            if resolved:
+                st.success(f"Retry completed: resolved {resolved} entries.")
+            if still_skipped:
+                st.warning(f"Still unresolved: {len(still_skipped)} entries.")
+            st.rerun()
+
+        with st.expander(f"📋 View skipped entries ({len(skipped_details)} items)", expanded=True):
+            st.subheader("Skipped Books")
+            for idx, entry in enumerate(skipped_details, 1):
+                entry_title = (entry.get("title") or "").strip()
+                entry_author = (entry.get("author") or "").strip()
+                entry_ean = str(entry.get("ean") or "").strip()
+
+                st.caption(f"{idx}. **{entry.get('title', 'Unknown')}**")
+                st.caption(f"Autore: {entry_author or 'Unknown Author'}")
+                if entry_ean:
+                    st.caption(f"EAN: {entry_ean}")
+                reason = entry.get("reason", "Unknown reason")
+                st.caption(f"Motivo: {reason}")
+
+                st.divider()
+
+    if skipped_report_path:
+        try:
+            import os
+
+            if os.path.exists(skipped_report_path):
+                with open(skipped_report_path, "r", encoding="utf-8") as f:
+                    report_content = f.read()
+                st.download_button(
+                    label="📥 Download Skipped Report (JSON)",
+                    data=report_content,
+                    file_name=os.path.basename(skipped_report_path),
+                    mime="application/json",
+                )
+        except Exception as e:
+            st.warning(f"Could not load report file: {e}")
+
 
 def main():
     process_pending_approval()
+    if "auto_metadata_checked_ids" not in st.session_state:
+        st.session_state["auto_metadata_checked_ids"] = []
 
     st.title("BiblioForge")
     st.caption("Workflow states: To Clean -> In Progress -> To Approve -> Approved")
@@ -503,8 +653,29 @@ def main():
         if st.button("Clear queue", use_container_width=True):
             removed = controller.repository.clear_books()
             st.success(f"Cleared {removed} books from the review queue.")
+            st.session_state["auto_metadata_checked_ids"] = []
             st.rerun()
     book = next(b for b in pending if b.id == selected_id)
+
+    checked_ids = set(st.session_state.get("auto_metadata_checked_ids", []))
+    needs_forced_refresh = (
+        controller._has_synthetic_summary(book)
+        or controller._looks_like_placeholder_cover(getattr(book, "cover_url", None))
+        or not bool(
+            getattr(book, "info_link", None)
+            or getattr(book, "canonical_volume_link", None)
+            or getattr(book, "goodreads_link", None)
+            or getattr(book, "openlibrary_key", None)
+        )
+    )
+
+    if book.id not in checked_ids or needs_forced_refresh:
+        with st.spinner("Fetching initial metadata..."):
+            refreshed = controller.ensure_review_metadata(book.id)
+        if refreshed:
+            book = refreshed
+        checked_ids.add(book.id)
+        st.session_state["auto_metadata_checked_ids"] = list(checked_ids)
 
     left, right = st.columns([1, 1])
     with left:

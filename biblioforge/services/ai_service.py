@@ -385,6 +385,19 @@ def _simple_cleanup_author(raw_author: Optional[str]) -> Optional[str]:
     if not text:
         return None
     text = re.sub(r"\s+", " ", text)
+
+    # Catalog rows sometimes append publisher/store names after author, e.g.
+    # "George R. R. Martin, Mondadori". Keep only person-like chunks.
+    chunks = [chunk.strip() for chunk in re.split(r"[,;|/]", text) if chunk.strip()]
+    if len(chunks) > 1:
+        person_chunks = [chunk for chunk in chunks if _looks_like_person_name(chunk)]
+        if person_chunks:
+            if len(person_chunks) >= 2 and all(_looks_like_person_name(chunk) for chunk in chunks[:2]):
+                # Preserve common "Surname, Name" forms.
+                text = f"{chunks[0]}, {chunks[1]}"
+            else:
+                text = person_chunks[0]
+
     return text
 
 

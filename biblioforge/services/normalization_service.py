@@ -87,7 +87,6 @@ def normalize_title(raw_title: Optional[str], author: Optional[str] = None) -> s
     title = _repair_text_noise(raw_title)
     # Remove decorative quotes around chunks while keeping the inner text.
     title = title.replace('"', " ")
-    title = title.replace("'", " ")
     title = re.sub(r"\([^)]*\)|\[[^]]*\]", "", title)  # remove bracketed notes
     title = _strip_edition_noise(title)
     title = _remove_embedded_author(title, author)

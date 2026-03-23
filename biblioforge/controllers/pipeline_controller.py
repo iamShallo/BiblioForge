@@ -1,7 +1,9 @@
 import asyncio
 import copy
+import json
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, List, Optional, Union
 from uuid import uuid4
@@ -34,6 +36,7 @@ class PipelineController:
         self.approved_repository = BookRepository(approved_target)
         self.default_cleaned_excel_path = cleaned_dir / "books_cleaned.xlsx"
         self.last_import_skipped = 0
+        self.last_import_skipped_details: List[dict] = []
 
     @staticmethod
     def _is_reliably_enriched(book: Book) -> bool:
@@ -56,6 +59,186 @@ class PipelineController:
 
         # Require at least one trusted external anchor and meaningful bibliographic evidence.
         return has_trusted_link and (has_real_author or has_real_categories or has_summary or has_isbn)
+
+    @staticmethod
+    def _has_minimal_metadata(book: Book) -> bool:
+        """True only when enrichment produced externally useful metadata."""
+        has_link = any(
+            [
+                bool(getattr(book, "info_link", None)),
+                bool(getattr(book, "canonical_volume_link", None)),
+                bool(getattr(book, "openlibrary_key", None)),
+                bool(getattr(book, "goodreads_link", None)),
+            ]
+        )
+        has_real_cover = bool(getattr(book, "cover_url", None)) and not PipelineController._looks_like_placeholder_cover(
+            getattr(book, "cover_url", None)
+        )
+        has_real_summary = bool((getattr(book, "fetched_summary", None) or "").strip()) and not PipelineController._has_synthetic_summary(
+            book
+        )
+
+        # Do not treat synthetic local fallback data as import-ready metadata.
+        return has_link or has_real_cover or has_real_summary
+
+    @staticmethod
+    def _looks_like_placeholder_cover(url: Optional[str]) -> bool:
+        if not url:
+            return False
+        lowered = str(url).lower()
+        if "via.placeholder.com" in lowered:
+            return True
+        if "covers.openlibrary.org" in lowered and "default=true" in lowered:
+            return True
+        return False
+
+    @staticmethod
+    def _has_synthetic_summary(book: Book) -> bool:
+        source = (getattr(book, "summary_source", "") or "").strip().lower()
+        summary = (getattr(book, "fetched_summary", None) or "").strip()
+        return bool(summary) and source == "local_fallback"
+
+    @staticmethod
+    def _apply_candidate_metadata(book: Book, candidate: Optional[dict]) -> Book:
+        if not candidate:
+            return book
+
+        candidate_link = (candidate.get("info_link") or "").strip() or None
+        candidate_cover = (candidate.get("cover_url") or "").strip() or None
+        candidate_published_date = (candidate.get("published_date") or "").strip() or None
+        candidate_title = (candidate.get("title") or "").strip()
+        candidate_authors = (candidate.get("authors") or "").strip()
+
+        if candidate_title:
+            canonical = normalize_title(candidate_title, candidate_authors or book.author)
+            book.raw_title = canonical or candidate_title
+            book.normalized_title = canonical or candidate_title
+        if candidate_authors:
+            book.author = candidate_authors
+
+        if not getattr(book, "info_link", None) and candidate_link:
+            book.info_link = candidate_link
+        if (
+            (not getattr(book, "cover_url", None) or PipelineController._looks_like_placeholder_cover(getattr(book, "cover_url", None)))
+            and candidate_cover
+        ):
+            book.cover_url = candidate_cover
+        if not getattr(book, "openlibrary_key", None) and candidate_link:
+            match = re.search(r"openlibrary\.org/works/([^/?#]+)", candidate_link)
+            if match:
+                book.openlibrary_key = match.group(1)
+        if not getattr(book, "published_date", None) and candidate_published_date:
+            book.published_date = candidate_published_date
+        if (
+            not getattr(book, "publication_year", None)
+            and candidate_published_date
+            and candidate_published_date[:4].isdigit()
+        ):
+            book.publication_year = int(candidate_published_date[:4])
+
+        # Avoid preserving synthetic fallback summaries when we switched to candidate metadata.
+        if PipelineController._has_synthetic_summary(book):
+            book.fetched_summary = None
+            book.summary_source = None
+
+        return book
+
+    @staticmethod
+    def _metadata_score(book: Book) -> int:
+        score = 0
+        if getattr(book, "info_link", None):
+            score += 3
+        if getattr(book, "canonical_volume_link", None):
+            score += 3
+        if getattr(book, "openlibrary_key", None):
+            score += 2
+        if getattr(book, "goodreads_link", None):
+            score += 2
+        if getattr(book, "cover_url", None):
+            score += 2
+        if (getattr(book, "isbn", None) or "").strip():
+            score += 2
+        if (getattr(book, "isbn_10", None) or "").strip():
+            score += 1
+        if (getattr(book, "fetched_summary", None) or "").strip():
+            score += 2
+        if getattr(book, "publisher", None):
+            score += 1
+        if getattr(book, "pages", None):
+            score += 1
+        if getattr(book, "publication_year", None):
+            score += 1
+        if getattr(book, "categories", None):
+            score += 1
+        return score
+
+    @staticmethod
+    def _reset_enrichment_fields(book: Book) -> None:
+        for attr in [
+            "fetched_summary",
+            "summary_source",
+            "isbn",
+            "isbn_10",
+            "published_date",
+            "publication_year",
+            "pages",
+            "cover_url",
+            "publisher",
+            "categories",
+            "subtitle",
+            "language",
+            "print_type",
+            "info_link",
+            "preview_link",
+            "canonical_volume_link",
+            "goodreads_link",
+            "openlibrary_key",
+            "first_publish_year",
+            "edition_count",
+            "average_rating",
+            "ratings_count",
+            "positive_ratio",
+            "review_samples",
+            "discarded_information_examples",
+            "insights",
+        ]:
+            if attr in {"categories", "review_samples", "discarded_information_examples"}:
+                setattr(book, attr, [])
+            elif attr == "ratings_count":
+                setattr(book, attr, 0)
+            else:
+                setattr(book, attr, None)
+
+    async def _enrich_with_immediate_retry(self, book: Book) -> Book:
+        """Run enrichment and immediately retry once with refreshed catalog hints when metadata is poor."""
+        first_pass = await enrich_book(book)
+        if self._is_reliably_enriched(first_pass):
+            return first_pass
+
+        retry_seed = copy.deepcopy(first_pass)
+
+        refreshed_catalog = normalize_catalog_entry(
+            raw_title=first_pass.raw_title,
+            raw_author=first_pass.author,
+            raw_publisher=getattr(first_pass, "catalog_publisher", None),
+        )
+        retry_author = refreshed_catalog.get("author") or retry_seed.author
+        retry_title_input = refreshed_catalog.get("title") or retry_seed.raw_title
+        retry_title = normalize_title(retry_title_input, retry_author)
+        if retry_title:
+            retry_seed.raw_title = retry_title
+            retry_seed.normalized_title = retry_title
+        retry_seed.author = retry_author
+
+        self._reset_enrichment_fields(retry_seed)
+        second_pass = await enrich_book(retry_seed)
+
+        if self._is_reliably_enriched(second_pass):
+            return second_pass
+
+        first_score = self._metadata_score(first_pass)
+        second_score = self._metadata_score(second_pass)
+        return second_pass if second_score >= first_score else first_pass
 
     def resolve_excel_path(self, excel_path: Optional[Union[Path, str]] = None) -> Path:
         """Resolve Excel path from absolute or common relative locations."""
@@ -86,6 +269,7 @@ class PipelineController:
         catalog_publisher: Optional[str] = None,
         catalog_quantity: Optional[int] = None,
         catalog_price: Optional[float] = None,
+        allow_low_confidence: bool = False,
     ) -> Book:
         if not (raw_title or "").strip():
             raise BookNotFoundError("Title is empty. Please insert a valid book title.")
@@ -110,8 +294,20 @@ class PipelineController:
             catalog_price=catalog_price,
             status=BookStatus.IN_PROGRESS,
         )
-        book = asyncio.run(enrich_book(book))
+        book = asyncio.run(self._enrich_with_immediate_retry(book))
         if not self._is_reliably_enriched(book):
+            if allow_low_confidence:
+                # Manual selection can bypass confidence, but not completely empty metadata.
+                if self._has_minimal_metadata(book):
+                    note = "Manual selection fallback: queued with low confidence, verify metadata before approval."
+                    examples = list(getattr(book, "discarded_information_examples", []) or [])
+                    if note not in examples:
+                        examples.append(note)
+                    book.discarded_information_examples = examples
+                    book = generate_insights(book)
+                    book.status = BookStatus.TO_APPROVE
+                    return self.repository.upsert_book(book)
+
             suggestions = asyncio.run(
                 search_candidates(
                     book.normalized_title,
@@ -137,6 +333,72 @@ class PipelineController:
         book = generate_insights(book)
         return self.repository.upsert_book(book)
 
+    def ingest_selected_candidate(
+        self,
+        candidate: dict,
+        fallback_title: Optional[str] = None,
+        fallback_author: Optional[str] = None,
+        catalog_ean: Optional[str] = None,
+        catalog_publisher: Optional[str] = None,
+        catalog_quantity: Optional[int] = None,
+        catalog_price: Optional[float] = None,
+    ) -> Book:
+        """Ingest a user-selected candidate, preserving candidate metadata when enrichment is weak."""
+        selected_title = (candidate.get("title") or fallback_title or "").strip()
+        selected_author = (candidate.get("authors") or fallback_author or "").strip() or None
+        if not selected_title:
+            raise BookNotFoundError("Candidate title is empty. Please select a valid match.")
+
+        try:
+            return self.ingest_raw_book(
+                selected_title,
+                selected_author,
+                catalog_ean=catalog_ean,
+                catalog_publisher=catalog_publisher,
+                catalog_quantity=catalog_quantity,
+                catalog_price=catalog_price,
+                allow_low_confidence=True,
+            )
+        except BookNotFoundError:
+            normalized_catalog = normalize_catalog_entry(
+                raw_title=selected_title,
+                raw_author=selected_author,
+                raw_publisher=catalog_publisher,
+            )
+            normalized_input_title = normalized_catalog.get("title") or selected_title
+            normalized_input_author = normalized_catalog.get("author") or selected_author
+            canonical_title = normalize_title(normalized_input_title, normalized_input_author)
+
+            seed = Book(
+                raw_title=canonical_title,
+                normalized_title=canonical_title,
+                author=normalized_input_author,
+                catalog_ean=catalog_ean,
+                catalog_publisher=normalized_catalog.get("publisher") or catalog_publisher,
+                catalog_quantity=catalog_quantity,
+                catalog_price=catalog_price,
+                status=BookStatus.IN_PROGRESS,
+            )
+
+            seed = self._apply_candidate_metadata(seed, candidate)
+
+            enriched = asyncio.run(self._enrich_with_immediate_retry(seed))
+            enriched = self._apply_candidate_metadata(enriched, candidate)
+
+            if not self._has_minimal_metadata(enriched):
+                raise BookNotFoundError(
+                    "Selected match could not provide enough metadata. Try another candidate or add ISBN/EAN."
+                )
+
+            note = "Manual selected-candidate fallback: queued with preserved external metadata."
+            examples = list(getattr(enriched, "discarded_information_examples", []) or [])
+            if note not in examples:
+                examples.append(note)
+            enriched.discarded_information_examples = examples
+            enriched = generate_insights(enriched)
+            enriched.status = BookStatus.TO_APPROVE
+            return self.repository.upsert_book(enriched)
+
     def find_candidates(
         self,
         raw_title: str,
@@ -155,7 +417,7 @@ class PipelineController:
         normalized_input_title = normalized_catalog.get("title") or raw_title
         normalized_input_author = normalized_catalog.get("author") or cleaned_author
         canonical_title = normalize_title(normalized_input_title, normalized_input_author)
-        return asyncio.run(
+        strict_results = asyncio.run(
             search_candidates(
                 canonical_title,
                 normalized_input_author,
@@ -164,6 +426,86 @@ class PipelineController:
                 limit=limit,
             )
         )
+        if strict_results:
+            return strict_results
+
+        # Fallback 1: same title but no author constraint.
+        relaxed_results = asyncio.run(
+            search_candidates(
+                canonical_title,
+                None,
+                catalog_publisher,
+                catalog_ean,
+                limit=limit,
+            )
+        )
+        if relaxed_results:
+            return relaxed_results
+
+        # Fallback 2: raw title text without catalog normalization.
+        raw_title_for_search = normalize_title(raw_title, cleaned_author) or (raw_title or "").strip()
+        if raw_title_for_search and raw_title_for_search != canonical_title:
+            raw_results = asyncio.run(
+                search_candidates(
+                    raw_title_for_search,
+                    cleaned_author,
+                    catalog_publisher,
+                    catalog_ean,
+                    limit=limit,
+                )
+            )
+            if raw_results:
+                return raw_results
+
+        # Fallback 3: direct lookup by EAN/ISBN when present.
+        code_value = (catalog_ean or "").strip()
+        if code_value:
+            code_results = asyncio.run(
+                search_candidates(
+                    code_value,
+                    None,
+                    None,
+                    code_value,
+                    limit=limit,
+                )
+            )
+            if code_results:
+                return code_results
+
+        return []
+    
+    def _save_skipped_report(self, skipped_entries: List[dict]) -> str:
+        """Save skipped entries to a JSON report file."""
+        reports_dir = self.project_root / "artifacts" / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_path = reports_dir / f"import_skipped_{timestamp}.json"
+        
+        # Ensure EAN values are strings to prevent float conversion
+        cleaned_entries = []
+        for entry in skipped_entries:
+            cleaned_entry = entry.copy()
+            if cleaned_entry.get("ean"):
+                cleaned_entry["ean"] = str(cleaned_entry["ean"]).split('.')[0]  # Remove .0 if present
+            cleaned_entries.append(cleaned_entry)
+        
+        report_data = {
+            "timestamp": datetime.now().isoformat(),
+            "total_skipped": len(cleaned_entries),
+            "skipped_entries": cleaned_entries
+        }
+        
+        with open(report_path, 'w', encoding='utf-8') as f:
+            json.dump(report_data, f, indent=2, ensure_ascii=False)
+        
+        self.last_import_skipped_report_path = str(report_path)
+        return str(report_path)
+    
+    def get_last_skipped_report_path(self) -> Optional[str]:
+        """Get the path to the last generated skipped report."""
+        return getattr(self, "last_import_skipped_report_path", None)
+    
     def list_pending(self) -> List[Book]:
         return self.repository.list_books(BookStatus.TO_APPROVE)
 
@@ -220,8 +562,11 @@ class PipelineController:
         skipped = 0
         seen = set()
         self.last_import_skipped = 0
+        self.last_import_skipped_details = []
+        self.last_import_skipped_report_path = None
 
         title_candidates = ["Title", "Titolo", "Book Title", "Titolo Libro", "Libro", "Nome Libro"]
+        isbn_candidates = ["ISBN", "ISBN-13", "ISBN13", "Codice ISBN", "EAN/ISBN", "Codice libro"]
         author_candidates = ["Author", "Autore", "Authors", "Autori", "Writer"]
         ean_candidates = ["Codice EAN", "EAN", "CodiceEAN", "Barcode", "Codice a barre"]
         publisher_candidates = ["Editore", "Publisher", "Casa Editrice"]
@@ -304,6 +649,15 @@ class PipelineController:
                 return ""
             return str(value).strip()
 
+        def _clean_catalog_code(value) -> str:
+            text = _cell_to_text(value)
+            if not text:
+                return ""
+            # Normalize Excel numeric-like values and keep only ISBN/EAN-safe chars.
+            text = text.split(".")[0] if text.endswith(".0") else text
+            compact = re.sub(r"[^0-9Xx]", "", text)
+            return compact.upper()
+
         def _to_int(value) -> Optional[int]:
             text = _cell_to_text(value)
             if not text:
@@ -331,10 +685,11 @@ class PipelineController:
                 continue
 
             title_col = _pick_column(frame.columns, title_candidates)
-            if title_col is None:
+            isbn_col = _pick_column(frame.columns, isbn_candidates)
+            ean_col = _pick_column(frame.columns, ean_candidates)
+            if title_col is None and isbn_col is None and ean_col is None:
                 continue
             author_col = _pick_column(frame.columns, author_candidates)
-            ean_col = _pick_column(frame.columns, ean_candidates)
             publisher_col = _pick_column(frame.columns, publisher_candidates)
             quantity_col = _pick_column(frame.columns, quantity_candidates)
             price_col = _pick_column(frame.columns, price_candidates)
@@ -350,10 +705,17 @@ class PipelineController:
             )
 
             for _, row in frame.iterrows():
-                raw_title_value = _cell_to_text(row.get(title_col))
+                raw_title_value = _cell_to_text(row.get(title_col)) if title_col is not None else ""
                 title_value = _clean_title(raw_title_value)
-                if not title_value:
+                isbn_value = _clean_catalog_code(row.get(isbn_col)) if isbn_col is not None else ""
+                ean_value = _clean_catalog_code(row.get(ean_col)) if ean_col is not None else ""
+                catalog_code = isbn_value or ean_value
+
+                if not title_value and not catalog_code:
                     continue
+
+                if not title_value and catalog_code:
+                    title_value = catalog_code
 
                 title_lower = title_value.lower()
                 if any(title_lower.startswith(marker) for marker in noise_markers):
@@ -363,7 +725,6 @@ class PipelineController:
 
                 author_raw = _cell_to_text(row.get(author_col)) if author_col is not None else ""
                 author_value = _clean_author(author_raw) if author_raw else ""
-                ean_value = _cell_to_text(row.get(ean_col)) if ean_col is not None else ""
                 publisher_raw = _cell_to_text(row.get(publisher_col)) if publisher_col is not None else ""
                 publisher_value = _clean_publisher(publisher_raw) if publisher_raw else ""
                 quantity_value = _to_int(row.get(quantity_col)) if quantity_col is not None else None
@@ -385,7 +746,7 @@ class PipelineController:
                         "title": normalized_catalog.get("title") or title_value,
                         "author": normalized_catalog.get("author") or author,
                         "publisher": normalized_catalog.get("publisher") or publisher_value or None,
-                        "ean": ean_value or None,
+                        "ean": catalog_code or None,
                         "quantity": quantity_value,
                         "price": price_value,
                     }
@@ -405,8 +766,9 @@ class PipelineController:
             batch_size = max(20, int(os.getenv("BIBLIOFORGE_IMPORT_BATCH", "200")))
             semaphore = asyncio.Semaphore(max_concurrency)
             cache = {}
+            skipped_entries = []
 
-            async def _enrich_one(entry: dict) -> Optional[Book]:
+            async def _enrich_one(entry: dict, entry_index: int) -> Optional[Book]:
                 key = (entry.get("title", "").casefold(), (entry.get("author") or "").casefold())
 
                 # Serve from cache when the same title/author repeats.
@@ -432,23 +794,116 @@ class PipelineController:
                             catalog_price=entry.get("price"),
                             status=BookStatus.IN_PROGRESS,
                         )
-                        book = await enrich_book(book)
+                        book = await self._enrich_with_immediate_retry(book)
                         if not self._is_reliably_enriched(book):
+                            # Try fallback: search by EAN if available
+                            ean_value = (entry.get("ean") or "").strip()
+                            if ean_value and len(ean_value) >= 8:
+                                try:
+                                    # Search using EAN as primary identifier
+                                    ean_candidates = await search_candidates(
+                                        normalized_title=ean_value,
+                                        author=None,
+                                        publisher=None,
+                                        catalog_ean=ean_value,
+                                        limit=1
+                                    )
+                                    if ean_candidates and len(ean_candidates) > 0:
+                                        # Found via EAN, try to enrich again with EAN search result
+                                        top_result = ean_candidates[0]
+                                        book.raw_title = top_result.get("title", book.raw_title)
+                                        book.normalized_title = top_result.get("title", book.normalized_title)
+                                        book.author = top_result.get("authors", book.author)
+                                        book = await enrich_book(book)
+                                        if self._is_reliably_enriched(book):
+                                            book = generate_insights(book)
+                                            book.status = BookStatus.TO_APPROVE
+                                            cache[key] = book
+                                            return book
+                                except Exception:
+                                    pass
+
+                            # Try fallback: resolve best candidate by title/author and enrich again.
+                            try:
+                                candidate_results = await search_candidates(
+                                    normalized_title=entry.get("title") or "",
+                                    author=entry.get("author") or "",
+                                    publisher=entry.get("publisher") or None,
+                                    catalog_ean=entry.get("ean") or None,
+                                    limit=1,
+                                )
+                                if candidate_results:
+                                    top_result = candidate_results[0]
+                                    candidate_title = (top_result.get("title") or "").strip()
+                                    candidate_authors = (top_result.get("authors") or "").strip()
+                                    if candidate_title:
+                                        canonical_candidate_title = normalize_title(
+                                            candidate_title,
+                                            candidate_authors or book.author,
+                                        )
+                                        book.raw_title = canonical_candidate_title or candidate_title
+                                        book.normalized_title = canonical_candidate_title or candidate_title
+                                    if candidate_authors:
+                                        book.author = candidate_authors
+
+                                    book = await enrich_book(book)
+                                    if self._is_reliably_enriched(book):
+                                        book = generate_insights(book)
+                                        book.status = BookStatus.TO_APPROVE
+                                        cache[key] = book
+                                        return book
+                            except Exception:
+                                pass
+
+                            # Queue unresolved items only when we still have meaningful metadata.
+                            has_minimal_metadata = self._has_minimal_metadata(book)
+
+                            if has_minimal_metadata:
+                                note = "Low-confidence import fallback: verify title/author/isbn before approval."
+                                examples = list(getattr(book, "discarded_information_examples", []) or [])
+                                if note not in examples:
+                                    examples.append(note)
+                                book.discarded_information_examples = examples
+                                book = generate_insights(book)
+                                book.status = BookStatus.TO_APPROVE
+                                cache[key] = book
+                                return book
+
+                            skipped_entries.append(
+                                {
+                                    "index": entry_index,
+                                    "title": entry.get("title"),
+                                    "author": entry.get("author"),
+                                    "ean": str(entry.get("ean")) if entry.get("ean") else None,
+                                    "publisher": entry.get("publisher"),
+                                    "reason": "No reliable metadata found from Google Books/Goodreads",
+                                }
+                            )
                             return None
                         book = generate_insights(book)
                         book.status = BookStatus.TO_APPROVE
                         cache[key] = book
                         return book
-                    except Exception:
+                    except Exception as e:
+                        skipped_entries.append({
+                            "index": entry_index,
+                            "title": entry.get("title"),
+                            "author": entry.get("author"),
+                            "ean": entry.get("ean"),
+                            "publisher": entry.get("publisher"),
+                            "reason": f"Exception during enrichment: {str(e)}"
+                        })
                         return None
 
+            chunk_offset = 0
             for idx in range(0, len(items), batch_size):
                 chunk = items[idx : idx + batch_size]
-                tasks = [_enrich_one(entry) for entry in chunk]
+                tasks = [_enrich_one(entry, chunk_offset + i) for i, entry in enumerate(chunk)]
                 results = await asyncio.gather(*tasks)
                 to_insert = [b for b in results if b]
                 queued += len(to_insert)
                 skipped += len(chunk) - len(to_insert)
+                chunk_offset += len(chunk)
                 processed += len(chunk)
                 if to_insert:
                     self.repository.upsert_many(to_insert)
@@ -458,6 +913,11 @@ class PipelineController:
                         progress_callback(processed, total)
                     except Exception:
                         pass
+            
+            # Save skipped entries to a JSON report
+            if skipped_entries:
+                self.last_import_skipped_details = skipped_entries
+                self._save_skipped_report(skipped_entries)
 
         asyncio.run(_process_entries(entries))
 
@@ -488,43 +948,12 @@ class PipelineController:
         book.reject_attempts = int(book.reject_attempts or 0) + 1
 
         # Reset enrichment-derived fields so stale metadata/summary are not reused.
-        for attr in [
-            "fetched_summary",
-            "summary_source",
-            "isbn",
-            "isbn_10",
-            "published_date",
-            "publication_year",
-            "pages",
-            "cover_url",
-            "publisher",
-            "categories",
-            "subtitle",
-            "language",
-            "print_type",
-            "info_link",
-            "preview_link",
-            "canonical_volume_link",
-            "goodreads_link",
-            "openlibrary_key",
-            "first_publish_year",
-            "edition_count",
-            "average_rating",
-            "ratings_count",
-            "positive_ratio",
-            "review_samples",
-            "discarded_information_examples",
-            "insights",
-        ]:
-            if attr in {"categories", "review_samples", "discarded_information_examples"}:
-                setattr(book, attr, [])
-            else:
-                setattr(book, attr, None)
+        self._reset_enrichment_fields(book)
 
         book.status = BookStatus.IN_PROGRESS
         self.repository.upsert_book(book)
 
-        refreshed = asyncio.run(enrich_book(book))
+        refreshed = asyncio.run(self._enrich_with_immediate_retry(book))
         refreshed = generate_insights(
             refreshed,
             regeneration_token=regeneration_token,
@@ -537,4 +966,70 @@ class PipelineController:
 
     def list_approved(self) -> List[Book]:
         return self.approved_repository.list_books(BookStatus.APPROVED)
+
+    def ensure_review_metadata(self, book_id: str) -> Optional[Book]:
+        """Ensure pending-review book has metadata on first opening, without manual reject."""
+        book = self.repository.get_book(book_id)
+        if not book:
+            return None
+
+        has_summary = bool((getattr(book, "fetched_summary", None) or "").strip())
+        has_cover = bool(getattr(book, "cover_url", None))
+        has_link = bool(
+            getattr(book, "info_link", None)
+            or getattr(book, "canonical_volume_link", None)
+            or getattr(book, "goodreads_link", None)
+            or getattr(book, "openlibrary_key", None)
+        )
+        synthetic_summary = self._has_synthetic_summary(book)
+        placeholder_cover = self._looks_like_placeholder_cover(getattr(book, "cover_url", None))
+
+        if self._has_minimal_metadata(book) and (has_summary or has_cover or has_link) and not (
+            synthetic_summary or placeholder_cover
+        ):
+            return book
+
+        refreshed_catalog = normalize_catalog_entry(
+            raw_title=book.raw_title,
+            raw_author=book.author,
+            raw_publisher=getattr(book, "catalog_publisher", None),
+        )
+        book.author = refreshed_catalog.get("author") or book.author
+        inferred_title = refreshed_catalog.get("title") or book.raw_title
+        if inferred_title:
+            canonical_title = normalize_title(inferred_title, book.author)
+            if canonical_title:
+                book.raw_title = canonical_title
+                book.normalized_title = canonical_title
+
+        previous_summary = book.insights.summary if book.insights else None
+        regeneration_token = str(uuid4())
+        # Drop stale fallback metadata before automatic refresh.
+        self._reset_enrichment_fields(book)
+        book.status = BookStatus.IN_PROGRESS
+        self.repository.upsert_book(book)
+
+        refreshed = asyncio.run(self._enrich_with_immediate_retry(book))
+
+        # If still weak, try resolving a top candidate and merge its metadata.
+        if not self._has_minimal_metadata(refreshed) or self._has_synthetic_summary(refreshed):
+            candidates = asyncio.run(
+                search_candidates(
+                    refreshed.normalized_title or refreshed.raw_title,
+                    refreshed.author,
+                    getattr(refreshed, "catalog_publisher", None),
+                    getattr(refreshed, "catalog_ean", None),
+                    limit=1,
+                )
+            )
+            if candidates:
+                refreshed = self._apply_candidate_metadata(refreshed, candidates[0])
+
+        refreshed = generate_insights(
+            refreshed,
+            regeneration_token=regeneration_token,
+            previous_summary=previous_summary,
+        )
+        refreshed.status = BookStatus.TO_APPROVE
+        return self.repository.upsert_book(refreshed)
 
