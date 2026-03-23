@@ -234,7 +234,7 @@ def render_context_column(book: Book) -> None:
             st.markdown(shown_text)
 
             if is_long:
-                toggle_label = "Comprimi" if st.session_state[expanded_key] else "Espandi"
+                toggle_label = "Collapse" if st.session_state[expanded_key] else "Expand"
                 if st.button(toggle_label, key=f"{expanded_key}-toggle"):
                     st.session_state[expanded_key] = not st.session_state[expanded_key]
                     st.rerun()
@@ -338,36 +338,36 @@ def render_ingestion_box():
     with st.form("ingestion-form"):
         title = st.text_input("Raw Title", value=default_title)
         author = st.text_input("Author (optional)", value=default_author)
-        st.caption("You can type only the title: the pipeline will try to resolve the author automatically.")
+        catalog_code = st.text_input("ISBN or EAN (optional)", value=default_catalog_code)
+        st.caption("You can search by title, by ISBN/EAN, or by combining title + author + ISBN/EAN.")
 
-        fallback_catalog_code = ""
         if st.session_state.get("show_isbn_ean_fallback"):
             st.warning("Book not found. As a last resort, insert ISBN or EAN to resolve the exact edition.")
-            fallback_catalog_code = st.text_input("ISBN or EAN (shown only after error)", value=default_catalog_code)
 
         submitted = st.form_submit_button("Find Matches")
         if submitted:
             st.session_state["ingestion_error_message"] = ""
+            query_title = (title or "").strip() or (catalog_code or "").strip()
             candidates = controller.find_candidates(
-                title,
+                query_title,
                 author or None,
                 catalog_publisher=None,
-                catalog_ean=fallback_catalog_code or None,
+                catalog_ean=catalog_code or None,
             )
             st.session_state["ingest_candidates"] = candidates
             st.session_state["ingest_input"] = {
                 "title": title,
                 "author": author,
-                "catalog_ean": fallback_catalog_code,
+                "catalog_ean": catalog_code,
             }
             if candidates:
                 st.session_state["show_isbn_ean_fallback"] = False
-            elif fallback_catalog_code:
+            elif catalog_code:
                 try:
                     book = controller.ingest_raw_book(
-                        title,
+                        query_title,
                         author or None,
-                        catalog_ean=fallback_catalog_code or None,
+                        catalog_ean=catalog_code or None,
                     )
                     st.success(f"Book queued for review: {book.normalized_title}")
                     st.session_state["show_isbn_ean_fallback"] = False
@@ -380,16 +380,16 @@ def render_ingestion_box():
                     st.session_state["show_isbn_ean_fallback"] = True
                     st.session_state["last_failed_title"] = title
                     st.session_state["last_failed_author"] = author
-                    st.session_state["last_failed_catalog_code"] = fallback_catalog_code
+                    st.session_state["last_failed_catalog_code"] = catalog_code
                     st.session_state["ingestion_error_message"] = str(exc)
                     st.rerun()
             else:
                 st.session_state["show_isbn_ean_fallback"] = True
                 st.session_state["last_failed_title"] = title
                 st.session_state["last_failed_author"] = author
-                st.session_state["last_failed_catalog_code"] = ""
+                st.session_state["last_failed_catalog_code"] = catalog_code
                 st.session_state["ingestion_error_message"] = (
-                    "Nessun candidato trovato con solo titolo. Aggiungi autore oppure ISBN/EAN per restringere la ricerca."
+                    "No candidate found. Add author or ISBN/EAN to narrow the search."
                 )
                 st.rerun()
 
@@ -452,18 +452,18 @@ def render_excel_ingestion_box() -> None:
     progress_placeholder = st.empty()
     if st.button("Load into review queue", use_container_width=True):
         start = time.perf_counter()
-        timer_placeholder.info("⏱️ Import in corso...")
-        progress_bar = progress_placeholder.progress(0, text="Preparazione import...")
+        timer_placeholder.info("⏱️ Import in progress...")
+        progress_bar = progress_placeholder.progress(0, text="Preparing import...")
 
         def _on_progress(processed: int, total: int) -> None:
             pct = 0 if total == 0 else int((processed / total) * 100)
             pct = max(0, min(pct, 100))
-            text = f"Import in corso... {processed}/{total}" if total else "Import in corso..."
+            text = f"Import in progress... {processed}/{total}" if total else "Import in progress..."
             progress_bar.progress(pct, text=text)
 
         try:
             total = controller.ingest_books_from_excel(excel_path_input, progress_callback=_on_progress)
-            progress_bar.progress(100, text="Import completato")
+            progress_bar.progress(100, text="Import completed")
             st.success(f"Imported {total} books into review queue.")
             if getattr(controller, "last_import_skipped", 0):
                 skipped_count = controller.last_import_skipped
@@ -479,11 +479,11 @@ def render_excel_ingestion_box() -> None:
                 None,
             )
             
-            timer_placeholder.success(f"⏱️ Import terminato in {format_duration(time.perf_counter() - start)}")
+            timer_placeholder.success(f"⏱️ Import completed in {format_duration(time.perf_counter() - start)}")
         except Exception as exc:
-            progress_bar.progress(0.0, text="Import fallito")
+            progress_bar.progress(0.0, text="Import failed")
             timer_placeholder.error(
-                f"⏱️ Import fallito dopo {format_duration(time.perf_counter() - start)}: {exc}"
+                f"⏱️ Import failed after {format_duration(time.perf_counter() - start)}: {exc}"
             )
             st.error(f"Excel import failed: {exc}")
 
@@ -493,10 +493,10 @@ def render_excel_ingestion_box() -> None:
     if skipped_details:
         top_left, top_mid, top_right = st.columns([3, 2, 1])
         top_left.warning(
-            f"Skipped persistenti: {len(skipped_details)} righe non risolte automaticamente."
+            f"Persistent skipped entries: {len(skipped_details)} rows not resolved automatically."
         )
         retry_clicked = top_mid.button("Retry all skipped", use_container_width=True)
-        if top_right.button("Pulisci lista skipped", use_container_width=True):
+        if top_right.button("Clear skipped list", use_container_width=True):
             st.session_state["persisted_skipped_entries"] = []
             st.session_state["persisted_skipped_report_path"] = None
             st.rerun()
@@ -575,11 +575,11 @@ def render_excel_ingestion_box() -> None:
                 entry_ean = str(entry.get("ean") or "").strip()
 
                 st.caption(f"{idx}. **{entry.get('title', 'Unknown')}**")
-                st.caption(f"Autore: {entry_author or 'Unknown Author'}")
+                st.caption(f"Author: {entry_author or 'Unknown Author'}")
                 if entry_ean:
                     st.caption(f"EAN: {entry_ean}")
                 reason = entry.get("reason", "Unknown reason")
-                st.caption(f"Motivo: {reason}")
+                st.caption(f"Reason: {reason}")
 
                 st.divider()
 
