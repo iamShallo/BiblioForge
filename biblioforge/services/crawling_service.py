@@ -381,10 +381,76 @@ async def search_candidates(
         return True
 
     results: list[dict] = []
+    raw_items: list[dict] = []
+    query_tokens = {
+        t
+        for t in re.findall(r"\w+", _normalize_for_match(normalized_title))
+        if len(t) >= 4
+    }
+
+    async def _openlibrary_candidates() -> List[dict]:
+        query = (normalized_title or "").strip()
+        if not query:
+            return []
+
+        try:
+            async with httpx.AsyncClient(timeout=12) as client:
+                resp = await client.get(
+                    OPENLIBRARY_SEARCH_URL,
+                    params={"q": query, "limit": max(limit * 3, 10)},
+                )
+                resp.raise_for_status()
+                docs = resp.json().get("docs", [])
+        except Exception:
+            return []
+
+        out: List[dict] = []
+        seen = set()
+        for doc in docs:
+            title = str(doc.get("title") or "").strip()
+            if not title:
+                continue
+            sim = _title_similarity(normalized_title, title)
+            if sim < 0.22:
+                continue
+
+            if query_tokens:
+                title_tokens = set(re.findall(r"\w+", _normalize_for_match(title)))
+                if len(query_tokens & title_tokens) == 0:
+                    continue
+
+            authors = ", ".join(doc.get("author_name", []) or [])
+            if author and authors and _title_similarity(author, authors) < 0.12:
+                continue
+
+            key = (title.casefold(), authors.casefold())
+            if key in seen:
+                continue
+            seen.add(key)
+
+            cover_id = doc.get("cover_i")
+            cover_url = f"https://covers.openlibrary.org/b/id/{cover_id}-M.jpg" if cover_id else None
+            work_key = (doc.get("key") or "").strip()
+            info_link = f"https://openlibrary.org{work_key}" if work_key.startswith("/") else None
+
+            out.append(
+                {
+                    "title": title,
+                    "authors": authors,
+                    "published_date": str(doc.get("first_publish_year") or "") or None,
+                    "info_link": info_link,
+                    "cover_url": cover_url,
+                }
+            )
+            if len(out) >= limit:
+                break
+        return out
     try:
         item = await _fetch_google_books(normalized_title, author, publisher, catalog_ean)
         if item and _has_sufficient_google_books_data(item):
             results.append(item)
+        if item:
+            raw_items.append(item)
 
         strict_query_parts = [f'intitle:"{normalized_title}"']
         if author:
@@ -410,13 +476,15 @@ async def search_candidates(
                 )
                 resp.raise_for_status()
                 for item in resp.json().get("items", []):
-                    if not _has_sufficient_google_books_data(item):
-                        continue
                     item_id = item.get("id")
                     if item_id and item_id in seen_ids:
                         continue
                     if item_id:
                         seen_ids.add(item_id)
+
+                    raw_items.append(item)
+                    if not _has_sufficient_google_books_data(item):
+                        continue
                     results.append(item)
 
         def _brief(item: dict) -> dict:
@@ -441,9 +509,44 @@ async def search_candidates(
 
         # Prefer richer metadata and better title match.
         briefed.sort(key=lambda row: (row[1], row[2]), reverse=True)
-        return [row[0] for row in briefed[:limit]]
+        if briefed:
+            return [row[0] for row in briefed[:limit]]
+
+        # Fallback for title-only or noisy queries: return less strict Google Books candidates.
+        relaxed = []
+        relaxed_seen = set()
+        for item in raw_items:
+            entry = _brief(item)
+            title = (entry.get("title") or "").strip()
+            if not title:
+                continue
+            similarity = _title_similarity(normalized_title, title)
+            if similarity < 0.28:
+                continue
+
+            if query_tokens:
+                title_tokens = set(re.findall(r"\w+", _normalize_for_match(title)))
+                if len(query_tokens & title_tokens) == 0:
+                    continue
+
+            authors_blob = (entry.get("authors") or "").strip()
+            if author and authors_blob and _title_similarity(author, authors_blob) < 0.15:
+                continue
+
+            key = (title, authors_blob)
+            if key in relaxed_seen:
+                continue
+            relaxed_seen.add(key)
+            relaxed.append((entry, _candidate_quality(item), similarity))
+
+        relaxed.sort(key=lambda row: (row[1], row[2]), reverse=True)
+        relaxed_out = [row[0] for row in relaxed[:limit]]
+        if relaxed_out:
+            return relaxed_out
+
+        return await _openlibrary_candidates()
     except Exception:
-        return []
+        return await _openlibrary_candidates()
 
 
 async def _fetch_goodreads_rating(
@@ -1494,17 +1597,13 @@ async def enrich_book(book: Book) -> Book:
         book.discarded_information_examples = [x[:260] for x in discarded_examples if x][:5]
 
     except Exception:
-        book.isbn = book.isbn or f"31213663{_deterministic_int(book, 100, 999)}"
-        book.isbn_10 = book.isbn_10 or f"88{_deterministic_int(book, 10000000, 99999999)}"
-        book.published_date = book.published_date or str(book.publication_year or 2010)
-        book.publication_year = book.publication_year or 2010
-        book.pages = book.pages or 355
+        # Keep existing values on crawler/network failure; avoid synthetic bibliographic data.
         book.cover_url = book.cover_url or _build_cover_fallback(book)
-        book.publisher = book.publisher or "Unknown Publisher"
-        book.categories = book.categories or ["Unknown Genre"]
+        book.publisher = book.publisher or None
+        book.categories = book.categories or []
         book.subtitle = book.subtitle or None
-        book.language = book.language or "en"
-        book.print_type = book.print_type or "BOOK"
+        book.language = book.language or None
+        book.print_type = book.print_type or None
         book.info_link = book.info_link or None
         book.preview_link = book.preview_link or None
         book.canonical_volume_link = book.canonical_volume_link or None
@@ -1518,8 +1617,8 @@ async def enrich_book(book: Book) -> Book:
         book.review_samples = book.review_samples or []
         book.discarded_information_examples = book.discarded_information_examples or []
         if not book.fetched_summary:
-            book.fetched_summary = f"Metadata summary unavailable for {book.normalized_title}."
-            book.summary_source = "local_fallback"
+            book.fetched_summary = None
+            book.summary_source = None
 
     book.status = BookStatus.IN_PROGRESS
     return book
