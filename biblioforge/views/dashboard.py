@@ -600,6 +600,33 @@ def render_excel_ingestion_box() -> None:
             st.warning(f"Could not load report file: {e}")
 
 
+def render_final_db_list() -> None:
+    st.markdown("### Final DB List")
+    approved_books = controller.list_approved()
+
+    if not approved_books:
+        st.info("The final DB is empty. Approve one or more books to populate it.")
+        return
+
+    st.caption(f"Approved books: {len(approved_books)}")
+    with st.expander("Show/Hide final DB list", expanded=False):
+        for idx, book in enumerate(approved_books, start=1):
+            title = book.normalized_title or book.raw_title or "Unknown title"
+            author = book.author or "Unknown author"
+            isbn = getattr(book, "isbn", None) or "-"
+            year = getattr(book, "publication_year", None) or "-"
+            rating = f"{book.average_rating:.2f}" if getattr(book, "average_rating", None) is not None else "-"
+            tags = ", ".join((book.insights.tags if book.insights else [])[:6]) or "-"
+
+            with st.expander(f"{idx}. {title} - {author}", expanded=False):
+                st.markdown(f"**Title:** {title}")
+                st.markdown(f"**Author:** {author}")
+                st.markdown(f"**ISBN:** {isbn}")
+                st.markdown(f"**Year:** {year}")
+                st.markdown(f"**Rating:** {rating}")
+                st.markdown(f"**Tags:** {tags}")
+
+
 def main():
     process_pending_approval()
     if "auto_metadata_checked_ids" not in st.session_state:
@@ -619,6 +646,8 @@ def main():
             removed = controller.approved_repository.clear_books()
         st.success(f"Cleared {removed} books from the approved DB.")
         st.rerun()
+
+    render_final_db_list()
 
     if st.session_state.get("last_reject_message"):
         st.warning(st.session_state["last_reject_message"])
