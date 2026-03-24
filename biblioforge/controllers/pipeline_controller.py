@@ -473,6 +473,144 @@ class PipelineController:
                 return code_results
 
         return []
+
+    def retry_skipped_entries(
+        self,
+        skipped_entries: List[dict],
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+    ) -> tuple[int, List[dict]]:
+        """Retry skipped rows with bounded concurrency and batch persistence."""
+        if not skipped_entries:
+            return 0, []
+
+        async def _retry_entries(items: List[dict]) -> tuple[int, List[dict]]:
+            total = len(items)
+            processed = 0
+            resolved = 0
+            unresolved: List[dict] = []
+            max_concurrency = max(1, int(os.getenv("BIBLIOFORGE_RETRY_CONCURRENCY", "8")))
+            batch_size = max(max_concurrency, int(os.getenv("BIBLIOFORGE_RETRY_BATCH", "80")))
+            semaphore = asyncio.Semaphore(max_concurrency)
+            cache = {}
+
+            async def _retry_one(entry: dict, entry_index: int) -> tuple[Optional[Book], Optional[dict]]:
+                entry_title = (entry.get("title") or "").strip()
+                entry_author = (entry.get("author") or "").strip() or None
+                entry_ean = str(entry.get("ean") or "").strip() or None
+                entry_publisher = (entry.get("publisher") or "").strip() or None
+                query_title = entry_title or (entry_ean or "")
+
+                if not query_title:
+                    return None, {
+                        "index": entry_index,
+                        "title": entry.get("title"),
+                        "author": entry.get("author"),
+                        "ean": entry_ean,
+                        "publisher": entry.get("publisher"),
+                        "reason": "Missing title/EAN for retry",
+                    }
+
+                cache_key = (query_title.casefold(), (entry_author or "").casefold())
+                cached_template = cache.get(cache_key)
+                if cached_template is not None:
+                    cached = copy.deepcopy(cached_template)
+                    cached.id = str(uuid4())
+                    cached.catalog_ean = entry_ean
+                    cached.catalog_publisher = entry_publisher
+                    cached.status = BookStatus.TO_APPROVE
+                    return cached, None
+
+                async with semaphore:
+                    try:
+                        normalized_catalog = normalize_catalog_entry(
+                            raw_title=query_title,
+                            raw_author=entry_author,
+                            raw_publisher=entry_publisher,
+                        )
+                        normalized_input_title = normalized_catalog.get("title") or query_title
+                        normalized_input_author = normalized_catalog.get("author") or entry_author
+                        canonical_title = normalize_title(normalized_input_title, normalized_input_author)
+
+                        seed = Book(
+                            raw_title=canonical_title or normalized_input_title,
+                            normalized_title=canonical_title or normalized_input_title,
+                            author=normalized_input_author,
+                            catalog_ean=entry_ean,
+                            catalog_publisher=normalized_catalog.get("publisher") or entry_publisher,
+                            status=BookStatus.IN_PROGRESS,
+                        )
+
+                        candidate_results = await search_candidates(
+                            normalized_title=query_title,
+                            author=entry_author,
+                            publisher=entry_publisher,
+                            catalog_ean=entry_ean,
+                            limit=1,
+                        )
+                        top_candidate = candidate_results[0] if candidate_results else None
+                        if top_candidate:
+                            seed = self._apply_candidate_metadata(seed, top_candidate)
+
+                        book = await self._enrich_with_immediate_retry(seed)
+                        if top_candidate:
+                            book = self._apply_candidate_metadata(book, top_candidate)
+
+                        if not self._is_reliably_enriched(book):
+                            if not self._has_minimal_metadata(book):
+                                return None, {
+                                    "index": entry_index,
+                                    "title": entry.get("title"),
+                                    "author": entry.get("author"),
+                                    "ean": entry_ean,
+                                    "publisher": entry.get("publisher"),
+                                    "reason": "No reliable metadata found from Google Books/Goodreads",
+                                }
+
+                            note = "Low-confidence retry fallback: verify title/author/isbn before approval."
+                            examples = list(getattr(book, "discarded_information_examples", []) or [])
+                            if note not in examples:
+                                examples.append(note)
+                            book.discarded_information_examples = examples
+
+                        book = await asyncio.to_thread(generate_insights, book)
+                        book.status = BookStatus.TO_APPROVE
+                        cache[cache_key] = copy.deepcopy(book)
+                        return book, None
+                    except Exception as exc:
+                        return None, {
+                            "index": entry_index,
+                            "title": entry.get("title"),
+                            "author": entry.get("author"),
+                            "ean": entry_ean,
+                            "publisher": entry.get("publisher"),
+                            "reason": f"Retry failed: {exc}",
+                        }
+
+            item_offset = 0
+            for idx in range(0, len(items), batch_size):
+                chunk = items[idx : idx + batch_size]
+                tasks = [_retry_one(entry, item_offset + i) for i, entry in enumerate(chunk)]
+                results = await asyncio.gather(*tasks)
+                item_offset += len(chunk)
+
+                to_insert = [book for book, error in results if book is not None and error is None]
+                errors = [error for _, error in results if error is not None]
+
+                if to_insert:
+                    self.repository.upsert_many(to_insert)
+                resolved += len(to_insert)
+                unresolved.extend(errors)
+
+                processed += len(chunk)
+                if progress_callback:
+                    try:
+                        progress_callback(processed, total)
+                    except Exception:
+                        pass
+
+            return resolved, unresolved
+
+        return asyncio.run(_retry_entries(skipped_entries))
     
     def _save_skipped_report(self, skipped_entries: List[dict]) -> str:
         """Save skipped entries to a JSON report file."""
