@@ -672,12 +672,15 @@ class PipelineController:
     def clear_approved(self) -> int:
         return self.approved_repository.clear_books()
 
-    def trust_process(self) -> int:
+    def trust_process(self, progress_callback: Optional[Callable[[int, int], None]] = None) -> int:
         pending = self.list_pending()
+        total = len(pending)
         approved = 0
-        for book in pending:
+        for idx, book in enumerate(pending):
             if self.approve(book.id):
                 approved += 1
+            if progress_callback:
+                progress_callback(idx + 1, total)
         return approved
 
     def remove_from_queue(self, book_id: str) -> bool:

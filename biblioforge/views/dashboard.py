@@ -265,9 +265,10 @@ def render_editing_column(book: Book, pending_ids: list[str]) -> None:
             ),
             default=book.insights.tags,
         )
-        col_approve, col_reject = st.columns([1, 1])
+        col_approve, col_reject, col_remove = st.columns([1, 1, 1])
         approve = col_approve.form_submit_button("Approve and Save", use_container_width=True)
         reject = col_reject.form_submit_button("Reject & Redo Search", use_container_width=True)
+        remove = col_remove.form_submit_button("Remove", use_container_width=True)
 
         if approve:
             st.session_state["approve_request"] = {
@@ -284,38 +285,47 @@ def render_editing_column(book: Book, pending_ids: list[str]) -> None:
                 st.rerun()
             else:
                 st.error("Reject failed: selected book was not found.")
+        if remove:
+            if hasattr(controller, "remove_from_queue"):
+                removed = controller.remove_from_queue(book.id)
+            elif hasattr(controller.repository, "delete_book"):
+                # Fallback for stale Streamlit state with an older controller instance.
+                removed = controller.repository.delete_book(book.id)
+            else:
+                # Final fallback for older repository objects loaded before method additions.
+                repo = controller.repository
+                cache = getattr(repo, "_cache", None)
+                persist = getattr(repo, "_persist", None)
+                if isinstance(cache, list) and callable(persist):
+                    original_len = len(cache)
+                    repo._cache = [item for item in cache if getattr(item, "id", None) != book.id]
+                    removed = len(repo._cache) != original_len
+                    if removed:
+                        repo._persist()
+                else:
+                    removed = False
+            if removed:
+                st.success("Book removed from the review queue.")
+                st.rerun()
+            else:
+                st.error("Could not remove the selected book from the queue.")
 
-    trust_col, remove_col = st.columns([4, 1])
+    trust_col = st.container()
     remaining = len(pending_ids)
     trust_col.caption(f"Pending to approve: {remaining}")
     if trust_col.button("Trust the Process", help="Approve all pending books in one batch."):
-        approved = controller.trust_process()
+        progress_placeholder = st.empty()
+        progress_bar = progress_placeholder.progress(0, text="Starting process...")
+        
+        def _on_progress(processed: int, total: int) -> None:
+            pct = 0 if total == 0 else int((processed / total) * 100)
+            pct = max(0, min(pct, 100))
+            text = f"Processing books... {processed}/{total}"
+            progress_bar.progress(pct, text=text)
+        
+        approved = controller.trust_process(progress_callback=_on_progress)
+        progress_bar.progress(100, text="Process completed!")
         st.success(f"Process trusted: {approved} books saved to the final DB in one batch.")
-
-    if remove_col.button("Remove", help="Remove this book from the review queue."):
-        if hasattr(controller, "remove_from_queue"):
-            removed = controller.remove_from_queue(book.id)
-        elif hasattr(controller.repository, "delete_book"):
-            # Fallback for stale Streamlit state with an older controller instance.
-            removed = controller.repository.delete_book(book.id)
-        else:
-            # Final fallback for older repository objects loaded before method additions.
-            repo = controller.repository
-            cache = getattr(repo, "_cache", None)
-            persist = getattr(repo, "_persist", None)
-            if isinstance(cache, list) and callable(persist):
-                original_len = len(cache)
-                repo._cache = [item for item in cache if getattr(item, "id", None) != book.id]
-                removed = len(repo._cache) != original_len
-                if removed:
-                    repo._persist()
-            else:
-                removed = False
-        if removed:
-            st.success("Book removed from the review queue.")
-            st.rerun()
-        else:
-            st.error("Could not remove the selected book from the queue.")
 
 
 def render_ingestion_box():
