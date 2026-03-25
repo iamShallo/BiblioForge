@@ -488,8 +488,8 @@ class PipelineController:
             processed = 0
             resolved = 0
             unresolved: List[dict] = []
-            max_concurrency = max(1, int(os.getenv("BIBLIOFORGE_RETRY_CONCURRENCY", "8")))
-            batch_size = max(max_concurrency, int(os.getenv("BIBLIOFORGE_RETRY_BATCH", "80")))
+            max_concurrency = max(1, int(os.getenv("BIBLIOFORGE_RETRY_CONCURRENCY", "16")))
+            batch_size = max(max_concurrency, int(os.getenv("BIBLIOFORGE_RETRY_BATCH", "160")))
             semaphore = asyncio.Semaphore(max_concurrency)
             cache = {}
 
@@ -711,6 +711,14 @@ class PipelineController:
         quantity_candidates = ["Quantita", "Quantità", "Qta", "Stock", "Giacenza"]
         price_candidates = ["Prezzo", "Price", "Prezzo vendita", "Prezzo listino"]
 
+        def _env_truthy(name: str, default: bool = True) -> bool:
+            raw = os.getenv(name)
+            if raw is None:
+                return default
+            return str(raw).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+        allow_catalog_only_fallback = _env_truthy("BIBLIOFORGE_IMPORT_ALLOW_CATALOG_FALLBACK", True)
+
         def _pick_column(columns, candidates):
             exact = {str(c): c for c in columns}
             for candidate in candidates:
@@ -775,12 +783,41 @@ class PipelineController:
 
         def _clean_author(text: str) -> str:
             text = _fix_mojibake(text)
-            return text
+            # Strip common curator/editor markers that hurt search precision.
+            text = re.sub(r"\([^)]*\)", " ", text)
+            text = re.sub(r"\b(CUR\.?|A\s+CURA\s+DI|ED\.?|TRAD\.?|TRADOTTO\s+DA)\b", " ", text, flags=re.IGNORECASE)
+            text = re.sub(r"\s*;\s*", ";", text)
+            chunks = [part.strip() for part in text.split(";") if part.strip()]
+            primary = chunks[0] if chunks else text
+            primary = re.sub(r"\s+", " ", primary).strip(" ,;:-")
+            return primary
 
         def _clean_publisher(text: str) -> str:
             text = _fix_mojibake(text)
             text = re.sub(r"^[Vv]\s*-\s*", "", text)
             return text
+
+        def _looks_like_catalog_book(entry: dict) -> bool:
+            title = str(entry.get("title") or "").strip()
+            author = str(entry.get("author") or "").strip()
+            ean = str(entry.get("ean") or "").strip().upper()
+            publisher = str(entry.get("publisher") or "").strip()
+
+            if not title:
+                return False
+            if len(title) < 3:
+                return False
+            if not re.search(r"[A-Za-zÀ-ÖØ-öø-ÿ]", title):
+                return False
+
+            alpha_count = len(re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ]", title))
+            if alpha_count < 3:
+                return False
+
+            has_code = bool(re.fullmatch(r"[0-9X]{8,14}", ean))
+            has_author = bool(author and re.search(r"[A-Za-zÀ-ÖØ-öø-ÿ]", author))
+            has_publisher = bool(publisher and len(publisher) >= 3)
+            return has_code or has_author or has_publisher
 
         def _cell_to_text(value) -> str:
             if value is None or pd.isna(value):
@@ -1007,6 +1044,32 @@ class PipelineController:
                                 cache[key] = book
                                 return book
 
+                            if allow_catalog_only_fallback and _looks_like_catalog_book(entry):
+                                # Keep plausible catalog rows in the review queue even without trusted external metadata.
+                                entry_title = entry.get("title") or book.raw_title
+                                entry_author = entry.get("author") or book.author
+                                canonical_entry_title = normalize_title(entry_title, entry_author) or entry_title
+                                book.raw_title = canonical_entry_title
+                                book.normalized_title = canonical_entry_title
+                                book.author = entry_author
+                                book.catalog_ean = entry.get("ean")
+                                book.catalog_publisher = entry.get("publisher")
+                                book.catalog_quantity = entry.get("quantity")
+                                book.catalog_price = entry.get("price")
+
+                                note = (
+                                    "Catalog-only fallback: queued without trusted external metadata. "
+                                    "Verify title/author/isbn before approval."
+                                )
+                                examples = list(getattr(book, "discarded_information_examples", []) or [])
+                                if note not in examples:
+                                    examples.append(note)
+                                book.discarded_information_examples = examples
+                                book = generate_insights(book)
+                                book.status = BookStatus.TO_APPROVE
+                                cache[key] = book
+                                return book
+
                             skipped_entries.append(
                                 {
                                     "index": entry_index,
@@ -1014,7 +1077,7 @@ class PipelineController:
                                     "author": entry.get("author"),
                                     "ean": str(entry.get("ean")) if entry.get("ean") else None,
                                     "publisher": entry.get("publisher"),
-                                    "reason": "No reliable metadata found from Google Books/Goodreads",
+                                    "reason": "No reliable metadata found and catalog row looked invalid/noisy",
                                 }
                             )
                             return None

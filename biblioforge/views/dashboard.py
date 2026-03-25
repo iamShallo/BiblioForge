@@ -1,6 +1,8 @@
 import time
+from io import BytesIO
 from urllib.parse import parse_qs, urlparse
 
+import pandas as pd
 import streamlit as st
 
 from biblioforge.controllers.pipeline_controller import BookNotFoundError, PipelineController
@@ -503,61 +505,16 @@ def render_excel_ingestion_box() -> None:
 
         if retry_clicked:
             progress = st.progress(0, text="Retry skipped in progress...")
-            resolved = 0
-            still_skipped = []
-            total = len(skipped_details)
+            def _on_retry_progress(processed: int, total: int) -> None:
+                pct = 0 if total == 0 else int((processed / total) * 100)
+                pct = max(0, min(pct, 100))
+                text = f"Retry skipped... {processed}/{total}" if total else "Retry skipped in progress..."
+                progress.progress(pct, text=text)
 
-            for idx, entry in enumerate(skipped_details, start=1):
-                entry_title = (entry.get("title") or "").strip()
-                entry_author = (entry.get("author") or "").strip()
-                entry_ean = str(entry.get("ean") or "").strip()
-                entry_publisher = (entry.get("publisher") or "").strip()
-                query_title = entry_title or entry_ean
-
-                pct = int((idx / total) * 100) if total else 100
-                progress.progress(pct, text=f"Retry skipped... {idx}/{total}")
-
-                if not query_title:
-                    entry_copy = entry.copy()
-                    entry_copy["reason"] = "Missing title/EAN for retry"
-                    still_skipped.append(entry_copy)
-                    continue
-
-                try:
-                    candidates = controller.find_candidates(
-                        query_title,
-                        entry_author or None,
-                        catalog_publisher=entry_publisher or None,
-                        catalog_ean=entry_ean or None,
-                    )
-
-                    if candidates:
-                        controller.ingest_selected_candidate(
-                            candidates[0],
-                            fallback_title=query_title,
-                            fallback_author=entry_author or None,
-                            catalog_ean=entry_ean or None,
-                            catalog_publisher=entry_publisher or None,
-                        )
-                        resolved += 1
-                        continue
-
-                    controller.ingest_raw_book(
-                        query_title,
-                        entry_author or None,
-                        catalog_ean=entry_ean or None,
-                        catalog_publisher=entry_publisher or None,
-                        allow_low_confidence=True,
-                    )
-                    resolved += 1
-                except BookNotFoundError as exc:
-                    entry_copy = entry.copy()
-                    entry_copy["reason"] = str(exc).split("\n")[0]
-                    still_skipped.append(entry_copy)
-                except Exception as exc:
-                    entry_copy = entry.copy()
-                    entry_copy["reason"] = f"Retry failed: {exc}"
-                    still_skipped.append(entry_copy)
+            resolved, still_skipped = controller.retry_skipped_entries(
+                skipped_details,
+                progress_callback=_on_retry_progress,
+            )
 
             progress.progress(100, text="Retry skipped completed")
             st.session_state["persisted_skipped_entries"] = still_skipped
@@ -566,6 +523,16 @@ def render_excel_ingestion_box() -> None:
             if still_skipped:
                 st.warning(f"Still unresolved: {len(still_skipped)} entries.")
             st.rerun()
+
+        skipped_df = _skipped_entries_to_dataframe(skipped_details)
+        skipped_excel = _to_excel_bytes(skipped_df, "skipped")
+        st.download_button(
+            label="Download Skipped List (Excel)",
+            data=skipped_excel,
+            file_name="biblioforge_skipped_list.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
 
         with st.expander(f"📋 View skipped entries ({len(skipped_details)} items)", expanded=True):
             st.subheader("Skipped Books")
@@ -600,6 +567,59 @@ def render_excel_ingestion_box() -> None:
             st.warning(f"Could not load report file: {e}")
 
 
+def _to_excel_bytes(dataframe: pd.DataFrame, sheet_name: str) -> bytes:
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        dataframe.to_excel(writer, index=False, sheet_name=sheet_name)
+    output.seek(0)
+    return output.getvalue()
+
+
+def _skipped_entries_to_dataframe(skipped_entries: list[dict]) -> pd.DataFrame:
+    rows = []
+    for entry in skipped_entries:
+        rows.append(
+            {
+                "index": entry.get("index"),
+                "title": entry.get("title"),
+                "author": entry.get("author"),
+                "ean": entry.get("ean"),
+                "publisher": entry.get("publisher"),
+                "reason": entry.get("reason"),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _approved_books_to_dataframe(approved_books: list[Book]) -> pd.DataFrame:
+    rows = []
+    for book in approved_books:
+        tags = ", ".join((book.insights.tags if book.insights else []) or [])
+        rows.append(
+            {
+                "id": book.id,
+                "title": book.normalized_title or book.raw_title,
+                "raw_title": book.raw_title,
+                "author": book.author,
+                "isbn": getattr(book, "isbn", None),
+                "isbn_10": getattr(book, "isbn_10", None),
+                "publication_year": getattr(book, "publication_year", None),
+                "published_date": getattr(book, "published_date", None),
+                "publisher": getattr(book, "publisher", None),
+                "catalog_publisher": getattr(book, "catalog_publisher", None),
+                "catalog_ean": getattr(book, "catalog_ean", None),
+                "catalog_quantity": getattr(book, "catalog_quantity", None),
+                "catalog_price": getattr(book, "catalog_price", None),
+                "average_rating": getattr(book, "average_rating", None),
+                "ratings_count": getattr(book, "ratings_count", 0),
+                "status": getattr(book.status, "value", None),
+                "tags": tags,
+                "summary": book.insights.summary if book.insights else None,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def render_final_db_list() -> None:
     st.markdown("### Final DB List")
     approved_books = controller.list_approved()
@@ -609,6 +629,17 @@ def render_final_db_list() -> None:
         return
 
     st.caption(f"Approved books: {len(approved_books)}")
+
+    approved_df = _approved_books_to_dataframe(approved_books)
+    approved_excel = _to_excel_bytes(approved_df, "final_db")
+    st.download_button(
+        label="Download Final DB (Excel)",
+        data=approved_excel,
+        file_name="biblioforge_final_db.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )
+
     with st.expander("Show/Hide final DB list", expanded=False):
         for idx, book in enumerate(approved_books, start=1):
             title = book.normalized_title or book.raw_title or "Unknown title"
