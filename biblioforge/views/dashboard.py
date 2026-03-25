@@ -612,6 +612,7 @@ def _approved_books_to_dataframe(approved_books: list[Book]) -> pd.DataFrame:
                 "catalog_price": getattr(book, "catalog_price", None),
                 "average_rating": getattr(book, "average_rating", None),
                 "ratings_count": getattr(book, "ratings_count", 0),
+                "cover_url": getattr(book, "cover_url", None),
                 "status": getattr(book.status, "value", None),
                 "tags": tags,
                 "summary": book.insights.summary if book.insights else None,

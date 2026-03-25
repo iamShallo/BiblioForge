@@ -124,10 +124,9 @@ def _build_story_summary(book: Book) -> str:
         if _word_count(candidate) >= 25:
             return candidate
 
-    return (
-        f"{title} introduce i personaggi principali e il conflitto di partenza, delineando ambientazione, "
-        "temi e posta in gioco senza rivelare snodi decisivi della trama."
-    )
+    # If no sufficient data was found, return the message about insufficient description
+    # instead of the generic template summary
+    return "Non è stata trovata una descrizione accurata per questo libro"
 
 
 def _tags_are_acceptable(tags: List[str]) -> bool:
