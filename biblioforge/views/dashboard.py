@@ -326,6 +326,7 @@ def render_editing_column(book: Book, pending_ids: list[str]) -> None:
         approved = controller.trust_process(progress_callback=_on_progress)
         progress_bar.progress(100, text="Process completed!")
         st.success(f"Process trusted: {approved} books saved to the final DB in one batch.")
+        st.rerun()
 
 
 def render_ingestion_box():
@@ -578,9 +579,20 @@ def render_excel_ingestion_box() -> None:
 
 
 def _to_excel_bytes(dataframe: pd.DataFrame, sheet_name: str) -> bytes:
+    excluded_columns = {
+        "id",
+        "raw_title",
+        "isbn_10",
+        "publisher",
+        "catalog_publisher",
+        "catalog_ean",
+        "ratings_count",
+        "status",
+    }
+    export_df = dataframe.drop(columns=[c for c in excluded_columns if c in dataframe.columns])
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        dataframe.to_excel(writer, index=False, sheet_name=sheet_name)
+        export_df.to_excel(writer, index=False, sheet_name=sheet_name)
     output.seek(0)
     return output.getvalue()
 
@@ -643,13 +655,23 @@ def render_final_db_list() -> None:
 
     approved_df = _approved_books_to_dataframe(approved_books)
     approved_excel = _to_excel_bytes(approved_df, "final_db")
-    st.download_button(
-        label="Download Final DB (Excel)",
-        data=approved_excel,
-        file_name="biblioforge_final_db.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-    )
+    clear_col, download_col = st.columns([1, 3])
+    with clear_col:
+        if st.button("Clear approved DB", key="clear-approved-finaldb", use_container_width=True):
+            if hasattr(controller, "clear_approved"):
+                removed = controller.clear_approved()
+            else:
+                removed = controller.approved_repository.clear_books()
+            st.success(f"Cleared {removed} books from the approved DB.")
+            st.rerun()
+    with download_col:
+        st.download_button(
+            label="Download Final DB (Excel)",
+            data=approved_excel,
+            file_name="biblioforge_final_db.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
 
     with st.expander("Show/Hide final DB list", expanded=False):
         for idx, book in enumerate(approved_books, start=1):
@@ -660,13 +682,31 @@ def render_final_db_list() -> None:
             rating = f"{book.average_rating:.2f}" if getattr(book, "average_rating", None) is not None else "-"
             tags = ", ".join((book.insights.tags if book.insights else [])[:6]) or "-"
 
-            with st.expander(f"{idx}. {title} - {author}", expanded=False):
-                st.markdown(f"**Title:** {title}")
-                st.markdown(f"**Author:** {author}")
-                st.markdown(f"**ISBN:** {isbn}")
-                st.markdown(f"**Year:** {year}")
-                st.markdown(f"**Rating:** {rating}")
-                st.markdown(f"**Tags:** {tags}")
+            row_left, row_right = st.columns([6, 1])
+            with row_right:
+                if st.button("X", key=f"final-remove-{book.id}", use_container_width=True):
+                    restored = controller.restore_from_approved(book.id)
+                    if restored:
+                        st.success("Book moved back to review queue.")
+                    else:
+                        st.error("Could not move the selected book back to the review queue.")
+                    st.rerun()
+
+            with row_left:
+                with st.expander(f"{idx}. {title} - {author}", expanded=False):
+                    top_left, top_right = st.columns([1, 3])
+                    with top_left:
+                        if getattr(book, "cover_url", None):
+                            st.image(bust_cache(book.cover_url, book.id), width=120)
+                        else:
+                            st.image("https://via.placeholder.com/120x180?text=No+Cover", width=120)
+                    with top_right:
+                        st.markdown(f"**Title:** {title}")
+                        st.markdown(f"**Author:** {author}")
+                        st.markdown(f"**ISBN:** {isbn}")
+                        st.markdown(f"**Year:** {year}")
+                        st.markdown(f"**Rating:** {rating}")
+                        st.markdown(f"**Tags:** {tags}")
 
 
 def main():
@@ -681,13 +721,6 @@ def main():
 
     summary_col, _ = st.columns([1, 3])
     summary_col.metric("Approved in final DB", len(controller.list_approved()))
-    if summary_col.button("Clear approved DB", use_container_width=True):
-        if hasattr(controller, "clear_approved"):
-            removed = controller.clear_approved()
-        else:
-            removed = controller.approved_repository.clear_books()
-        st.success(f"Cleared {removed} books from the approved DB.")
-        st.rerun()
 
     render_final_db_list()
 

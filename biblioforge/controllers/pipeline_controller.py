@@ -672,6 +672,17 @@ class PipelineController:
     def clear_approved(self) -> int:
         return self.approved_repository.clear_books()
 
+    def restore_from_approved(self, book_id: str) -> bool:
+        """Move a book from final DB back into the review queue."""
+        book = self.approved_repository.get_book(book_id)
+        if not book:
+            return False
+
+        book.status = BookStatus.TO_APPROVE
+        self.repository.upsert_book(book)
+        self.approved_repository.delete_book(book_id)
+        return True
+
     def trust_process(self, progress_callback: Optional[Callable[[int, int], None]] = None) -> int:
         pending = self.list_pending()
         total = len(pending)
@@ -712,7 +723,16 @@ class PipelineController:
         ean_candidates = ["Codice EAN", "EAN", "CodiceEAN", "Barcode", "Codice a barre"]
         publisher_candidates = ["Editore", "Publisher", "Casa Editrice"]
         quantity_candidates = ["Quantita", "Quantità", "Qta", "Stock", "Giacenza"]
-        price_candidates = ["Prezzo", "Price", "Prezzo vendita", "Prezzo listino"]
+        price_candidates = [
+            "Prezzo",
+            "Price",
+            "Prezzo vendita",
+            "Prezzo listino",
+            "PVP",
+            "Prezzo copertina",
+            "Importo",
+            "Costo",
+        ]
 
         def _env_truthy(name: str, default: bool = True) -> bool:
             raw = os.getenv(name)
@@ -847,10 +867,29 @@ class PipelineController:
                 return None
 
         def _to_float(value) -> Optional[float]:
+            if isinstance(value, (int, float)) and not pd.isna(value):
+                return float(value)
+
             text = _cell_to_text(value)
             if not text:
                 return None
-            normalized = text.replace("€", "").replace(" ", "").replace(".", "").replace(",", ".")
+
+            normalized = text.replace("€", "").replace("EUR", "").replace("eur", "")
+            normalized = re.sub(r"[^0-9,.-]", "", normalized)
+            if not normalized:
+                return None
+
+            # Heuristic parsing for both EU (1.234,56) and US (1,234.56) formats.
+            if "," in normalized and "." in normalized:
+                last_comma = normalized.rfind(",")
+                last_dot = normalized.rfind(".")
+                if last_comma > last_dot:
+                    normalized = normalized.replace(".", "").replace(",", ".")
+                else:
+                    normalized = normalized.replace(",", "")
+            elif "," in normalized:
+                normalized = normalized.replace(".", "").replace(",", ".")
+
             try:
                 return float(normalized)
             except ValueError:
