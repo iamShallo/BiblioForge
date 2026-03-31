@@ -17,23 +17,31 @@ from biblioforge.services.crawling_service import enrich_book, search_candidates
 from biblioforge.services.normalization_service import normalize_title
 
 
+# Eccezione custom per quando non riusciamo a trovare un libro
+# Custom exception when a book cannot be reliably resolved
 class BookNotFoundError(ValueError):
-    """Raised when enrichment cannot reliably resolve a book."""
+    pass
 
 
+# Orchestrator principale - gestisce tutto il flusso di ingestion/elaborazione
+# Main orchestrator - manages the entire book ingestion and enrichment pipeline
 class PipelineController:
-    """Coordinates cleaning, enrichment, AI, and persistence."""
 
     def __init__(self, storage_path: Optional[Path] = None) -> None:
+        # Setup dei percorsi delle cartelle di dati
+        # Setup data folder paths
         processed_dir = Path(__file__).resolve().parent.parent / "data" / "processed"
         cleaned_dir = Path(__file__).resolve().parent.parent / "data" / "cleaned"
         self.project_root = Path(__file__).resolve().parents[2]
         self.package_root = Path(__file__).resolve().parent.parent
+        
+        # Percorsi dei file JSON (uno per i libri in approvazione, uno per i finali)
         target = storage_path or processed_dir / "books.json"
         approved_target = processed_dir / "approved_books.json"
 
-        self.repository = BookRepository(target)
-        self.approved_repository = BookRepository(approved_target)
+        # Inizializza i repository (wrapper JSONattorno ai file)
+        self.repository = BookRepository(target)  # Books to approve
+        self.approved_repository = BookRepository(approved_target)  # Final approved books
         self.default_cleaned_excel_path = cleaned_dir / "books_cleaned.xlsx"
         self.last_import_skipped = 0
         self.last_import_skipped_details: List[dict] = []
@@ -62,7 +70,7 @@ class PipelineController:
 
     @staticmethod
     def _has_minimal_metadata(book: Book) -> bool:
-        """True only when enrichment produced externally useful metadata."""
+
         has_link = any(
             [
                 bool(getattr(book, "info_link", None)),
@@ -210,7 +218,6 @@ class PipelineController:
                 setattr(book, attr, None)
 
     async def _enrich_with_immediate_retry(self, book: Book) -> Book:
-        """Run enrichment and immediately retry once with refreshed catalog hints when metadata is poor."""
         first_pass = await enrich_book(book)
         if self._is_reliably_enriched(first_pass):
             return first_pass
@@ -241,7 +248,6 @@ class PipelineController:
         return second_pass if second_score >= first_score else first_pass
 
     def resolve_excel_path(self, excel_path: Optional[Union[Path, str]] = None) -> Path:
-        """Resolve Excel path from absolute or common relative locations."""
         if excel_path is None:
             return self.default_cleaned_excel_path
 
@@ -343,7 +349,6 @@ class PipelineController:
         catalog_quantity: Optional[int] = None,
         catalog_price: Optional[float] = None,
     ) -> Book:
-        """Ingest a user-selected candidate, preserving candidate metadata when enrichment is weak."""
         selected_title = (candidate.get("title") or fallback_title or "").strip()
         selected_author = (candidate.get("authors") or fallback_author or "").strip() or None
         if not selected_title:
@@ -407,7 +412,6 @@ class PipelineController:
         catalog_ean: Optional[str] = None,
         limit: int = 6,
     ) -> List[dict]:
-        """Return candidate matches for a raw query (title/author/publisher/ean)."""
         cleaned_author = (author or "").strip() or None
         normalized_catalog = normalize_catalog_entry(
             raw_title=raw_title,
@@ -479,7 +483,6 @@ class PipelineController:
         skipped_entries: List[dict],
         progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> tuple[int, List[dict]]:
-        """Retry skipped rows with bounded concurrency and batch persistence."""
         if not skipped_entries:
             return 0, []
 
@@ -613,7 +616,6 @@ class PipelineController:
         return asyncio.run(_retry_entries(skipped_entries))
     
     def _save_skipped_report(self, skipped_entries: List[dict]) -> str:
-        """Save skipped entries to a JSON report file."""
         reports_dir = self.project_root / "artifacts" / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
         
@@ -641,7 +643,6 @@ class PipelineController:
         return str(report_path)
     
     def get_last_skipped_report_path(self) -> Optional[str]:
-        """Get the path to the last generated skipped report."""
         return getattr(self, "last_import_skipped_report_path", None)
     
     def list_pending(self) -> List[Book]:
@@ -673,7 +674,6 @@ class PipelineController:
         return self.approved_repository.clear_books()
 
     def restore_from_approved(self, book_id: str) -> bool:
-        """Move a book from final DB back into the review queue."""
         book = self.approved_repository.get_book(book_id)
         if not book:
             return False
@@ -763,7 +763,6 @@ class PipelineController:
             return None
 
         def _fix_mojibake(text: str) -> str:
-            """Fix common mojibake (UTF-8 mis-decoded as Latin-1) and stray chars."""
             if not text:
                 return ""
 
@@ -1211,7 +1210,6 @@ class PipelineController:
         return self.approved_repository.list_books(BookStatus.APPROVED)
 
     def ensure_review_metadata(self, book_id: str) -> Optional[Book]:
-        """Ensure pending-review book has metadata on first opening, without manual reject."""
         book = self.repository.get_book(book_id)
         if not book:
             return None

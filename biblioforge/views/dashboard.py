@@ -40,7 +40,6 @@ st.markdown(
 
 
 def process_pending_approval() -> None:
-    """Run a queued approval (set in session) outside the form to avoid double clicks."""
     request = st.session_state.get("approve_request")
     if not request:
         return
@@ -86,7 +85,6 @@ def bust_cache(url: str, token: str) -> str:
 
 
 def _normalize_source_link(url: str) -> str:
-    """Normalize links so equivalent book pages are shown once in UI."""
     parsed = urlparse(url)
     query = parse_qs(parsed.query)
     book_id = (query.get("id") or [""])[0]
