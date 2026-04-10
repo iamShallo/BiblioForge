@@ -467,7 +467,7 @@ def render_editing_column(book: Book) -> None:
             st.session_state[f"show-remove-popup-{book.id}"] = True
             st.rerun()
         if reject:
-            with st.spinner("Rifiuto e rigenerazione in corso..."):
+            with st.spinner("Cerco i dati online..."):
                 updated = controller.reject_and_retry(book.id)
             if updated:
                 st.session_state["last_reject_message"] = "Libro rigenerato con una nuova analisi crawl+AI"
