@@ -1,5 +1,3 @@
-"""Google Books-backed crawling and enrichment, with Goodreads HTML scrape for ratings."""
-
 import asyncio
 import difflib
 import html
@@ -16,30 +14,42 @@ from biblioforge.models.book import Book, BookStatus, ReviewSample
 from biblioforge.services.normalization_service import normalize_title
 
 
+# URL dei servizi esterni (Google Books, Goodreads, OpenLibrary, Amazon)
+# External APIs for book data
 GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes"
 GOODREADS_SEARCH_URL = "https://www.goodreads.com/search"
 OPENLIBRARY_SEARCH_URL = "https://openlibrary.org/search.json"
 AMAZON_IT_SEARCH_URL = "https://www.amazon.it/s"
 
 
+# Normalizza il testo per il matching - rimuove accenti, punteggiatura, tutto minuscolo
+# Normalize text for fuzzy matching - remove accents, punctuation, lowercase
 def _normalize_for_match(text: Optional[str]) -> str:
     if not text:
         return ""
     lowered = str(text).strip().lower()
+    # NFKD = decomposizione di compatibilità
     lowered = unicodedata.normalize("NFKD", lowered)
+    # Rimuovi i diacritici (accenti, etc.)
     lowered = "".join(ch for ch in lowered if not unicodedata.combining(ch))
+    # Sostituisci punteggiatura con spazi
     lowered = re.sub(r"[^a-z0-9\s]", " ", lowered)
+    # Normalizza spazi
     lowered = re.sub(r"\s+", " ", lowered).strip()
     return lowered
 
 
+# Calcola la similarità tra due titoli - combina SequenceMatcher + token overlap
+# Compute similarity between two titles using both sequence matching and token overlap
 def _title_similarity(left: Optional[str], right: Optional[str]) -> float:
     l_norm = _normalize_for_match(left)
     r_norm = _normalize_for_match(right)
     if not l_norm or not r_norm:
         return 0.0
+    # SequenceMatcher è l'algoritmo di diff di Python (simile a Levenshtein)
     ratio = difflib.SequenceMatcher(None, l_norm, r_norm).ratio()
 
+    # Token overlap aiuta a recuperare dai titoli con parole scambiate o OCR noise
     # Token overlap helps recover from swapped words and OCR-like noise.
     l_tokens = set(l_norm.split())
     r_tokens = set(r_norm.split())
@@ -49,15 +59,16 @@ def _title_similarity(left: Optional[str], right: Optional[str]) -> float:
     return max(ratio, overlap)
 
 
+# Converte il voto medio (1-5) in rapporto positivo (0-1)
+# Convert average rating (1-5 stars) to positive ratio (0-1)
 def _compute_ratio(book: Book) -> Optional[float]:
-    """Derive positive ratio deterministically from available ratings."""
     if book.average_rating is not None:
+        # Normalizza: 5 stelle -> 1.0, 0 stelle -> 0.0
         return round(min(max(book.average_rating / 5, 0), 1), 3)
     return None
 
 
 def _compute_ratio_from_reviews(samples: List[ReviewSample]) -> Optional[float]:
-    """Compute ratio from collected review ratings when API ratings are missing."""
     ratings = [s.rating for s in samples if isinstance(getattr(s, "rating", None), (int, float))]
     if not ratings:
         return None
@@ -304,7 +315,6 @@ async def search_candidates(
     catalog_ean: Optional[str] = None,
     limit: int = 5,
 ) -> List[dict]:
-    """Return a short list of candidate books (title, author, link, cover)."""
 
     def _candidate_quality(item: dict) -> int:
         volume = item.get("volumeInfo", {}) if isinstance(item, dict) else {}
@@ -554,7 +564,6 @@ async def _fetch_goodreads_rating(
     author: Optional[str],
     book_url: Optional[str] = None,
 ) -> Tuple[Optional[float], int, Optional[str]]:
-    """Scrape Goodreads book page to extract average rating, rating count and description."""
 
     def _to_int(value: Optional[str]) -> int:
         if not value:
@@ -671,7 +680,6 @@ async def _fetch_goodreads_user_reviews(
     author: Optional[str],
     book_url: Optional[str] = None,
 ) -> List[ReviewSample]:
-    """Best-effort extraction of user-facing review snippets from Goodreads pages."""
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
@@ -752,11 +760,6 @@ async def _fetch_goodreads_user_reviews(
 
 
 async def _fetch_amazon_user_reviews(normalized_title: str, author: Optional[str], max_pages: int = 2) -> List[ReviewSample]:
-    """Best-effort extraction of user review snippets from Amazon product pages.
-
-    Note: Amazon may block scraping; failures should not break the pipeline.
-    max_pages controls pagination depth to gather more than a couple of reviews when available.
-    """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
@@ -857,7 +860,6 @@ async def _fetch_amazon_user_reviews(normalized_title: str, author: Optional[str
 
 
 async def _fetch_amazon_rating(normalized_title: str, author: Optional[str]) -> Tuple[Optional[float], Optional[int]]:
-    """Fetch average star rating and (approximate) count from Amazon search/review page."""
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
@@ -1019,10 +1021,6 @@ def _extract_metadata(item: dict, normalized_title: str) -> dict:
 
 
 def _build_cover_fallback(book: Book) -> str:
-    """Try deterministic cover sources before final placeholder.
-
-    Use OpenLibrary with default fallback so a valid image URL is always returned.
-    """
     isbn = _normalize_catalog_code(getattr(book, "isbn", None)) or ""
     isbn10 = _normalize_catalog_code(getattr(book, "isbn_10", None)) or ""
     ean = _normalize_catalog_code(getattr(book, "catalog_ean", None)) or ""
@@ -1134,7 +1132,6 @@ def _clean_review_text(text: Optional[str]) -> str:
 
 
 def _clean_user_review_text(text: Optional[str]) -> str:
-    """Clean user reviews preserving paragraph breaks for readability."""
     if not text:
         return ""
 
@@ -1419,7 +1416,6 @@ def _reviews_from_user_snippets(source: str, snippets: List[str], default_rating
 
 
 async def enrich_book(book: Book) -> Book:
-    """Enrich a book using Google Books plus Goodreads scrape; fallback to safe defaults."""
     try:
         discarded_examples: List[str] = []
         item = await _fetch_google_books(

@@ -1,5 +1,3 @@
-"""Gemini-powered insights generation with Pydantic validation and fallback."""
-
 import json
 import os
 import re
@@ -9,37 +7,38 @@ from uuid import uuid4
 import httpx
 from pydantic import BaseModel, ValidationError, Field
 
-from biblioforge.models.book import Book, BookInsights, BookStatus, TransparencyNote
+from biblioforge.models.book import Book, BookInsights, BookStatus
 from biblioforge.services.normalization_service import normalize_title
 
 
+# URL di Gemini per le richieste API
+# Google's Gemini 1.5 Flash endpoint for content generation
 GEMINI_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
     "gemini-1.5-flash-latest:generateContent"
 )
 
 
-class TransparencyNotePayload(BaseModel):
-    reason: str
-    detail: str
-
-
+# Modelli Pydantic per validare le risposte da Gemini (typesafe)
+# Pydantic models to validate Gemini responses
 class InsightsPayload(BaseModel):
-    summary: str
-    tags: List[str] = Field(default_factory=list)
-    rejected_information: List[TransparencyNotePayload] = Field(default_factory=list)
+    summary: str  # Riassunto generato
+    tags: List[str] = Field(default_factory=list)  # Tag editoriali
 
 
 class CatalogNormalizationPayload(BaseModel):
-    title: str
-    author: Optional[str] = None
-    publisher: Optional[str] = None
+    title: str  # Titolo pulito
+    author: Optional[str] = None  # Autore se rilevato
+    publisher: Optional[str] = None  # Editore se rilevato
 
 
+# Helper - conta le parole nel testo
 def _word_count(text: str) -> int:
     return len(re.findall(r"\b\w+\b", text or ""))
 
 
+# Controlla che il riassunto non contenga spoiler o informazioni scartate
+# Check if summary meets quality criteria (no spoilers, no metadata)
 def _summary_is_acceptable(summary: str) -> bool:
     lowered = (summary or "").lower()
     forbidden_markers = [
@@ -218,62 +217,12 @@ def _derive_tags(book: Book) -> List[str]:
     return ordered[:8]
 
 
-def _derive_rejected_information(book: Book) -> List[TransparencyNote]:
-    rejected: List[TransparencyNote] = []
-    discarded_examples: List[str] = list(getattr(book, "discarded_information_examples", []) or [])
-    if not book.review_samples:
-        rejected.append(
-            TransparencyNote(
-                reason="No direct user reviews",
-                detail="Excluded reader-opinion claims because no review samples were available.",
-            )
-        )
-    if not book.isbn:
-        rejected.append(
-            TransparencyNote(
-                reason="Missing ISBN",
-                detail="Dropped edition-specific details due to missing ISBN metadata.",
-            )
-        )
-    if not book.publication_year:
-        rejected.append(
-            TransparencyNote(
-                reason="Missing publication date",
-                detail="Removed historical placement claims that require a verified publication year.",
-            )
-        )
-    if not book.fetched_summary:
-        rejected.append(
-            TransparencyNote(
-                reason="Insufficient synopsis",
-                detail="Avoided plot-specific statements because no trusted summary was fetched.",
-            )
-        )
-    if discarded_examples:
-        for example in discarded_examples[:2]:
-            rejected.append(
-                TransparencyNote(
-                    reason="Promotional or noisy source removed",
-                    detail=f"Filtered low-quality source snippet. Removed example: \"{example}\"",
-                )
-            )
-    if not rejected:
-        rejected.append(
-            TransparencyNote(
-                reason="Marketing language filtered",
-                detail="Removed promotional wording to keep the report factual and source-grounded.",
-            )
-        )
-    return rejected[:6]
-
-
 def _fallback_insights(book: Book) -> BookInsights:
     summary_text = _build_story_summary(book)
 
     return BookInsights(
         summary=summary_text,
         tags=_derive_tags(book),
-        rejected_information=_derive_rejected_information(book),
     )
 
 
@@ -282,7 +231,6 @@ def _build_prompt(book: Book, regeneration_token: Optional[str] = None) -> str:
     return (
         "You are generating an editorial report for a book. "
         "Return JSON with keys: summary (string), tags (array of strings), "
-        "rejected_information (array of objects with reason and detail). "
         "Be concise; avoid opinions not grounded in provided inputs.\n"
         "Summary constraints: 70-140 words, spoiler-free, no ending reveal, no killer reveal, no final twist reveal.\n"
         "Write summary as a story synopsis focused on setup, central conflict, characters, and early narrative arc.\n"
@@ -359,11 +307,9 @@ def _parse_json_object(text: str) -> dict:
 def _parse_gemini_response(text: str) -> BookInsights:
     data = _parse_json_object(text)
     payload = InsightsPayload(**data)
-    rejected = [TransparencyNote(**item.dict()) for item in payload.rejected_information]
     return BookInsights(
         summary=payload.summary,
         tags=payload.tags,
-        rejected_information=rejected,
     )
 
 
@@ -480,7 +426,6 @@ def normalize_catalog_entry(
     raw_author: Optional[str] = None,
     raw_publisher: Optional[str] = None,
 ) -> dict:
-    """Normalize noisy catalog fields using Gemini, with deterministic fallback."""
     parsed_title, parsed_author = _extract_embedded_author(raw_title, raw_author)
     fallback = {
         "title": _simple_cleanup_title(parsed_title or raw_title, parsed_author or raw_author),
@@ -547,7 +492,6 @@ def generate_insights(
     regeneration_token: Optional[str] = None,
     previous_summary: Optional[str] = None,
 ) -> Book:
-    """Call Gemini; fall back to local heuristics on error."""
     api_key = os.getenv("GEMINI_API_KEY")
     insights = None
     if api_key:

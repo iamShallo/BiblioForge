@@ -7,27 +7,36 @@ from biblioforge.models.book import (
     BookInsights,
     BookStatus,
     ReviewSample,
-    TransparencyNote,
 )
 
 
+# Classe che gestisce il salvataggio e il caricamento dei libri da file JSON
+# Basically un wrapper attorno a un file JSON
+# Repository pattern - mantiene i dati in cache e li sincronizza con il disco
 class BookRepository:
-    """Simple JSON-backed repository for demo purposes."""
 
     def __init__(self, storage_path: Path) -> None:
+        # Creiamo il percorso e la cartella se non esiste
+        # Create the path and folder if it doesn't exist
         self.storage_path = Path(storage_path)
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+        # Carica i dati dal file JSON in memoria
+        # Load data from JSON file into memory
         self._cache: List[Book] = self._load()
 
     def _load(self) -> List[Book]:
+        # Se il file non esiste, ritorna lista vuota
         if not self.storage_path.exists():
             return []
         try:
+            # Legge il file JSON e lo converte in dizionari Python
             raw = json.loads(self.storage_path.read_text())
         except json.JSONDecodeError:
+            # Se il JSON è corrotto, non crasha tutto
             return []
         if not isinstance(raw, list):
             return []
+        # Converte ogni dizionario in un oggetto Book usando _dict_to_book
         return [self._dict_to_book(item) for item in raw if isinstance(item, dict)]
 
     def _persist(self) -> None:
@@ -35,17 +44,25 @@ class BookRepository:
         self.storage_path.write_text(json.dumps(payload, indent=2))
 
     def _refresh_from_disk(self) -> None:
-        """Reload cache to reflect external file edits while dashboard is running."""
+        # Ricarica la cache dal disco - utile se il file è stato modificato esternamente
+        # Refresh cache from disk - useful if file was modified externally (e.g., dashboard)
         self._cache = self._load()
 
     def list_books(self, status: Optional[BookStatus] = None) -> List[Book]:
+        # Ricarica dal disco prima di tornare i dati
         self._refresh_from_disk()
         if status is None:
+            # Se nessuno stato è specificato, ritorna tutti i libri
             return list(self._cache)
+        # Filtra solo i libri con lo stato richiesto
+        # Filter books by the requested status
         return [b for b in self._cache if b.status == status]
 
     def get_book(self, book_id: str) -> Optional[Book]:
+        # Cerca un libro per ID
+        # Find book by its unique ID
         self._refresh_from_disk()
+        # Usa 'next()' per trovare il primo (e unico) libro con quel ID
         return next((b for b in self._cache if b.id == book_id), None)
 
     def upsert_book(self, book: Book) -> Book:
@@ -58,23 +75,28 @@ class BookRepository:
         return book
 
     def upsert_many(self, books: List[Book]) -> int:
-        """Upsert a batch of books with a single disk write for speed."""
+        # upsert = update or insert. Se il libro esiste lo aggiorna, altrimenti lo aggiunge
         self._refresh_from_disk()
+        # Crea una mappa libro_id -> indice nella cache per cerca veloce
         cache_map = {b.id: idx for idx, b in enumerate(self._cache)}
         new_count = 0
         for book in books:
             idx = cache_map.get(book.id)
             if idx is not None:
+                # Aggiorna libro esistente
                 self._cache[idx] = book
             else:
+                # Aggiungi nuovo libro
                 cache_map[book.id] = len(self._cache)
                 self._cache.append(book)
                 new_count += 1
+        # Salva tutto una sola volta per velocità (instead of one write per book)
         if books:
             self._persist()
         return new_count
 
     def update_status(self, book_id: str, status: BookStatus) -> Optional[Book]:
+        # Aggiorna lo stato di un libro e lo salva
         self._refresh_from_disk()
         book = self.get_book(book_id)
         if not book:
@@ -84,14 +106,17 @@ class BookRepository:
         return book
 
     def clear_books(self, status: Optional[BookStatus] = None) -> int:
-        """Clear books from storage and return removed count."""
+        # Cancella i libri (tutti o solo quelli con un certo stato)
+        # Delete books by status (or all if status is None)
         self._refresh_from_disk()
         if status is None:
+            # Cancella tutto
             removed = len(self._cache)
             self._cache = []
             self._persist()
             return removed
 
+        # Altrimenti filtra e conserva solo i libri con status diverso
         original_len = len(self._cache)
         self._cache = [book for book in self._cache if book.status != status]
         removed = original_len - len(self._cache)
@@ -99,7 +124,6 @@ class BookRepository:
         return removed
 
     def delete_book(self, book_id: str) -> bool:
-        """Delete a single book by id and return whether it existed."""
         self._refresh_from_disk()
         original_len = len(self._cache)
         self._cache = [book for book in self._cache if book.id != book_id]
@@ -188,16 +212,6 @@ class BookRepository:
                     "forbidden texts, political schemes, and questions about faith and reason."
                 ),
                 tags=["Historical Fiction", "Mystery", "Medieval", "Philosophy", "Theology"],
-                rejected_information=[
-                    TransparencyNote(
-                        reason="Movie adaptation details",
-                        detail="Left out film references to focus on the book edition.",
-                    ),
-                    TransparencyNote(
-                        reason="Irrelevant plot digression",
-                        detail="Removed side anecdotes that do not change the investigation arc.",
-                    ),
-                ],
             ),
             status=BookStatus.TO_APPROVE,
         )
@@ -213,19 +227,12 @@ class BookRepository:
             if isinstance(item, dict):
                 reviews.append(ReviewSample(**item))
 
-        rejected: List[TransparencyNote] = []
         insights_data = data.get("insights") if isinstance(data.get("insights"), dict) else None
-        if insights_data:
-            for item in insights_data.get("rejected_information", []) or []:
-                if isinstance(item, dict):
-                    rejected.append(TransparencyNote(**item))
-
         insights = None
         if insights_data:
             insights = BookInsights(
                 summary=insights_data.get("summary", ""),
                 tags=list(insights_data.get("tags", [])),
-                rejected_information=rejected,
             )
         return Book(
             raw_title=data.get("raw_title", ""),

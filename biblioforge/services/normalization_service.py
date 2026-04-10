@@ -3,11 +3,15 @@ import unicodedata
 from typing import Optional
 
 
+# Fixe i problemi di encoding del testo (caratteri sporchi, quote strane)
+# Fix text encoding issues (weird quotes, mojibake from Latin-1 vs UTF-8)
 def _repair_text_noise(text: str) -> str:
     if not text:
         return ""
 
+    # Normalizza il testo Unicode (NFKC = compatibility decomposition)
     cleaned = unicodedata.normalize("NFKC", str(text))
+    # Sostituisce i caratteri quotation strani con quote normali
     replacements = {
         "Â«": '"',
         "Â»": '"',
@@ -28,6 +32,7 @@ def _repair_text_noise(text: str) -> str:
     for old, new in replacements.items():
         cleaned = cleaned.replace(old, new)
 
+    # Separa le parole incollate da errori OCR (es: "COSECaproni" -> "COSE Caproni")
     # Split glued words like "COSECaproni" that often come from OCR/encoding noise.
     cleaned = re.sub(r"\b([A-ZÀ-ÖØ-Ý]{3,})([A-Z][a-zà-öø-ÿ]+)\b", r"\1 \2", cleaned)
 
@@ -35,10 +40,13 @@ def _repair_text_noise(text: str) -> str:
     return cleaned
 
 
+# Rimuove l'autore dal titolo se è stato inserito insieme ("Titolo - Autore")
+# Remove author from title if it's been prepended/appended (e.g., "Title - Author")
 def _remove_embedded_author(title: str, author: Optional[str]) -> str:
     if not title or not author:
         return title
 
+    # Pulisci il testo dell'autore (rimuove spazi extra)
     # Remove common separators where the author is appended/prepended to title.
     author_text = re.sub(r"\s+", " ", author).strip(" -_\t\n")
     if not author_text:
@@ -79,17 +87,22 @@ def _strip_edition_noise(title: str) -> str:
     return cleaned
 
 
+# Funzione principale - normalizza il titolo rimuovendo tutti i noise
+# Main function - normalize title by removing all noise and irrelevant info
 def normalize_title(raw_title: Optional[str], author: Optional[str] = None) -> str:
-    """Create a search-friendly title by stripping noise."""
     if not raw_title:
         return ""
 
-    title = _repair_text_noise(raw_title)
-    # Remove decorative quotes around chunks while keeping the inner text.
+    # Applica le trasformazioni in sequenza
+    title = _repair_text_noise(raw_title)  # Fix encoding
+    # Rimuovi le virgolette decorative mantenendo il testo interno
     title = title.replace('"', " ")
+    # Rimuovi tutto quello che è tra parentesi/quadre (note del catalogo)
     title = re.sub(r"\([^)]*\)|\[[^]]*\]", "", title)  # remove bracketed notes
-    title = _strip_edition_noise(title)
+    title = _strip_edition_noise(title)  # Remove edition info
+    # Se l'autore era dentro il titolo, lo rimuove
     title = _remove_embedded_author(title, author)
+    # Normalizza gli spazi
     title = re.sub(r"\s+", " ", title)
     title = title.strip(" -_\t\n").strip()
-    return title.title()
+    return title.title()  # Uppercase first letter di ogni parola
