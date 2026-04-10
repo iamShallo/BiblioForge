@@ -197,6 +197,32 @@ st.markdown(
 )
 
 
+def render_centered_title_with_logo() -> None:
+    """Render centered title with logo image."""
+    import os
+    from pathlib import Path
+    
+    # Get the path to the logo
+    logo_path = Path(__file__).parent.parent / "imgs" / "Logo_Libreria.png"
+    
+    # Read and encode the image to base64
+    if logo_path.exists():
+        with open(logo_path, "rb") as img_file:
+            img_data = base64.b64encode(img_file.read()).decode()
+        
+        st.markdown(
+            f"""
+            <div style="display: flex; justify-content: center; align-items: center; gap: 20px; margin: 20px 0;">
+                <img src="data:image/png;base64,{img_data}" style="width: 250px; height: auto;">
+                <h1 style="margin: 0; font-size: 2.5rem;">La Cicogna Triste</h1>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.title("La Cicogna Triste")
+
+
 def process_pending_approval() -> None:
     """Run a queued approval (set in session) outside the form to avoid double clicks."""
     request = st.session_state.get("approve_request")
@@ -1203,7 +1229,7 @@ def main():
         current_view = current_view[0] if current_view else "dashboard"
 
     if current_view == "multi-sale":
-        st.title("La Cicogna Triste DB")
+        render_centered_title_with_logo()
         render_multi_sale_screen()
         return
 
@@ -1211,7 +1237,7 @@ def main():
     if "auto_metadata_checked_ids" not in st.session_state:
         st.session_state["auto_metadata_checked_ids"] = []
 
-    st.title("La Cicogna Triste DB")
+    render_centered_title_with_logo()
     left_ingest_col, right_ingest_col = st.columns(2)
     with left_ingest_col:
         render_ingestion_box()
