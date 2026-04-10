@@ -121,6 +121,76 @@ st.markdown(
         background: #991b1b;
         color: #ffffff !important;
     }
+    div[class*="st-key-edit-price-line-"] button {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        min-height: 1.2rem !important;
+        height: 1.2rem !important;
+        padding: 0 !important;
+        justify-content: flex-start !important;
+    }
+    div[class*="st-key-edit-price-line-"] button p {
+        font-size: 1.05rem !important;
+        margin: 0 !important;
+        line-height: 1.5 !important;
+        text-align: left !important;
+        text-decoration: underline !important;
+        text-underline-offset: 3px !important;
+        font-weight: 700 !important;
+    }
+    div[class*="st-key-edit-price-line-"] button:hover p {
+        color: #93c5fd !important;
+    }
+    div[class*="st-key-edit-price-form-"] {
+        border: 1px solid #2a3b57;
+        border-radius: 14px;
+        padding: 14px 14px 10px 14px;
+        background: linear-gradient(180deg, rgba(37, 99, 235, 0.12) 0%, rgba(15, 23, 42, 0.42) 100%);
+        margin-top: 8px;
+    }
+    div[class*="st-key-edit-price-form-"] label p {
+        font-weight: 700 !important;
+        letter-spacing: 0.2px;
+    }
+    div[class*="st-key-edit-price-form-"] div[data-baseweb="input"] {
+        border-radius: 12px !important;
+        border: 1px solid #3a4f74 !important;
+        background: rgba(8, 14, 28, 0.75) !important;
+    }
+    div[class*="st-key-edit-price-form-"] div[data-baseweb="input"] input {
+        font-size: 1.06rem !important;
+        font-weight: 700 !important;
+    }
+    div[class*="st-key-edit-price-form-"] div[data-testid="stFormSubmitButton"] button {
+        min-height: 2.6rem !important;
+        border-radius: 12px !important;
+        font-weight: 700 !important;
+        font-size: 1rem !important;
+        box-shadow: none !important;
+    }
+    div[class*="st-key-edit-price-form-"] div[data-testid="stHorizontalBlock"] > div:nth-child(1) div[data-testid="stFormSubmitButton"] button {
+        background: linear-gradient(90deg, #2563eb 0%, #1d4ed8 100%) !important;
+        color: #ffffff !important;
+        border: 1px solid #1e40af !important;
+    }
+    div[class*="st-key-edit-price-form-"] div[data-testid="stHorizontalBlock"] > div:nth-child(1) div[data-testid="stFormSubmitButton"] button p {
+        color: #ffffff !important;
+        font-size: 1rem !important;
+        font-weight: 700 !important;
+        line-height: 1.2 !important;
+    }
+    div[class*="st-key-edit-price-form-"] div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stFormSubmitButton"] button {
+        background: rgba(15, 23, 42, 0.72) !important;
+        color: #dbeafe !important;
+        border: 1px solid #475569 !important;
+    }
+    div[class*="st-key-edit-price-form-"] div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stFormSubmitButton"] button p {
+        color: #dbeafe !important;
+        font-size: 1rem !important;
+        font-weight: 700 !important;
+        line-height: 1.2 !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -232,8 +302,8 @@ def render_context_column(book: Book) -> None:
         metric_items.append(("Editore catalogo", str(catalog_publisher)))
     if catalog_quantity is not None:
         metric_items.append(("Quantita catalogo", str(catalog_quantity)))
-    if catalog_price is not None:
-        metric_items.append(("Prezzo catalogo", f"EUR {catalog_price:.2f}"))
+    price_text = f"EUR {catalog_price:.2f}" if catalog_price is not None else "N/D"
+    metric_items.append(("Prezzo catalogo", price_text))
 
     if book.publication_year:
         metric_items.append(("Anno edizione", str(book.publication_year)))
@@ -261,12 +331,50 @@ def render_context_column(book: Book) -> None:
     if metric_items:
         st.markdown("#### Metadati")
         left_meta, right_meta = st.columns(2)
+        edit_price_state_key = f"show-price-editor-{book.id}"
         for idx, (label, value) in enumerate(metric_items):
             target = left_meta if idx % 2 == 0 else right_meta
-            target.markdown(
-                f"<div class='meta-line'><span class='meta-label'>{label}:</span> {value}</div>",
-                unsafe_allow_html=True,
+            if label == "Prezzo catalogo":
+                if target.button(
+                    f"Prezzo catalogo: {value}",
+                    key=f"edit-price-line-{book.id}",
+                    help="Clicca per modificare il prezzo",
+                ):
+                    st.session_state[edit_price_state_key] = True
+            else:
+                target.markdown(
+                    f"<div class='meta-line'><span class='meta-label'>{label}:</span> {value}</div>",
+                    unsafe_allow_html=True,
+                )
+
+    if st.session_state.get(edit_price_state_key):
+        st.markdown("##### Modifica prezzo catalogo")
+        with st.form(key=f"edit-price-form-{book.id}"):
+            new_price = st.number_input(
+                "Nuovo prezzo catalogo (EUR)",
+                min_value=0.0,
+                value=float(catalog_price or 0.0),
+                step=0.5,
+                format="%.2f",
             )
+            save_col, cancel_col = st.columns(2)
+            save_price = save_col.form_submit_button("Salva", use_container_width=True)
+            cancel_price = cancel_col.form_submit_button("Annulla", use_container_width=True)
+
+        if cancel_price:
+            st.session_state.pop(edit_price_state_key, None)
+            st.rerun()
+
+        if save_price:
+            latest = controller.repository.get_book(book.id)
+            if latest is None:
+                st.error("Libro non trovato nel DB.")
+            else:
+                latest.catalog_price = float(new_price)
+                controller.repository.upsert_book(latest)
+                st.success(f"Prezzo catalogo aggiornato: EUR {float(new_price):.2f}")
+            st.session_state.pop(edit_price_state_key, None)
+            st.rerun()
 
     if categories:
         st.caption(f"Categorie: {', '.join(categories)}")
@@ -355,18 +463,20 @@ def render_editing_column(book: Book) -> None:
         add_quantity = col_remove.form_submit_button("+", use_container_width=True)
 
         if remove_with_price:
+            st.session_state.pop(f"show-quantity-popup-{book.id}", None)
             st.session_state[f"show-remove-popup-{book.id}"] = True
             st.rerun()
         if reject:
             with st.spinner("Rifiuto e rigenerazione in corso..."):
                 updated = controller.reject_and_retry(book.id)
             if updated:
-                st.session_state["last_reject_message"] = "Libro rifiutato e rigenerato con una nuova analisi crawl + AI."
+                st.session_state["last_reject_message"] = "Libro rigenerato con una nuova analisi crawl+AI"
                 st.rerun()
             else:
                 st.error("Rifiuto non riuscito: libro selezionato non trovato.")
 
         if add_quantity:
+            st.session_state.pop(f"show-remove-popup-{book.id}", None)
             st.session_state[f"show-quantity-popup-{book.id}"] = True
             st.rerun()
 
@@ -464,6 +574,7 @@ def render_editing_column(book: Book) -> None:
 
 def render_ingestion_box():
     st.markdown("### Aggiungi un libro manualmente")
+    st.caption("Oppure scannerizzalo con il codice a barre")
     if "show_isbn_ean_fallback" not in st.session_state:
         st.session_state["show_isbn_ean_fallback"] = False
     if "ingestion_error_message" not in st.session_state:
@@ -472,25 +583,26 @@ def render_ingestion_box():
         st.session_state["ingest_candidates"] = []
     if "ingest_input" not in st.session_state:
         st.session_state["ingest_input"] = {}
+    if "pending_manual_ingest" not in st.session_state:
+        st.session_state["pending_manual_ingest"] = None
 
     if st.session_state.get("ingestion_error_message"):
         st.error(st.session_state["ingestion_error_message"])
         st.session_state["ingestion_error_message"] = ""
 
-    default_title = st.session_state.get("last_failed_title", "The Name of the Rose")
+    default_title = st.session_state.get("last_failed_title", "")
     default_author = st.session_state.get("last_failed_author", "")
     default_catalog_code = st.session_state.get("last_failed_catalog_code", "")
-
     with st.form("ingestion-form"):
-        title = st.text_input("Titolo grezzo", value=default_title)
+        title = st.text_input("Titolo", value=default_title)
         author = st.text_input("Autore (opzionale)", value=default_author)
-        catalog_code = st.text_input("ISBN o EAN (opzionale)", value=default_catalog_code)
+        catalog_code = st.text_input("ISBN o EAN", value=default_catalog_code)
         st.caption("Puoi cercare per titolo, per ISBN/EAN, oppure combinando titolo + autore + ISBN/EAN.")
 
         if st.session_state.get("show_isbn_ean_fallback"):
             st.warning("Libro non trovato. Come ultima risorsa, inserisci ISBN o EAN per risolvere l'edizione esatta.")
 
-        submitted = st.form_submit_button("Trova corrispondenze")
+        submitted = st.form_submit_button("Aggiungi al Database")
         if submitted:
             st.session_state["ingestion_error_message"] = ""
             query_title = (title or "").strip() or (catalog_code or "").strip()
@@ -509,26 +621,17 @@ def render_ingestion_box():
             if candidates:
                 st.session_state["show_isbn_ean_fallback"] = False
             elif catalog_code:
-                try:
-                    book = controller.ingest_raw_book(
-                        query_title,
-                        author or None,
-                        catalog_ean=catalog_code or None,
-                    )
-                    st.success(f"Libro inserito in coda per la revisione: {book.normalized_title}")
-                    st.session_state["show_isbn_ean_fallback"] = False
-                    st.session_state["last_failed_title"] = "The Name of the Rose"
-                    st.session_state["last_failed_author"] = ""
-                    st.session_state["last_failed_catalog_code"] = ""
-                    st.session_state["ingest_candidates"] = []
-                    st.session_state["ingest_input"] = {}
-                except BookNotFoundError as exc:
-                    st.session_state["show_isbn_ean_fallback"] = True
-                    st.session_state["last_failed_title"] = title
-                    st.session_state["last_failed_author"] = author
-                    st.session_state["last_failed_catalog_code"] = catalog_code
-                    st.session_state["ingestion_error_message"] = str(exc)
-                    st.rerun()
+                existing = _find_existing_book_for_manual(query_title, author or None, catalog_code or None)
+                st.session_state["pending_manual_ingest"] = {
+                    "mode": "direct",
+                    "title": query_title,
+                    "author": author or None,
+                    "catalog_ean": catalog_code or None,
+                    "existing_book_id": existing.id if existing else None,
+                    "default_price": float(getattr(existing, "catalog_price", 0.0) or 0.0),
+                }
+                st.session_state["show_isbn_ean_fallback"] = False
+                st.rerun()
             else:
                 st.session_state["show_isbn_ean_fallback"] = True
                 st.session_state["last_failed_title"] = title
@@ -554,28 +657,115 @@ def render_ingestion_box():
             selected = candidates[choice] if isinstance(choice, int) and choice < len(candidates) else None
             sel_title = selected.get("title") if selected else ingest_input.get("title")
             sel_author = selected.get("authors") if selected else ingest_input.get("author")
-            try:
-                if selected:
-                    book = controller.ingest_selected_candidate(
-                        selected,
-                        fallback_title=ingest_input.get("title"),
-                        fallback_author=ingest_input.get("author"),
-                        catalog_ean=ingest_input.get("catalog_ean") or None,
-                    )
-                else:
-                    book = controller.ingest_raw_book(
-                        sel_title or ingest_input.get("title"),
-                        sel_author or None,
-                        catalog_ean=ingest_input.get("catalog_ean") or None,
-                        allow_low_confidence=True,
-                    )
-                st.success(f"Libro inserito in coda per la revisione: {book.normalized_title}")
+            existing = _find_existing_book_for_manual(
+                sel_title or ingest_input.get("title"),
+                sel_author or None,
+                ingest_input.get("catalog_ean") or None,
+            )
+            st.session_state["pending_manual_ingest"] = {
+                "mode": "candidate" if selected else "direct-fallback",
+                "selected": selected,
+                "fallback_title": ingest_input.get("title"),
+                "fallback_author": ingest_input.get("author"),
+                "title": sel_title or ingest_input.get("title"),
+                "author": sel_author or None,
+                "catalog_ean": ingest_input.get("catalog_ean") or None,
+                "existing_book_id": existing.id if existing else None,
+                "default_price": float(getattr(existing, "catalog_price", 0.0) or 0.0),
+            }
+            st.rerun()
+
+    pending = st.session_state.get("pending_manual_ingest")
+    if pending:
+        existing_book_id = pending.get("existing_book_id")
+        if existing_book_id:
+            existing = controller.repository.get_book(existing_book_id)
+            if existing and getattr(existing, "catalog_price", None) is not None:
+                current_qty = int(getattr(existing, "catalog_quantity", 0) or 0)
+                existing.catalog_quantity = current_qty + 1
+                controller.repository.upsert_book(existing)
+                st.session_state["last_manual_insert_message"] = (
+                    f"Libro inserito nel database: {existing.normalized_title or existing.raw_title} | Quantità aggiornata: {existing.catalog_quantity}"
+                )
+                st.session_state["selected_book_id"] = existing.id
+                st.session_state["pending_manual_ingest"] = None
                 st.session_state["show_isbn_ean_fallback"] = False
                 st.session_state["ingest_candidates"] = []
                 st.session_state["ingest_input"] = {}
-                st.session_state["last_failed_title"] = "The Name of the Rose"
+                st.session_state["last_failed_title"] = ""
                 st.session_state["last_failed_author"] = ""
                 st.session_state["last_failed_catalog_code"] = ""
+                st.rerun()
+
+        with st.form("manual-price-before-insert"):
+            st.markdown("### Prezzo di vendita")
+            sale_price = st.number_input(
+                "Inserisci il prezzo di vendita (EUR)",
+                min_value=0.01,
+                value=float(pending.get("default_price") or 0.0) or 0.01,
+                step=0.5,
+                format="%.2f",
+            )
+            confirm_col, cancel_col = st.columns(2)
+            confirm_insert = confirm_col.form_submit_button("Conferma inserimento", use_container_width=True)
+            cancel_insert = cancel_col.form_submit_button("Annulla", use_container_width=True)
+
+        if cancel_insert:
+            st.session_state["pending_manual_ingest"] = None
+            st.rerun()
+
+        if confirm_insert:
+            try:
+                mode = pending.get("mode")
+                existing_book_id = pending.get("existing_book_id")
+                if existing_book_id:
+                    latest = controller.repository.get_book(existing_book_id)
+                    if not latest:
+                        st.error("Libro non trovato nel DB.")
+                        st.session_state["pending_manual_ingest"] = None
+                        st.rerun()
+
+                    current_qty = int(getattr(latest, "catalog_quantity", 0) or 0)
+                    latest.catalog_quantity = current_qty + 1
+                    if getattr(latest, "catalog_price", None) is None:
+                        latest.catalog_price = float(sale_price)
+                    controller.repository.upsert_book(latest)
+                    st.session_state["last_manual_insert_message"] = (
+                        f"Libro inserito nel database: {latest.normalized_title or latest.raw_title} | Quantità aggiornata: {latest.catalog_quantity}"
+                    )
+                    st.session_state["selected_book_id"] = latest.id
+                else:
+                    if mode == "candidate" and pending.get("selected") is not None:
+                        book = controller.ingest_selected_candidate(
+                            pending.get("selected"),
+                            fallback_title=pending.get("fallback_title"),
+                            fallback_author=pending.get("fallback_author"),
+                            catalog_ean=pending.get("catalog_ean") or None,
+                            catalog_quantity=1,
+                            catalog_price=float(sale_price),
+                        )
+                    else:
+                        book = controller.ingest_raw_book(
+                            pending.get("title") or "",
+                            pending.get("author") or None,
+                            catalog_ean=pending.get("catalog_ean") or None,
+                            catalog_quantity=1,
+                            catalog_price=float(sale_price),
+                            allow_low_confidence=(mode == "direct-fallback"),
+                        )
+
+                    st.session_state["last_manual_insert_message"] = (
+                        f"Libro inserito nel database: {book.normalized_title} | Prezzo vendita: EUR {float(sale_price):.2f}"
+                    )
+                    st.session_state["selected_book_id"] = book.id
+                st.session_state["pending_manual_ingest"] = None
+                st.session_state["show_isbn_ean_fallback"] = False
+                st.session_state["ingest_candidates"] = []
+                st.session_state["ingest_input"] = {}
+                st.session_state["last_failed_title"] = ""
+                st.session_state["last_failed_author"] = ""
+                st.session_state["last_failed_catalog_code"] = ""
+                st.rerun()
             except BookNotFoundError as exc:
                 st.session_state["ingestion_error_message"] = str(exc)
                 st.rerun()
@@ -771,6 +961,157 @@ def _approved_books_to_dataframe(approved_books: list[Book]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _normalize_code(value: str | None) -> str:
+    if not value:
+        return ""
+    return "".join(ch for ch in str(value).upper() if ch.isalnum())
+
+
+def _find_book_by_isbn(code: str) -> Book | None:
+    needle = _normalize_code(code)
+    if not needle:
+        return None
+
+    for candidate in controller.repository.list_books():
+        values = [
+            getattr(candidate, "isbn", None),
+            getattr(candidate, "isbn_10", None),
+            getattr(candidate, "catalog_ean", None),
+        ]
+        if any(_normalize_code(v) == needle for v in values if v):
+            return candidate
+    return None
+
+
+def _find_existing_book_for_manual(title: str | None, author: str | None, catalog_ean: str | None) -> Book | None:
+    existing_by_code = _find_book_by_isbn(catalog_ean or "")
+    if existing_by_code is not None:
+        return existing_by_code
+
+    canonical_title = normalize_title((title or "").strip(), (author or "").strip() or None)
+    if not canonical_title:
+        return None
+
+    author_norm = (author or "").strip().casefold()
+    for candidate in controller.repository.list_books():
+        cand_title = normalize_title(
+            (candidate.raw_title or candidate.normalized_title or "").strip(),
+            (candidate.author or "").strip() or None,
+        )
+        if cand_title != canonical_title:
+            continue
+        cand_author = (candidate.author or "").strip().casefold()
+        if author_norm and cand_author and author_norm != cand_author:
+            continue
+        return candidate
+
+    return None
+
+
+def render_multi_sale_screen() -> None:
+    st.markdown("## Vendita multipla")
+    st.caption("Inserisci/scansiona ISBN per aggiungere libri alla vendita.")
+
+    if st.session_state.get("last_multi_sale_message"):
+        st.success(st.session_state["last_multi_sale_message"])
+        st.session_state["last_multi_sale_message"] = ""
+
+    if "multi_sale_cart" not in st.session_state:
+        st.session_state["multi_sale_cart"] = {}
+
+    with st.form("multi-sale-isbn-form"):
+        scanned_isbn = st.text_input("ISBN (scanner codice a barre)")
+        add_item = st.form_submit_button("Aggiungi", use_container_width=True)
+
+    if add_item:
+        found = _find_book_by_isbn(scanned_isbn)
+        if not found:
+            st.error("ISBN non trovato nel DB.")
+        else:
+            cart = dict(st.session_state.get("multi_sale_cart", {}))
+            current_in_catalog = int(getattr(found, "catalog_quantity", 0) or 0)
+            current_in_cart = int(cart.get(found.id, 0) or 0)
+            proposed_qty = current_in_cart + 1
+
+            if proposed_qty > current_in_catalog:
+                st.error("Quantità richiesta non presente nel catalogo.")
+            else:
+                cart[found.id] = proposed_qty
+                st.session_state["multi_sale_cart"] = cart
+                st.success(f"Aggiunto: {found.normalized_title or found.raw_title}")
+
+    cart = dict(st.session_state.get("multi_sale_cart", {}))
+    if cart:
+        st.markdown("### Elenco vendita")
+        total = 0.0
+
+        for book_id, qty in list(cart.items()):
+            book = controller.repository.get_book(book_id)
+            if not book:
+                cart.pop(book_id, None)
+                continue
+
+            unit_price = float(getattr(book, "catalog_price", 0.0) or 0.0)
+            line_total = unit_price * int(qty)
+            total += line_total
+
+            img_col, line_col, qty_col, del_col = st.columns([1, 5, 2, 1])
+            with img_col:
+                if getattr(book, "cover_url", None):
+                    st.image(bust_cache(book.cover_url, book.id), width=54)
+                else:
+                    st.image("https://via.placeholder.com/54x80?text=No+Cover", width=54)
+            line_col.markdown(f"**{book.normalized_title or book.raw_title}**")
+            line_col.caption(book.author or "Autore sconosciuto")
+            qty_col.caption(f"Qta {int(qty)} | EUR {unit_price:.2f}")
+            if del_col.button("X", key=f"multi-sale-delete-{book_id}"):
+                cart.pop(book_id, None)
+                st.session_state["multi_sale_cart"] = cart
+                st.rerun()
+
+        st.session_state["multi_sale_cart"] = cart
+        st.markdown(f"### Totale vendita: EUR {total:.2f}")
+
+        confirm_col, clear_col = st.columns(2)
+        confirm_sale = confirm_col.button("Conferma", use_container_width=True)
+        clear_sale = clear_col.button("Svuota", use_container_width=True)
+
+        if clear_sale:
+            st.session_state["multi_sale_cart"] = {}
+            st.rerun()
+
+        if confirm_sale:
+            invalid_items = []
+            for book_id, qty in cart.items():
+                latest = controller.repository.get_book(book_id)
+                if not latest:
+                    continue
+                current_qty = int(getattr(latest, "catalog_quantity", 0) or 0)
+                if int(qty) > current_qty:
+                    invalid_items.append(latest.normalized_title or latest.raw_title)
+
+            if invalid_items:
+                st.error("Quantità richiesta non presente nel catalogo.")
+                return
+
+            for book_id, qty in cart.items():
+                latest = controller.repository.get_book(book_id)
+                if not latest:
+                    continue
+                current_qty = int(getattr(latest, "catalog_quantity", 0) or 0)
+                new_qty = current_qty - int(qty)
+                if new_qty < 1:
+                    controller.repository.delete_book(book_id)
+                else:
+                    latest.catalog_quantity = new_qty
+                    controller.repository.upsert_book(latest)
+            st.session_state["multi_sale_cart"] = {}
+            st.session_state["last_multi_sale_message"] = "Vendita multipla registrata."
+            st.rerun()
+
+    st.markdown("[Torna alla dashboard](?view=dashboard)")
+
+
 def render_floating_final_db_download_button() -> None:
     queue_books = controller.list_pending()
     queue_df = _approved_books_to_dataframe(queue_books)
@@ -784,7 +1125,7 @@ def render_floating_final_db_download_button() -> None:
                download="LaCicognaTristeDB.xlsx">
                Download Excel DB
             </a>
-            <button type="button" class="floating-multi-btn">Vendita multipla</button>
+            <a class="floating-multi-btn" href="?view=multi-sale">Vendita multipla</a>
         </div>
         """,
         unsafe_allow_html=True,
@@ -857,11 +1198,20 @@ def render_final_db_list() -> None:
 
 
 def main():
+    current_view = st.query_params.get("view", "dashboard")
+    if isinstance(current_view, list):
+        current_view = current_view[0] if current_view else "dashboard"
+
+    if current_view == "multi-sale":
+        st.title("La Cicogna Triste DB")
+        render_multi_sale_screen()
+        return
+
     process_pending_approval()
     if "auto_metadata_checked_ids" not in st.session_state:
         st.session_state["auto_metadata_checked_ids"] = []
 
-    st.title("La Cicogna Triste")
+    st.title("La Cicogna Triste DB")
     left_ingest_col, right_ingest_col = st.columns(2)
     with left_ingest_col:
         render_ingestion_box()
@@ -875,6 +1225,10 @@ def main():
     if st.session_state.get("last_approve_message"):
         st.success(st.session_state["last_approve_message"])
         st.session_state["last_approve_message"] = ""
+
+    if st.session_state.get("last_manual_insert_message"):
+        st.success(st.session_state["last_manual_insert_message"])
+        st.session_state["last_manual_insert_message"] = ""
 
     pending = controller.list_pending()
     if not pending:
