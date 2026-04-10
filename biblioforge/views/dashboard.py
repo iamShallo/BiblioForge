@@ -1,5 +1,7 @@
 import time
+import json
 from io import BytesIO
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
@@ -11,6 +13,7 @@ from biblioforge.services.normalization_service import normalize_title
 
 
 controller = PipelineController()
+SKIPPED_STATE_FILE = Path(__file__).resolve().parent.parent / "data" / "processed" / "last_skipped_state.json"
 st.set_page_config(page_title="BiblioForge", layout="wide")
 st.markdown(
     """
@@ -450,10 +453,10 @@ def render_ingestion_box():
 
 def render_excel_ingestion_box() -> None:
     st.markdown("### Import from Excel")
-    if "persisted_skipped_entries" not in st.session_state:
-        st.session_state["persisted_skipped_entries"] = []
-    if "persisted_skipped_report_path" not in st.session_state:
-        st.session_state["persisted_skipped_report_path"] = None
+    if "persisted_skipped_entries" not in st.session_state or "persisted_skipped_report_path" not in st.session_state:
+        persisted_entries, persisted_report_path = _load_skipped_state()
+        st.session_state.setdefault("persisted_skipped_entries", persisted_entries)
+        st.session_state.setdefault("persisted_skipped_report_path", persisted_report_path)
 
     default_path = "biblioforge/data/cleaned/books_cleaned.xlsx"
     excel_path_input = st.text_input("Excel path", value=default_path)
@@ -491,6 +494,10 @@ def render_excel_ingestion_box() -> None:
                 "last_import_skipped_report_path",
                 None,
             )
+            _save_skipped_state(
+                st.session_state["persisted_skipped_entries"],
+                st.session_state["persisted_skipped_report_path"],
+            )
             
             timer_placeholder.success(f"⏱️ Import completed in {format_duration(time.perf_counter() - start)}")
         except Exception as exc:
@@ -512,6 +519,7 @@ def render_excel_ingestion_box() -> None:
         if top_right.button("Clear skipped list", use_container_width=True):
             st.session_state["persisted_skipped_entries"] = []
             st.session_state["persisted_skipped_report_path"] = None
+            _clear_skipped_state()
             st.rerun()
 
         if retry_clicked:
@@ -529,6 +537,10 @@ def render_excel_ingestion_box() -> None:
 
             progress.progress(100, text="Retry skipped completed")
             st.session_state["persisted_skipped_entries"] = still_skipped
+            _save_skipped_state(
+                st.session_state["persisted_skipped_entries"],
+                st.session_state.get("persisted_skipped_report_path"),
+            )
             if resolved:
                 st.success(f"Retry completed: resolved {resolved} entries.")
             if still_skipped:
@@ -576,6 +588,43 @@ def render_excel_ingestion_box() -> None:
                 )
         except Exception as e:
             st.warning(f"Could not load report file: {e}")
+
+
+def _load_skipped_state() -> tuple[list[dict], str | None]:
+    if not SKIPPED_STATE_FILE.exists():
+        return [], None
+    try:
+        payload = json.loads(SKIPPED_STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return [], None
+    if not isinstance(payload, dict):
+        return [], None
+    entries = payload.get("entries")
+    report_path = payload.get("report_path")
+    if not isinstance(entries, list):
+        entries = []
+    if report_path is not None and not isinstance(report_path, str):
+        report_path = None
+    return entries, report_path
+
+
+def _save_skipped_state(entries: list[dict], report_path: str | None) -> None:
+    try:
+        SKIPPED_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        SKIPPED_STATE_FILE.write_text(
+            json.dumps({"entries": entries, "report_path": report_path}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+
+def _clear_skipped_state() -> None:
+    try:
+        if SKIPPED_STATE_FILE.exists():
+            SKIPPED_STATE_FILE.unlink()
+    except Exception:
+        pass
 
 
 def _to_excel_bytes(dataframe: pd.DataFrame, sheet_name: str) -> bytes:
