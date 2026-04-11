@@ -1,5 +1,6 @@
 import time
 import json
+import tempfile
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -456,15 +457,23 @@ def render_excel_ingestion_box() -> None:
         st.session_state.setdefault("persisted_skipped_entries", persisted_entries)
         st.session_state.setdefault("persisted_skipped_report_path", persisted_report_path)
 
-    default_path = "biblioforge/data/cleaned/books_cleaned.xlsx"
-    excel_path_input = st.text_input("Excel path", value=default_path)
-    resolved_path = controller.resolve_excel_path(excel_path_input)
-    st.caption(f"Resolved import source: {resolved_path}")
-    if not resolved_path.exists():
-        st.warning("Excel path does not exist. Update the path before importing.")
+    uploaded_excel = st.file_uploader(
+        "Drag and drop Excel file here, or click to browse",
+        type=["xlsx", "xls"],
+        accept_multiple_files=False,
+        key="excel-import-uploader",
+    )
+    if uploaded_excel is not None:
+        st.caption(f"Selected file: {uploaded_excel.name}")
+
     timer_placeholder = st.empty()
     progress_placeholder = st.empty()
-    if st.button("Load into review queue", use_container_width=True):
+    submitted = st.button(
+        "Load into review queue",
+        use_container_width=True,
+        disabled=uploaded_excel is None,
+    )
+    if submitted:
         start = time.perf_counter()
         timer_placeholder.info("⏱️ Import in progress...")
         progress_bar = progress_placeholder.progress(0, text="Preparing import...")
@@ -476,7 +485,15 @@ def render_excel_ingestion_box() -> None:
             progress_bar.progress(pct, text=text)
 
         try:
-            total = controller.ingest_books_from_excel(excel_path_input, progress_callback=_on_progress)
+            if uploaded_excel is None:
+                raise FileNotFoundError("No Excel file selected.")
+
+            suffix = Path(uploaded_excel.name).suffix or ".xlsx"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+                tmp_file.write(uploaded_excel.getbuffer())
+                import_source = tmp_file.name
+
+            total = controller.ingest_books_from_excel(import_source, progress_callback=_on_progress)
             progress_bar.progress(100, text="Import completed")
             st.success(f"Imported {total} books into review queue.")
             if getattr(controller, "last_import_skipped", 0):
@@ -496,6 +513,11 @@ def render_excel_ingestion_box() -> None:
                 st.session_state["persisted_skipped_entries"],
                 st.session_state["persisted_skipped_report_path"],
             )
+
+            try:
+                Path(import_source).unlink(missing_ok=True)
+            except Exception:
+                pass
             
             timer_placeholder.success(f"⏱️ Import completed in {format_duration(time.perf_counter() - start)}")
         except Exception as exc:
