@@ -1,10 +1,12 @@
 import time
 import base64
+import json
 from io import BytesIO
 from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from biblioforge.controllers.pipeline_controller import BookNotFoundError, PipelineController
 from biblioforge.models.book import Book, BookStatus
@@ -197,6 +199,140 @@ st.markdown(
 )
 
 
+def focus_text_input(label: str) -> None:
+    escaped_label = json.dumps(label)
+    components.html(
+        f"""
+        <script>
+        (function() {{
+            const focusField = () => {{
+                const label = {escaped_label};
+                const input = window.parent.document.querySelector('input[aria-label="' + label + '"]');
+                if (input) {{
+                    input.focus();
+                    if (typeof input.select === 'function') {{
+                        input.select();
+                    }}
+                }}
+            }};
+            focusField();
+            setTimeout(focusField, 150);
+        }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
+def focus_and_autoblur_isbn_input(label: str, should_focus: bool = False) -> None:
+    escaped_label = json.dumps(label)
+    components.html(
+        f"""
+        <script>
+        (function() {{
+            const install = () => {{
+                const label = {escaped_label};
+                const selector = 'input[aria-label="' + label + '"]';
+                const input = window.parent.document.querySelector(selector);
+                if (!input) {{
+                    return false;
+                }}
+                if ({'true' if should_focus else 'false'}) {{
+                    input.focus();
+                    if (typeof input.select === 'function') {{
+                        input.select();
+                    }}
+                }}
+                return true;
+            }};
+            let attempts = 0;
+            const keepFocused = setInterval(() => {{
+                attempts += 1;
+                const found = install();
+                if (attempts >= 240 || found) {{
+                    clearInterval(keepFocused);
+                }}
+            }}, 250);
+        }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
+def ensure_isbn_auto_trigger(label: str) -> None:
+    escaped_label = json.dumps(label)
+    components.html(
+        f"""
+        <script>
+        (function() {{
+            const parentWindow = window.parent;
+            const label = {escaped_label};
+            const selector = 'input[aria-label="' + label + '"]';
+
+            if (!parentWindow.__biblioforgeIsbnWatchers) {{
+                parentWindow.__biblioforgeIsbnWatchers = {{}};
+            }}
+
+            const existing = parentWindow.__biblioforgeIsbnWatchers[label];
+            if (existing) {{
+                clearInterval(existing);
+            }}
+
+            const triggerIfReady = (input) => {{
+                if (!input) {{
+                    return;
+                }}
+                const normalized = (input.value || '').replace(/[^0-9A-Za-z]/g, '');
+                const lastSent = input.dataset.biblioforgeLastSubmittedIsbn || '';
+                if (normalized.length >= 12) {{
+                    if (lastSent !== normalized) {{
+                        input.dataset.biblioforgeLastSubmittedIsbn = normalized;
+                        input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                        input.blur();
+                    }}
+                }} else {{
+                    input.dataset.biblioforgeLastSubmittedIsbn = '';
+                }}
+            }};
+
+            const tick = () => {{
+                const input = parentWindow.document.querySelector(selector);
+                if (!input) {{
+                    return;
+                }}
+                if (input.dataset.biblioforgeIsbnImmediateInstalled !== '1') {{
+                    input.dataset.biblioforgeIsbnImmediateInstalled = '1';
+                    input.addEventListener('input', () => triggerIfReady(input));
+                    input.addEventListener('paste', () => setTimeout(() => triggerIfReady(input), 0));
+                }}
+                triggerIfReady(input);
+            }};
+
+            parentWindow.__biblioforgeIsbnWatchers[label] = setInterval(tick, 40);
+            tick();
+        }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
+def request_isbn_refocus(scope: str) -> None:
+    st.session_state[f"{scope}_isbn_refocus"] = True
+    st.session_state[f"{scope}_isbn_refocus_until"] = time.time() + 60
+
+
+def render_isbn_refocus(scope: str, label: str) -> None:
+    refocus_until = float(st.session_state.get(f"{scope}_isbn_refocus_until", 0) or 0)
+    if st.session_state.pop(f"{scope}_isbn_refocus", False) or refocus_until >= time.time():
+        focus_and_autoblur_isbn_input(label, should_focus=True)
+        st.session_state[f"{scope}_isbn_refocus_until"] = max(refocus_until, time.time() + 10)
+
+
 def render_centered_title_with_logo() -> None:
     """Render centered title with logo image."""
     import os
@@ -291,7 +427,7 @@ def status_label(status: BookStatus) -> str:
 
 
 def render_context_column(book: Book) -> None:
-    st.markdown("### Contesto e dati estratti")
+    st.markdown("### Libro e dati estratti")
     first_publish_year = getattr(book, "first_publish_year", None)
     published_date = getattr(book, "published_date", None)
     isbn_10 = getattr(book, "isbn_10", None)
@@ -465,7 +601,6 @@ def render_context_column(book: Book) -> None:
 
 
 def render_editing_column(book: Book) -> None:
-    st.markdown("### Modifica report")
     if not book.insights:
         st.warning("Nessun insight AI disponibile per questo libro.")
         return
@@ -611,6 +746,8 @@ def render_ingestion_box():
         st.session_state["ingest_input"] = {}
     if "pending_manual_ingest" not in st.session_state:
         st.session_state["pending_manual_ingest"] = None
+    if "manual_isbn_refocus" not in st.session_state:
+        st.session_state["manual_isbn_refocus"] = True
 
     if st.session_state.get("ingestion_error_message"):
         st.error(st.session_state["ingestion_error_message"])
@@ -619,54 +756,103 @@ def render_ingestion_box():
     default_title = st.session_state.get("last_failed_title", "")
     default_author = st.session_state.get("last_failed_author", "")
     default_catalog_code = st.session_state.get("last_failed_catalog_code", "")
-    with st.form("ingestion-form"):
-        title = st.text_input("Titolo", value=default_title)
-        author = st.text_input("Autore (opzionale)", value=default_author)
-        catalog_code = st.text_input("ISBN o EAN", value=default_catalog_code)
-        st.caption("Puoi cercare per titolo, per ISBN/EAN, oppure combinando titolo + autore + ISBN/EAN.")
+    def process_manual_ingestion(force: bool = False) -> None:
+        title = (st.session_state.get("manual_ingest_title") or "").strip()
+        author = (st.session_state.get("manual_ingest_author") or "").strip()
+        catalog_code = (st.session_state.get("manual_ingest_catalog_code") or "").strip()
 
-        if st.session_state.get("show_isbn_ean_fallback"):
-            st.warning("Libro non trovato. Come ultima risorsa, inserisci ISBN o EAN per risolvere l'edizione esatta.")
+        if not force and not catalog_code:
+            return
 
-        submitted = st.form_submit_button("Aggiungi al Database")
-        if submitted:
-            st.session_state["ingestion_error_message"] = ""
-            query_title = (title or "").strip() or (catalog_code or "").strip()
-            candidates = controller.find_candidates(
-                query_title,
-                author or None,
-                catalog_publisher=None,
-                catalog_ean=catalog_code or None,
-            )
-            st.session_state["ingest_candidates"] = candidates
-            st.session_state["ingest_input"] = {
-                "title": title,
-                "author": author,
-                "catalog_ean": catalog_code,
+        st.session_state["ingestion_error_message"] = ""
+        query_title = title or catalog_code
+        existing = _find_existing_book_for_manual(query_title, author or None, catalog_code or None)
+        if catalog_code and existing is not None:
+            st.session_state["pending_manual_ingest"] = {
+                "mode": "direct",
+                "title": query_title,
+                "author": author or None,
+                "catalog_ean": catalog_code or None,
+                "existing_book_id": existing.id,
+                "default_price": float(getattr(existing, "catalog_price", 0.0) or 0.0),
             }
-            if candidates:
-                st.session_state["show_isbn_ean_fallback"] = False
-            elif catalog_code:
-                existing = _find_existing_book_for_manual(query_title, author or None, catalog_code or None)
-                st.session_state["pending_manual_ingest"] = {
-                    "mode": "direct",
-                    "title": query_title,
-                    "author": author or None,
-                    "catalog_ean": catalog_code or None,
-                    "existing_book_id": existing.id if existing else None,
-                    "default_price": float(getattr(existing, "catalog_price", 0.0) or 0.0),
-                }
-                st.session_state["show_isbn_ean_fallback"] = False
-                st.rerun()
-            else:
-                st.session_state["show_isbn_ean_fallback"] = True
-                st.session_state["last_failed_title"] = title
-                st.session_state["last_failed_author"] = author
-                st.session_state["last_failed_catalog_code"] = catalog_code
-                st.session_state["ingestion_error_message"] = (
-                    "Nessun candidato trovato. Aggiungi autore o ISBN/EAN per restringere la ricerca."
-                )
-                st.rerun()
+            st.session_state["show_isbn_ean_fallback"] = False
+            st.session_state["manual_clear_input_next_run"] = True
+            request_isbn_refocus("manual")
+            return
+
+        candidates = controller.find_candidates(
+            query_title,
+            author or None,
+            catalog_publisher=None,
+            catalog_ean=catalog_code or None,
+        )
+        st.session_state["ingest_candidates"] = candidates
+        st.session_state["ingest_input"] = {
+            "title": title,
+            "author": author,
+            "catalog_ean": catalog_code,
+        }
+        if candidates:
+            st.session_state["show_isbn_ean_fallback"] = False
+        elif catalog_code:
+            st.session_state["pending_manual_ingest"] = {
+                "mode": "direct",
+                "title": query_title,
+                "author": author or None,
+                "catalog_ean": catalog_code or None,
+                "existing_book_id": existing.id if existing else None,
+                "default_price": float(getattr(existing, "catalog_price", 0.0) or 0.0),
+            }
+            st.session_state["show_isbn_ean_fallback"] = False
+            st.session_state["manual_clear_input_next_run"] = True
+            request_isbn_refocus("manual")
+            st.rerun()
+        else:
+            st.session_state["show_isbn_ean_fallback"] = True
+            st.session_state["last_failed_title"] = title
+            st.session_state["last_failed_author"] = author
+            st.session_state["last_failed_catalog_code"] = catalog_code
+            st.session_state["ingestion_error_message"] = (
+                "Nessun candidato trovato. Aggiungi autore o ISBN/EAN per restringere la ricerca."
+            )
+            request_isbn_refocus("manual")
+            st.rerun()
+
+    if "manual_ingest_title" not in st.session_state:
+        st.session_state["manual_ingest_title"] = default_title
+    if "manual_ingest_author" not in st.session_state:
+        st.session_state["manual_ingest_author"] = default_author
+    if "manual_ingest_catalog_code" not in st.session_state:
+        st.session_state["manual_ingest_catalog_code"] = default_catalog_code
+    if "manual_last_autosearch_code" not in st.session_state:
+        st.session_state["manual_last_autosearch_code"] = ""
+    if "manual_clear_input_next_run" not in st.session_state:
+        st.session_state["manual_clear_input_next_run"] = False
+
+    if st.session_state.get("manual_clear_input_next_run"):
+        st.session_state["manual_ingest_catalog_code"] = ""
+        st.session_state["manual_last_autosearch_code"] = ""
+        st.session_state["manual_clear_input_next_run"] = False
+
+    title = st.text_input("Titolo", key="manual_ingest_title")
+    author = st.text_input("Autore (opzionale)", key="manual_ingest_author")
+    catalog_code = st.text_input("ISBN o EAN", key="manual_ingest_catalog_code")
+    ensure_isbn_auto_trigger("ISBN o EAN")
+    manual_scan_code = _normalize_code(catalog_code)
+    if len(manual_scan_code) >= 12 and manual_scan_code != st.session_state.get("manual_last_autosearch_code", ""):
+        st.session_state["manual_last_autosearch_code"] = manual_scan_code
+        process_manual_ingestion(force=False)
+        st.rerun()
+    elif len(manual_scan_code) < 12:
+        st.session_state["manual_last_autosearch_code"] = ""
+    st.caption("Puoi cercare per titolo, per ISBN/EAN, oppure combinando titolo + autore + ISBN/EAN.")
+
+    if st.session_state.get("show_isbn_ean_fallback"):
+        st.warning("Libro non trovato. Come ultima risorsa, inserisci ISBN o EAN per risolvere l'edizione esatta.")
+
+    if st.button("Aggiungi al Database"):
+        process_manual_ingestion(force=True)
 
     # Post-form selection step
     candidates = st.session_state.get("ingest_candidates", [])
@@ -721,6 +907,7 @@ def render_ingestion_box():
                 st.session_state["last_failed_title"] = ""
                 st.session_state["last_failed_author"] = ""
                 st.session_state["last_failed_catalog_code"] = ""
+                request_isbn_refocus("manual")
                 st.rerun()
 
         with st.form("manual-price-before-insert"):
@@ -791,10 +978,14 @@ def render_ingestion_box():
                 st.session_state["last_failed_title"] = ""
                 st.session_state["last_failed_author"] = ""
                 st.session_state["last_failed_catalog_code"] = ""
+                request_isbn_refocus("manual")
                 st.rerun()
             except BookNotFoundError as exc:
                 st.session_state["ingestion_error_message"] = str(exc)
+                request_isbn_refocus("manual")
                 st.rerun()
+
+    render_isbn_refocus("manual", "ISBN o EAN")
 
 
 def render_excel_ingestion_box() -> None:
@@ -1045,26 +1236,76 @@ def render_multi_sale_screen() -> None:
     if "multi_sale_cart" not in st.session_state:
         st.session_state["multi_sale_cart"] = {}
 
-    with st.form("multi-sale-isbn-form"):
-        scanned_isbn = st.text_input("ISBN (scanner codice a barre)")
-        add_item = st.form_submit_button("Aggiungi", use_container_width=True)
+    def process_scanned_isbn() -> bool:
+        scanned_isbn = (st.session_state.get("multi_sale_scan_input") or "").strip()
+        if not scanned_isbn:
+            return False
 
-    if add_item:
         found = _find_book_by_isbn(scanned_isbn)
         if not found:
-            st.error("ISBN non trovato nel DB.")
-        else:
-            cart = dict(st.session_state.get("multi_sale_cart", {}))
-            current_in_catalog = int(getattr(found, "catalog_quantity", 0) or 0)
-            current_in_cart = int(cart.get(found.id, 0) or 0)
-            proposed_qty = current_in_cart + 1
+            st.session_state["last_multi_sale_feedback"] = ("error", "ISBN non trovato nel DB.")
+            st.session_state["multi_sale_clear_input_next_run"] = True
+            request_isbn_refocus("multi_sale")
+            return True
 
-            if proposed_qty > current_in_catalog:
-                st.error("Quantità richiesta non presente nel catalogo.")
-            else:
-                cart[found.id] = proposed_qty
-                st.session_state["multi_sale_cart"] = cart
-                st.success(f"Aggiunto: {found.normalized_title or found.raw_title}")
+        cart = dict(st.session_state.get("multi_sale_cart", {}))
+        current_in_catalog = int(getattr(found, "catalog_quantity", 0) or 0)
+        current_in_cart = int(cart.get(found.id, 0) or 0)
+        proposed_qty = current_in_cart + 1
+
+        if proposed_qty > current_in_catalog:
+            st.session_state["last_multi_sale_feedback"] = ("error", "Quantità richiesta non presente nel catalogo.")
+            request_isbn_refocus("multi_sale")
+        else:
+            cart[found.id] = proposed_qty
+            st.session_state["multi_sale_cart"] = cart
+            st.session_state["last_multi_sale_feedback"] = (
+                "success",
+                f"Aggiunto: {found.normalized_title or found.raw_title}",
+            )
+
+        st.session_state["multi_sale_clear_input_next_run"] = True
+        request_isbn_refocus("multi_sale")
+        return True
+
+    if "multi_sale_scan_input" not in st.session_state:
+        st.session_state["multi_sale_scan_input"] = ""
+    if "multi_sale_isbn_refocus" not in st.session_state:
+        st.session_state["multi_sale_isbn_refocus"] = True
+    if "multi_sale_last_autosearch_code" not in st.session_state:
+        st.session_state["multi_sale_last_autosearch_code"] = ""
+    if "multi_sale_clear_input_next_run" not in st.session_state:
+        st.session_state["multi_sale_clear_input_next_run"] = False
+
+    if st.session_state.get("multi_sale_clear_input_next_run"):
+        st.session_state["multi_sale_scan_input"] = ""
+        st.session_state["multi_sale_last_autosearch_code"] = ""
+        st.session_state["multi_sale_clear_input_next_run"] = False
+
+    feedback = st.session_state.pop("last_multi_sale_feedback", None)
+    if feedback:
+        level, message = feedback
+        if level == "error":
+            st.error(message)
+        else:
+            st.success(message)
+
+    isbn_col, add_col = st.columns([4, 1], vertical_alignment="bottom")
+    isbn_col.text_input(
+        "ISBN (scanner codice a barre)",
+        key="multi_sale_scan_input",
+    )
+    ensure_isbn_auto_trigger("ISBN (scanner codice a barre)")
+    multi_sale_scan_code = _normalize_code(st.session_state.get("multi_sale_scan_input"))
+    if len(multi_sale_scan_code) >= 12 and multi_sale_scan_code != st.session_state.get("multi_sale_last_autosearch_code", ""):
+        st.session_state["multi_sale_last_autosearch_code"] = multi_sale_scan_code
+        if process_scanned_isbn():
+            st.rerun()
+    elif len(multi_sale_scan_code) < 12:
+        st.session_state["multi_sale_last_autosearch_code"] = ""
+    if add_col.button("Aggiungi", use_container_width=True):
+        if process_scanned_isbn():
+            st.rerun()
 
     cart = dict(st.session_state.get("multi_sale_cart", {}))
     if cart:
@@ -1134,6 +1375,8 @@ def render_multi_sale_screen() -> None:
             st.session_state["multi_sale_cart"] = {}
             st.session_state["last_multi_sale_message"] = "Vendita multipla registrata."
             st.rerun()
+
+    render_isbn_refocus("multi_sale", "ISBN (scanner codice a barre)")
 
     st.markdown("[Torna alla dashboard](?view=dashboard)")
 
