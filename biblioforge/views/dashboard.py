@@ -1,6 +1,8 @@
 import time
 import base64
 import json
+import tempfile
+from pathlib import Path
 from io import BytesIO
 from urllib.parse import parse_qs, urlparse
 
@@ -197,6 +199,45 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+
+def sync_books_file_state() -> None:
+    books_path = controller.repository.storage_path
+    try:
+        current_mtime = books_path.stat().st_mtime
+    except FileNotFoundError:
+        current_mtime = 0.0
+
+    cached_mtime = st.session_state.get("books_file_mtime")
+    if cached_mtime is None:
+        st.session_state["books_file_mtime"] = current_mtime
+        return
+
+    if current_mtime != cached_mtime:
+        st.session_state["books_file_mtime"] = current_mtime
+        for key in [
+            "selected_book_id",
+            "auto_metadata_checked_ids",
+            "last_manual_insert_message",
+            "last_reject_message",
+            "last_approve_message",
+            "ingest_candidates",
+            "ingest_input",
+            "pending_manual_ingest",
+            "manual_ingest_title",
+            "manual_ingest_author",
+            "manual_ingest_catalog_code",
+            "manual_last_autosearch_code",
+            "manual_clear_input_next_run",
+            "multi_sale_cart",
+            "multi_sale_scan_input",
+            "multi_sale_last_autosearch_code",
+            "multi_sale_clear_input_next_run",
+            "last_multi_sale_message",
+            "last_multi_sale_feedback",
+        ]:
+            st.session_state.pop(key, None)
+        st.rerun()
 
 
 def focus_text_input(label: str) -> None:
@@ -994,15 +1035,31 @@ def render_excel_ingestion_box() -> None:
         st.session_state["persisted_skipped_entries"] = []
     if "persisted_skipped_report_path" not in st.session_state:
         st.session_state["persisted_skipped_report_path"] = None
+    if "uploaded_excel_temp_path" not in st.session_state:
+        st.session_state["uploaded_excel_temp_path"] = None
+    if "uploaded_excel_signature" not in st.session_state:
+        st.session_state["uploaded_excel_signature"] = None
 
-    default_path = "biblioforge/data/cleaned/books_cleaned.xlsx"
-    with st.form("excel-ingestion-form"):
-        excel_path_input = st.text_input("Percorso Excel", value=default_path)
-        resolved_path = controller.resolve_excel_path(excel_path_input)
-        st.caption(f"Sorgente import risolta: {resolved_path}")
-        if not resolved_path.exists():
-            st.warning("Il percorso Excel non esiste. Aggiorna il percorso prima di importare.")
-        submitted = st.form_submit_button("Carica in excel", use_container_width=True)
+    uploaded_excel = st.file_uploader(
+        "Trascina qui il file Excel oppure selezionalo da Esplora risorse",
+        type=["xlsx", "xls"],
+        accept_multiple_files=False,
+        key="excel-file-uploader",
+    )
+
+    if uploaded_excel is not None:
+        file_signature = (uploaded_excel.name, getattr(uploaded_excel, "size", None))
+        if file_signature != st.session_state.get("uploaded_excel_signature"):
+            suffix = Path(uploaded_excel.name).suffix or ".xlsx"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+                tmp_file.write(uploaded_excel.getbuffer())
+                st.session_state["uploaded_excel_temp_path"] = tmp_file.name
+                st.session_state["uploaded_excel_signature"] = file_signature
+
+    if st.session_state.get("uploaded_excel_temp_path") and uploaded_excel is not None:
+        st.caption(f"File selezionato: {uploaded_excel.name}")
+
+    submitted = st.button("Importa file selezionato", use_container_width=True, disabled=not bool(st.session_state.get("uploaded_excel_temp_path")))
 
     timer_placeholder = st.empty()
     progress_placeholder = st.empty()
@@ -1018,7 +1075,11 @@ def render_excel_ingestion_box() -> None:
             progress_bar.progress(pct, text=text)
 
         try:
-            total = controller.ingest_books_from_excel(excel_path_input, progress_callback=_on_progress)
+            import_source = st.session_state.get("uploaded_excel_temp_path")
+            if not import_source:
+                raise FileNotFoundError("Nessun file Excel selezionato.")
+
+            total = controller.ingest_books_from_excel(import_source, progress_callback=_on_progress)
             progress_bar.progress(100, text="Import completato")
             st.success(f"Importati {total} libri nella coda di revisione.")
             if getattr(controller, "last_import_skipped", 0):
@@ -1034,6 +1095,8 @@ def render_excel_ingestion_box() -> None:
                 "last_import_skipped_report_path",
                 None,
             )
+            st.session_state["uploaded_excel_signature"] = None
+            st.session_state["uploaded_excel_temp_path"] = None
             
             timer_placeholder.success(f"Import completato in {format_duration(time.perf_counter() - start)}")
         except Exception as exc:
@@ -1471,6 +1534,8 @@ def main():
     if isinstance(current_view, list):
         current_view = current_view[0] if current_view else "dashboard"
 
+    sync_books_file_state()
+
     if current_view == "multi-sale":
         render_centered_title_with_logo()
         render_multi_sale_screen()
@@ -1501,7 +1566,7 @@ def main():
 
     pending = controller.list_pending()
     if not pending:
-        st.info("Nessun libro in attesa di revisione. Aggiungine uno sopra per iniziare.")
+        st.info("Nessun libro nel database. Aggiungine uno sopra manualmente o importali da Excel per iniziare.")
         render_floating_final_db_download_button()
         return
 
