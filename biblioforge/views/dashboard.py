@@ -2,6 +2,7 @@ import time
 import base64
 import json
 import tempfile
+from collections import Counter
 from pathlib import Path
 from io import BytesIO
 from urllib.parse import parse_qs, urlparse
@@ -216,7 +217,6 @@ def sync_books_file_state() -> None:
     if current_mtime != cached_mtime:
         st.session_state["books_file_mtime"] = current_mtime
         for key in [
-            "selected_book_id",
             "auto_metadata_checked_ids",
             "last_manual_insert_message",
             "last_reject_message",
@@ -237,7 +237,40 @@ def sync_books_file_state() -> None:
             "last_multi_sale_feedback",
         ]:
             st.session_state.pop(key, None)
-        st.rerun()
+        # Avoid forced rerun here: it can interrupt list selection and make
+        # the UI snap back to the first book while the user is opening one.
+        return
+
+
+def _selection_base_title(book: Book) -> str:
+    title = normalize_title(book.raw_title or book.normalized_title, book.author)
+    return (title or book.normalized_title or book.raw_title or "Titolo sconosciuto").strip()
+
+
+def _selection_label(book: Book, duplicate_title_counts: Counter[str]) -> str:
+    title = _selection_base_title(book)
+    author = (book.author or "Autore sconosciuto").strip()
+    code = (getattr(book, "catalog_ean", None) or getattr(book, "isbn", None) or getattr(book, "isbn_10", None) or "-").strip()
+    code_label = f"EAN/ISBN {code}" if code != "-" else "EAN/ISBN -"
+
+    # Add a tiny id suffix only when multiple entries share the same visible title.
+    duplicate_suffix = ""
+    if duplicate_title_counts[title.casefold()] > 1:
+        duplicate_suffix = f" | ID {book.id[-6:]}"
+
+    return f"{title} - {author} | {code_label}{duplicate_suffix}"
+
+
+def request_selected_book(book_id: str | None) -> None:
+    if not book_id:
+        return
+    st.session_state["pending_selected_book_id"] = book_id
+
+
+def apply_pending_selected_book(pending_ids: list[str]) -> None:
+    pending_selected = st.session_state.pop("pending_selected_book_id", None)
+    if pending_selected and pending_selected in pending_ids:
+        st.session_state["selected_book_id"] = pending_selected
 
 
 def focus_text_input(label: str) -> None:
@@ -418,7 +451,7 @@ def process_pending_approval() -> None:
     else:
         refreshed_pending = controller.list_pending()
         if refreshed_pending:
-            st.session_state["selected_book_id"] = refreshed_pending[0].id
+            request_selected_book(refreshed_pending[0].id)
         else:
             st.session_state.pop("selected_book_id", None)
 
@@ -669,13 +702,20 @@ def render_editing_column(book: Book) -> None:
             st.session_state[f"show-remove-popup-{book.id}"] = True
             st.rerun()
         if reject:
-            with st.spinner("Cerco i dati online..."):
-                updated = controller.reject_and_retry(book.id)
-            if updated:
-                st.session_state["last_reject_message"] = "Libro rigenerato con una nuova analisi crawl+AI"
-                st.rerun()
-            else:
-                st.error("Rifiuto non riuscito: libro selezionato non trovato.")
+            try:
+                with st.spinner("Cerco i dati online..."):
+                    updated = controller.reject_and_retry(book.id)
+                if updated:
+                    request_selected_book(updated.id)
+                    checked_ids = set(st.session_state.get("auto_metadata_checked_ids", []))
+                    checked_ids.discard(updated.id)
+                    st.session_state["auto_metadata_checked_ids"] = list(checked_ids)
+                    st.session_state["last_reject_message"] = "Libro rigenerato con una nuova analisi crawl+AI"
+                    st.rerun()
+                else:
+                    st.error("Rifiuto non riuscito: libro selezionato non trovato.")
+            except Exception as exc:
+                st.error(f"Rifiuto non riuscito: {exc}")
 
         if add_quantity:
             st.session_state.pop(f"show-remove-popup-{book.id}", None)
@@ -940,7 +980,7 @@ def render_ingestion_box():
                 st.session_state["last_manual_insert_message"] = (
                     f"Libro inserito nel database: {existing.normalized_title or existing.raw_title} | Quantità aggiornata: {existing.catalog_quantity}"
                 )
-                st.session_state["selected_book_id"] = existing.id
+                request_selected_book(existing.id)
                 st.session_state["pending_manual_ingest"] = None
                 st.session_state["show_isbn_ean_fallback"] = False
                 st.session_state["ingest_candidates"] = []
@@ -987,7 +1027,7 @@ def render_ingestion_box():
                     st.session_state["last_manual_insert_message"] = (
                         f"Libro inserito nel database: {latest.normalized_title or latest.raw_title} | Quantità aggiornata: {latest.catalog_quantity}"
                     )
-                    st.session_state["selected_book_id"] = latest.id
+                    request_selected_book(latest.id)
                 else:
                     if mode == "candidate" and pending.get("selected") is not None:
                         book = controller.ingest_selected_candidate(
@@ -1011,7 +1051,7 @@ def render_ingestion_box():
                     st.session_state["last_manual_insert_message"] = (
                         f"Libro inserito nel database: {book.normalized_title} | Prezzo vendita: EUR {float(sale_price):.2f}"
                     )
-                    st.session_state["selected_book_id"] = book.id
+                    request_selected_book(book.id)
                 st.session_state["pending_manual_ingest"] = None
                 st.session_state["show_isbn_ean_fallback"] = False
                 st.session_state["ingest_candidates"] = []
@@ -1572,16 +1612,17 @@ def main():
 
     st.markdown("Selezione libro dal database")
     pending_ids = [book.id for book in pending]
+    apply_pending_selected_book(pending_ids)
     if st.session_state.get("selected_book_id") not in pending_ids:
         st.session_state["selected_book_id"] = pending_ids[0]
+
+    title_counts = Counter(_selection_base_title(book).casefold() for book in pending)
+    selection_labels = {book.id: _selection_label(book, title_counts) for book in pending}
 
     selected_id = st.selectbox(
         "Selezione libro dal database",
         options=pending_ids,
-        format_func=lambda bid: next(
-            (normalize_title(b.raw_title or b.normalized_title, b.author) for b in pending if b.id == bid),
-            bid,
-        ),
+        format_func=lambda bid: selection_labels.get(bid, bid),
         label_visibility="collapsed",
         key="selected_book_id",
     )

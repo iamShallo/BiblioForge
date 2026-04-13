@@ -1177,6 +1177,8 @@ class PipelineController:
         if not book:
             return None
 
+        original_book = copy.deepcopy(book)
+
         if not (book.author or "").strip():
             refreshed_catalog = normalize_catalog_entry(
                 raw_title=book.raw_title,
@@ -1197,16 +1199,24 @@ class PipelineController:
         # Reset enrichment-derived fields so stale metadata/summary are not reused.
         self._reset_enrichment_fields(book)
 
+        # Keep the operation atomic from the UI perspective: do not persist an
+        # intermediate IN_PROGRESS state that would remove the book from pending.
         book.status = BookStatus.IN_PROGRESS
-        self.repository.upsert_book(book)
-
-        refreshed = asyncio.run(self._enrich_with_immediate_retry(book))
-        refreshed = generate_insights(
-            refreshed,
-            regeneration_token=regeneration_token,
-            previous_summary=previous_summary,
-        )
-        return self.repository.upsert_book(refreshed)
+        try:
+            refreshed = asyncio.run(self._enrich_with_immediate_retry(book))
+            refreshed = generate_insights(
+                refreshed,
+                regeneration_token=regeneration_token,
+                previous_summary=previous_summary,
+            )
+            # Keep retried items in review queue.
+            refreshed.status = BookStatus.TO_APPROVE
+            return self.repository.upsert_book(refreshed)
+        except Exception:
+            # Roll back the queue item so selection does not jump to another row.
+            original_book.status = BookStatus.TO_APPROVE
+            self.repository.upsert_book(original_book)
+            raise
 
     def get(self, book_id: str) -> Optional[Book]:
         return self.repository.get_book(book_id)
@@ -1219,6 +1229,8 @@ class PipelineController:
         book = self.repository.get_book(book_id)
         if not book:
             return None
+
+        original_book = copy.deepcopy(book)
 
         has_summary = bool((getattr(book, "fetched_summary", None) or "").strip())
         has_cover = bool(getattr(book, "cover_url", None))
@@ -1254,29 +1266,36 @@ class PipelineController:
         # Drop stale fallback metadata before automatic refresh.
         self._reset_enrichment_fields(book)
         book.status = BookStatus.IN_PROGRESS
-        self.repository.upsert_book(book)
 
-        refreshed = asyncio.run(self._enrich_with_immediate_retry(book))
+        try:
+            # Keep refresh atomic for UI stability: avoid persisting transient
+            # IN_PROGRESS that would remove the item from the pending dropdown.
+            refreshed = asyncio.run(self._enrich_with_immediate_retry(book))
 
-        # If still weak, try resolving a top candidate and merge its metadata.
-        if not self._has_minimal_metadata(refreshed) or self._has_synthetic_summary(refreshed):
-            candidates = asyncio.run(
-                search_candidates(
-                    refreshed.normalized_title or refreshed.raw_title,
-                    refreshed.author,
-                    getattr(refreshed, "catalog_publisher", None),
-                    getattr(refreshed, "catalog_ean", None),
-                    limit=1,
+            # If still weak, try resolving a top candidate and merge its metadata.
+            if not self._has_minimal_metadata(refreshed) or self._has_synthetic_summary(refreshed):
+                candidates = asyncio.run(
+                    search_candidates(
+                        refreshed.normalized_title or refreshed.raw_title,
+                        refreshed.author,
+                        getattr(refreshed, "catalog_publisher", None),
+                        getattr(refreshed, "catalog_ean", None),
+                        limit=1,
+                    )
                 )
-            )
-            if candidates:
-                refreshed = self._apply_candidate_metadata(refreshed, candidates[0])
+                if candidates:
+                    refreshed = self._apply_candidate_metadata(refreshed, candidates[0])
 
-        refreshed = generate_insights(
-            refreshed,
-            regeneration_token=regeneration_token,
-            previous_summary=previous_summary,
-        )
-        refreshed.status = BookStatus.TO_APPROVE
-        return self.repository.upsert_book(refreshed)
+            refreshed = generate_insights(
+                refreshed,
+                regeneration_token=regeneration_token,
+                previous_summary=previous_summary,
+            )
+            refreshed.status = BookStatus.TO_APPROVE
+            return self.repository.upsert_book(refreshed)
+        except Exception:
+            # Restore original queue item if refresh fails for this title.
+            original_book.status = BookStatus.TO_APPROVE
+            self.repository.upsert_book(original_book)
+            raise
 
