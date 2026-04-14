@@ -32,6 +32,20 @@ class BookInsights:
 
 
 @dataclass
+class SoldBook:
+    """Represents a sold book record with sales information."""
+    book_id: str
+    raw_title: str
+    normalized_title: str
+    author: Optional[str] = None
+    price: Optional[float] = None
+    quantity: int = 1
+    sale_date: str = field(default_factory=lambda: None)
+    isbn: Optional[str] = None
+    ean: Optional[str] = None
+
+
+@dataclass
 class Book:
     raw_title: str
     normalized_title: str

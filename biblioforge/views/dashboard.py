@@ -3,6 +3,7 @@ import base64
 import json
 import tempfile
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from io import BytesIO
 from urllib.parse import parse_qs, urlparse
@@ -12,11 +13,16 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from biblioforge.controllers.pipeline_controller import BookNotFoundError, PipelineController
-from biblioforge.models.book import Book, BookStatus
+from biblioforge.models.book import Book, BookStatus, SoldBook
+from biblioforge.repositories.sold_book_repository import SoldBookRepository
 from biblioforge.services.normalization_service import normalize_title
+from biblioforge.views.sales_history import render_sales_history_screen
 
 
 controller = PipelineController()
+sold_book_repo = SoldBookRepository(
+    Path(__file__).parent.parent / "data" / "processed" / "sold_books.json"
+)
 st.set_page_config(page_title="La Cicogna Triste", layout="wide")
 st.markdown(
     """
@@ -124,6 +130,22 @@ st.markdown(
     }
     .floating-multi-btn:hover {
         background: #991b1b;
+        color: #ffffff !important;
+    }
+    .floating-sales-btn {
+        display: inline-block;
+        background: #15803d;
+        color: #ffffff !important;
+        border: 1px solid #166534;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-weight: 700;
+        text-decoration: none !important;
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.25);
+        cursor: pointer;
+    }
+    .floating-sales-btn:hover {
+        background: #166534;
         color: #ffffff !important;
     }
     div[class*="st-key-edit-price-line-"] button {
@@ -765,7 +787,20 @@ def render_editing_column(book: Book) -> None:
                         removed = False
 
                 if removed:
-                    st.success("Quantità arrivata a 0: libro rimosso dal DB.")
+                    sold_book_repo.add_sale(
+                        SoldBook(
+                            book_id=latest.id,
+                            raw_title=latest.raw_title,
+                            normalized_title=latest.normalized_title,
+                            author=latest.author,
+                            price=getattr(latest, "catalog_price", None),
+                            quantity=1,
+                            sale_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            isbn=latest.isbn,
+                            ean=latest.catalog_ean,
+                        )
+                    )
+                    st.success("Quantità arrivata a 0: libro rimosso dal DB e vendita registrata.")
                     st.session_state.pop(f"show-remove-popup-{book.id}", None)
                     st.rerun()
                 else:
@@ -773,7 +808,20 @@ def render_editing_column(book: Book) -> None:
             else:
                 latest.catalog_quantity = new_qty
                 controller.repository.upsert_book(latest)
-                st.success(f"Quantità ridotta di 1. Quantità totale nel catalogo: {new_qty}.")
+                sold_book_repo.add_sale(
+                    SoldBook(
+                        book_id=latest.id,
+                        raw_title=latest.raw_title,
+                        normalized_title=latest.normalized_title,
+                        author=latest.author,
+                        price=getattr(latest, "catalog_price", None),
+                        quantity=1,
+                        sale_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        isbn=latest.isbn,
+                        ean=latest.catalog_ean,
+                    )
+                )
+                st.success(f"Quantità ridotta di 1. Quantità totale nel catalogo: {new_qty}. Vendita registrata.")
                 st.session_state.pop(f"show-remove-popup-{book.id}", None)
                 st.rerun()
 
@@ -1470,6 +1518,19 @@ def render_multi_sale_screen() -> None:
                     continue
                 current_qty = int(getattr(latest, "catalog_quantity", 0) or 0)
                 new_qty = current_qty - int(qty)
+                sold_book_repo.add_sale(
+                    SoldBook(
+                        book_id=latest.id,
+                        raw_title=latest.raw_title,
+                        normalized_title=latest.normalized_title,
+                        author=latest.author,
+                        price=getattr(latest, "catalog_price", None),
+                        quantity=int(qty),
+                        sale_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        isbn=latest.isbn,
+                        ean=latest.catalog_ean,
+                    )
+                )
                 if new_qty < 1:
                     controller.repository.delete_book(book_id)
                 else:
@@ -1498,6 +1559,7 @@ def render_floating_final_db_download_button() -> None:
                Download Excel DB
             </a>
             <a class="floating-multi-btn" href="?view=multi-sale">Vendita multipla</a>
+            <a class="floating-sales-btn" href="?view=sales">Vendite passate</a>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1579,6 +1641,11 @@ def main():
     if current_view == "multi-sale":
         render_centered_title_with_logo()
         render_multi_sale_screen()
+        return
+
+    if current_view == "sales":
+        render_centered_title_with_logo()
+        render_sales_history_screen()
         return
 
     process_pending_approval()
