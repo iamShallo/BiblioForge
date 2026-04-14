@@ -8,7 +8,7 @@ import os
 import re
 import unicodedata
 from typing import List, Optional, Tuple
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urljoin
 
 import httpx
 
@@ -20,6 +20,8 @@ GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes"
 GOODREADS_SEARCH_URL = "https://www.goodreads.com/search"
 OPENLIBRARY_SEARCH_URL = "https://openlibrary.org/search.json"
 AMAZON_IT_SEARCH_URL = "https://www.amazon.it/s"
+IBS_SEARCH_URL = "https://www.ibs.it/search/"
+IBS_BASE_URL = "https://www.ibs.it"
 
 
 def _normalize_for_match(text: Optional[str]) -> str:
@@ -116,6 +118,317 @@ def _normalize_catalog_code(code: Optional[str]) -> str:
         return ""
     compact = re.sub(r"[^0-9Xx]", "", str(code)).upper()
     return compact
+
+
+def _to_price_value(text: Optional[str]) -> Optional[float]:
+    if not text:
+        return None
+    normalized = re.sub(r"[^0-9,.-]", "", str(text))
+    if not normalized:
+        return None
+
+    if "," in normalized and "." in normalized:
+        if normalized.rfind(",") > normalized.rfind("."):
+            normalized = normalized.replace(".", "").replace(",", ".")
+        else:
+            normalized = normalized.replace(",", "")
+    else:
+        normalized = normalized.replace(",", ".")
+
+    try:
+        return float(normalized)
+    except Exception:
+        return None
+
+
+def _extract_ibs_product_link(search_html: str) -> Optional[str]:
+    if not search_html:
+        return None
+
+    # Prefer a direct product URL with an ISBN/EAN path when present.
+    product_matches = re.findall(r'href="([^"]+/e/\d{8,14})"', search_html, re.IGNORECASE)
+    for href in product_matches:
+        if href:
+            return href if href.startswith("http") else urljoin(IBS_BASE_URL, href)
+
+    return None
+
+
+def _extract_ibs_search_result_metadata(search_html: str) -> dict:
+    if not search_html:
+        return {}
+
+    patterns = [
+        r'<a[^>]+href="([^"]+/e/\d{8,14})"[^>]*>(?P<title>.*?)</a>\s*.*?di\s*<a[^>]*>(?P<author>.*?)</a>',
+        r'<a[^>]+href="([^"]+/e/\d{8,14})"[^>]*>(?P<title>.*?)</a>\s*<[^>]*>.*?di\s*<a[^>]*>(?P<author>.*?)</a>',
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, search_html, re.IGNORECASE | re.DOTALL)
+        if not match:
+            continue
+        title = _clean_review_text(match.group("title"))
+        author = _clean_review_text(match.group("author"))
+        if title and len(title) > 2 and (not author or _normalize_for_match(title) != _normalize_for_match(author)):
+            return {"title": title, "authors": author or None, "info_link": urljoin(IBS_BASE_URL, match.group(1))}
+
+    return {}
+
+
+def _is_generic_ibs_title(title: Optional[str]) -> bool:
+    normalized = _normalize_for_match(title)
+    if not normalized:
+        return True
+    generic_titles = {
+        "risultati ricerca",
+        "risultato ricerca",
+        "search results",
+        "resultati ricerca",
+        "risultati",
+        "risultato",
+    }
+    return normalized in generic_titles or normalized.startswith("risultati ricerca")
+
+
+def _extract_ibs_full_price(page_html: str) -> Optional[float]:
+    if not page_html:
+        return None
+
+    plain_text = html.unescape(re.sub(r"<[^>]+>", " ", page_html))
+    plain_text = plain_text.replace("\xa0", " ")
+    plain_text = re.sub(r"[\u2010-\u2015\u2212\uFE63\uFF0D]", "-", plain_text)
+    plain_text = re.sub(r"\s+", " ", plain_text)
+    compact_text = re.sub(r"\s+", "", plain_text)
+
+    discount_patterns = [
+        # Product page layout: current price, discount, full list price.
+        r"Venditore:\s*IBS.{0,500}?(?P<current>\d[\d\.,]*)\s*€\s*[-–]\s*(?P<discount>\d+)%\s*(?P<list>\d[\d\.,]*)\s*€",
+        r"(?P<current>\d[\d\.,]*)\s*€\s*[-–]\s*(?P<discount>\d+)%\s*(?P<list>\d[\d\.,]*)\s*€",
+        # Search result layout: discount, list price, current price.
+        r"[-–]\s*(?P<discount>\d+)%\s*(?P<list>\d[\d\.,]*)\s*€\s*(?P<current>\d[\d\.,]*)\s*€",
+    ]
+
+    discount_candidates: List[float] = []
+    for pattern in discount_patterns:
+        for match in re.finditer(pattern, plain_text, re.IGNORECASE | re.DOTALL):
+            list_price = _to_price_value(match.groupdict().get("list"))
+            if list_price and list_price > 0:
+                discount_candidates.append(list_price)
+
+    compact_discount_patterns = [
+        r"(?P<current>\d[\d\.,]*)€-(?P<discount>\d+)%(?P<list>\d[\d\.,]*)€",
+        r"(?P<current>\d[\d\.,]*)€(?P<discount>\d+)%(?P<list>\d[\d\.,]*)€",
+        r"-(?P<discount>\d+)%(?P<list>\d[\d\.,]*)€(?P<current>\d[\d\.,]*)€",
+    ]
+    for pattern in compact_discount_patterns:
+        for match in re.finditer(pattern, compact_text, re.IGNORECASE | re.DOTALL):
+            list_price = _to_price_value(match.groupdict().get("list"))
+            if list_price and list_price > 0:
+                discount_candidates.append(list_price)
+
+    if discount_candidates:
+        # Prefer the non-discounted list price when the page exposes it explicitly.
+        return max(discount_candidates)
+
+    structured_patterns = [
+        r'itemprop="price"[^>]*content="(?P<price>\d[\d\.,]*)"',
+        r'itemprop="price"[^>]*>(?P<price>\d[\d\.,]*)<',
+        r'property="og:price:amount"[^>]*content="(?P<price>\d[\d\.,]*)"',
+        r'"price"\s*:\s*"(?P<price>\d[\d\.,]*)"',
+        r'"price"\s*:\s*(?P<price>\d[\d\.,]*)',
+    ]
+    structured_candidates: List[float] = []
+    for pattern in structured_patterns:
+        for match in re.finditer(pattern, page_html, re.IGNORECASE | re.DOTALL):
+            price_value = _to_price_value(match.groupdict().get("price"))
+            if price_value and price_value > 0:
+                structured_candidates.append(price_value)
+
+    if structured_candidates:
+        return max(structured_candidates)
+
+    fallback_patterns = [
+        r"Venditore:\s*IBS.*?(?P<price>\d[\d\.,]*)\s*€",
+        r"(?:Prezzo|Price)\s*(?::|€)?\s*(?P<price>\d[\d\.,]*)\s*€",
+        r"(?P<price>\d[\d\.,]*)\s*€",
+    ]
+    fallback_candidates: List[float] = []
+    for pattern in fallback_patterns:
+        for match in re.finditer(pattern, plain_text, re.IGNORECASE | re.DOTALL):
+            price_value = _to_price_value(match.groupdict().get("price"))
+            if price_value and price_value > 0:
+                fallback_candidates.append(price_value)
+
+    if fallback_candidates:
+        return max(fallback_candidates)
+
+    return None
+
+
+async def _fetch_ibs_price(normalized_title: str, author: Optional[str], catalog_ean: Optional[str]) -> Optional[float]:
+    queries = []
+    normalized_code = _normalize_catalog_code(catalog_ean)
+    if normalized_code:
+        queries.append(normalized_code)
+    if normalized_title:
+        queries.append(f"{normalized_title} {author or ''}".strip())
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+    }
+
+    async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=headers) as client:
+        for query in queries:
+            try:
+                search_resp = await client.get(IBS_SEARCH_URL, params={"query": query})
+                search_resp.raise_for_status()
+                search_html = search_resp.text
+            except Exception:
+                continue
+
+            direct_price = _extract_ibs_full_price(search_html)
+            if direct_price is not None:
+                return direct_price
+
+            product_link = _extract_ibs_product_link(search_html)
+            if not product_link:
+                continue
+
+            try:
+                product_resp = await client.get(product_link)
+                product_resp.raise_for_status()
+                product_price = _extract_ibs_full_price(product_resp.text)
+                if product_price is not None:
+                    return product_price
+            except Exception:
+                continue
+
+    return None
+
+
+async def fetch_ibs_metadata(normalized_title: str, author: Optional[str], catalog_ean: Optional[str]) -> dict:
+    queries = []
+    normalized_code = _normalize_catalog_code(catalog_ean)
+    if normalized_code:
+        queries.append(normalized_code)
+    if normalized_title:
+        queries.append(f"{normalized_title} {author or ''}".strip())
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+    }
+
+    async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=headers) as client:
+        for query in queries:
+            try:
+                search_resp = await client.get(IBS_SEARCH_URL, params={"query": query})
+                search_resp.raise_for_status()
+                search_html = search_resp.text
+            except Exception:
+                continue
+
+            def _extract_page_metadata(page_html: str) -> dict:
+                title = None
+                title_patterns = [
+                    r'<meta\s+property="og:title"\s+content="([^"]+)"',
+                    r'<h1[^>]*class="[^"]*title[^"]*"[^>]*>(.*?)</h1>',
+                    r'<h1[^>]*>(.*?)</h1>',
+                ]
+                for pattern in title_patterns:
+                    match = re.search(pattern, page_html, re.IGNORECASE | re.DOTALL)
+                    if match:
+                        title = _clean_review_text(match.group(1))
+                        if title:
+                            break
+
+                authors = None
+                author_patterns = [
+                    r'\(Autore\)\s*<a[^>]*>(.*?)</a>',
+                    r'Autore:\s*<a[^>]*>(.*?)</a>',
+                    r'di\s*<a[^>]*>(.*?)</a>',
+                ]
+                for pattern in author_patterns:
+                    match = re.search(pattern, page_html, re.IGNORECASE | re.DOTALL)
+                    if match:
+                        authors = _clean_review_text(match.group(1))
+                        if authors:
+                            break
+
+                publisher = None
+                publisher_patterns = [
+                    r'Editore:\s*<a[^>]*>(.*?)</a>',
+                    r'Editore:\s*([^<\n]+)',
+                    r'Casa editrice:\s*<a[^>]*>(.*?)</a>',
+                ]
+                for pattern in publisher_patterns:
+                    match = re.search(pattern, page_html, re.IGNORECASE | re.DOTALL)
+                    if match:
+                        publisher = _clean_review_text(match.group(1))
+                        if publisher:
+                            break
+
+                cover_url = None
+                cover_patterns = [
+                    r'<img[^>]+src="([^"]+978\d{10}[^"]+)"',
+                    r'<meta\s+property="og:image"\s+content="([^"]+)"',
+                ]
+                for pattern in cover_patterns:
+                    match = re.search(pattern, page_html, re.IGNORECASE | re.DOTALL)
+                    if match:
+                        cover_url = match.group(1)
+                        if cover_url and not cover_url.startswith("http"):
+                            cover_url = urljoin(IBS_BASE_URL, cover_url)
+                        if cover_url:
+                            break
+
+                if title and _is_generic_ibs_title(title):
+                    title = None
+
+                return {
+                    "title": title,
+                    "authors": authors,
+                    "publisher": publisher,
+                    "cover_url": cover_url,
+                    "price": _extract_ibs_full_price(page_html),
+                }
+
+            product_link = _extract_ibs_product_link(search_html)
+
+            search_meta = _extract_page_metadata(search_html)
+            if search_meta.get("title") or search_meta.get("authors") or search_meta.get("publisher") or search_meta.get("cover_url") or search_meta.get("price") is not None:
+                search_meta["info_link"] = product_link
+                return search_meta
+
+            if product_link:
+                try:
+                    product_resp = await client.get(product_link)
+                    product_resp.raise_for_status()
+                    product_meta = _extract_page_metadata(product_resp.text)
+                    product_meta["info_link"] = product_link
+                    if product_meta.get("title") or product_meta.get("authors") or product_meta.get("publisher") or product_meta.get("cover_url") or product_meta.get("price") is not None:
+                        return product_meta
+                except Exception:
+                    pass
+
+            search_meta = _extract_ibs_search_result_metadata(search_html)
+            search_title = search_meta.get("title")
+            search_authors = search_meta.get("authors")
+            if search_title and not _is_generic_ibs_title(search_title) and _normalize_for_match(search_title) != _normalize_for_match(search_authors):
+                price = _extract_ibs_full_price(search_html)
+                return {
+                    "title": search_title,
+                    "authors": search_authors,
+                    "publisher": None,
+                    "cover_url": None,
+                    "price": price,
+                    "info_link": search_meta.get("info_link") or product_link,
+                }
+
+    return {}
 
 
 async def _fetch_google_books(
@@ -492,6 +805,7 @@ async def search_candidates(
             return {
                 "title": vol.get("title"),
                 "authors": ", ".join(vol.get("authors", []) or []),
+                "publisher": vol.get("publisher"),
                 "published_date": vol.get("publishedDate"),
                 "info_link": vol.get("infoLink"),
                 "cover_url": vol.get("imageLinks", {}).get("thumbnail"),
@@ -1568,6 +1882,16 @@ async def enrich_book(book: Book) -> Book:
                         book.cover_url = f"https://covers.openlibrary.org/b/olid/{olid}-L.jpg"
         except Exception:
             pass
+
+        # Use IBS as the source for the public cover/list price when available.
+        # Skip a second fetch when the caller already resolved the price.
+        if getattr(book, "catalog_price", None) is None:
+            try:
+                ibs_price = await _fetch_ibs_price(book.normalized_title, book.author, getattr(book, "catalog_ean", None) or book.isbn)
+                if ibs_price is not None:
+                    book.catalog_price = ibs_price
+            except Exception:
+                pass
 
         # Ensure a cover image is always set (and resolvable).
         if not book.cover_url:

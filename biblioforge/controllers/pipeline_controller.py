@@ -13,7 +13,7 @@ import pandas as pd
 from biblioforge.models.book import Book, BookStatus
 from biblioforge.repositories.book_repository import BookRepository
 from biblioforge.services.ai_service import generate_insights, normalize_catalog_entry
-from biblioforge.services.crawling_service import enrich_book, search_candidates
+from biblioforge.services.crawling_service import _fetch_ibs_price, enrich_book, search_candidates
 from biblioforge.services.normalization_service import normalize_title
 
 
@@ -409,6 +409,20 @@ class PipelineController:
     ) -> List[dict]:
         """Return candidate matches for a raw query (title/author/publisher/ean)."""
         cleaned_author = (author or "").strip() or None
+        code_value = (catalog_ean or "").strip()
+        if code_value:
+            code_results = asyncio.run(
+                search_candidates(
+                    code_value,
+                    None,
+                    None,
+                    code_value,
+                    limit=limit,
+                )
+            )
+            if code_results:
+                return code_results
+
         normalized_catalog = normalize_catalog_entry(
             raw_title=raw_title,
             raw_author=cleaned_author,
@@ -456,21 +470,6 @@ class PipelineController:
             )
             if raw_results:
                 return raw_results
-
-        # Fallback 3: direct lookup by EAN/ISBN when present.
-        code_value = (catalog_ean or "").strip()
-        if code_value:
-            code_results = asyncio.run(
-                search_candidates(
-                    code_value,
-                    None,
-                    None,
-                    code_value,
-                    limit=limit,
-                )
-            )
-            if code_results:
-                return code_results
 
         return []
 
@@ -950,10 +949,17 @@ class PipelineController:
                 publisher_value = _clean_publisher(publisher_raw) if publisher_raw else ""
                 quantity_value = _to_int(row.get(quantity_col)) if quantity_col is not None else None
                 price_value = _to_float(row.get(price_col)) if price_col is not None else None
-                dedupe_key = (title_value.casefold(), author_value.casefold())
+                dedupe_key = (title_value.casefold(), author_value.casefold(), catalog_code.casefold())
                 if dedupe_key in seen:
                     continue
                 seen.add(dedupe_key)
+
+                resolved_price = price_value
+                if resolved_price is None:
+                    try:
+                        resolved_price = asyncio.run(_fetch_ibs_price(title_value, author_value or None, catalog_code or None))
+                    except Exception:
+                        resolved_price = None
 
                 author = author_value or None
                 normalized_catalog = normalize_catalog_entry(
@@ -969,7 +975,7 @@ class PipelineController:
                         "publisher": normalized_catalog.get("publisher") or publisher_value or None,
                         "ean": catalog_code or None,
                         "quantity": quantity_value,
-                        "price": price_value,
+                        "price": resolved_price,
                     }
                 )
 
