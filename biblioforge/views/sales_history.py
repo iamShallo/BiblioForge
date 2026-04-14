@@ -2,9 +2,114 @@
 
 import streamlit as st
 from datetime import datetime, timedelta
+from io import BytesIO
 import pandas as pd
 from biblioforge.repositories.sold_book_repository import SoldBookRepository
 from pathlib import Path
+
+
+def _to_excel_bytes(df: pd.DataFrame) -> bytes:
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Vendite")
+    return buffer.getvalue()
+
+
+def _compute_metrics(frame: pd.DataFrame) -> dict:
+    if frame.empty:
+        return {
+            "sales_count": 0.0,
+            "total_quantity": 0.0,
+            "avg_price": 0.0,
+            "total_sales": 0.0,
+        }
+    return {
+        "sales_count": float(len(frame)),
+        "total_quantity": float(frame["Quantità"].sum()),
+        "avg_price": float(frame["Prezzo Unitario"].mean()),
+        "total_sales": float(frame["Totale"].sum()),
+    }
+
+
+def _format_delta(current: float, baseline: float) -> str | None:
+    if baseline == 0:
+        if current == 0:
+            return "0.0%"
+        return "+100.0%"
+    if baseline < 0:
+        return None
+    change_pct = ((current - baseline) / baseline) * 100.0
+    return f"{change_pct:+.1f}%"
+
+
+def _compute_delta_map(active_quick_range: str, full_df: pd.DataFrame, filtered_df: pd.DataFrame) -> dict:
+    delta_map = {
+        "sales_count": None,
+        "total_quantity": None,
+        "avg_price": None,
+        "total_sales": None,
+    }
+
+    if filtered_df.empty:
+        return delta_map
+
+    reference_dt = filtered_df["Data Vendita"].max()
+    current_metrics = _compute_metrics(filtered_df)
+
+    if active_quick_range == "mese":
+        prev_month_date = reference_dt.to_pydatetime().replace(day=1) - timedelta(days=1)
+        prev_month = prev_month_date.month
+        prev_year = prev_month_date.year
+        baseline_df = full_df[
+            (full_df["Data Vendita"].dt.year == prev_year)
+            & (full_df["Data Vendita"].dt.month == prev_month)
+        ]
+        baseline_metrics = _compute_metrics(baseline_df)
+    elif active_quick_range == "anno":
+        prev_year = int(reference_dt.year) - 1
+        baseline_df = full_df[full_df["Data Vendita"].dt.year == prev_year]
+        baseline_metrics = _compute_metrics(baseline_df)
+    elif active_quick_range == "oggi":
+        ref_year = int(reference_dt.year)
+        ref_month = int(reference_dt.month)
+        ref_day = int(reference_dt.day)
+        month_df = full_df[
+            (full_df["Data Vendita"].dt.year == ref_year)
+            & (full_df["Data Vendita"].dt.month == ref_month)
+        ]
+        elapsed_days = max(ref_day, 1)
+        month_metrics = _compute_metrics(month_df)
+        baseline_metrics = {
+            "sales_count": month_metrics["sales_count"] / elapsed_days,
+            "total_quantity": month_metrics["total_quantity"] / elapsed_days,
+            "avg_price": month_metrics["avg_price"],
+            "total_sales": month_metrics["total_sales"] / elapsed_days,
+        }
+    else:
+        return delta_map
+
+    for key in delta_map:
+        delta_map[key] = _format_delta(current_metrics[key], baseline_metrics.get(key, 0.0))
+
+    return delta_map
+
+
+def _set_quick_range(range_key: str, today, min_date, max_date) -> None:
+    if range_key == "oggi":
+        st.session_state["sales_start_date"] = today
+        st.session_state["sales_end_date"] = today
+    elif range_key == "mese":
+        st.session_state["sales_start_date"] = today.replace(day=1)
+        st.session_state["sales_end_date"] = today
+    elif range_key == "anno":
+        st.session_state["sales_start_date"] = today.replace(month=1, day=1)
+        st.session_state["sales_end_date"] = today
+    else:
+        st.session_state["sales_start_date"] = min_date
+        st.session_state["sales_end_date"] = max_date
+
+    st.session_state["sales_quick_range"] = range_key
+    st.session_state["sales_filtered"] = True
 
 
 def render_sales_history_screen():
@@ -46,6 +151,54 @@ def render_sales_history_screen():
     df = df.dropna(subset=["Data Vendita"])
     df = df.sort_values("Data Vendita", ascending=False)
 
+    today = datetime.now().date()
+    min_date = df["Data Vendita"].min().date() if not df.empty else today - timedelta(days=30)
+    max_date = df["Data Vendita"].max().date() if not df.empty else today
+
+    if "sales_start_date" not in st.session_state:
+        st.session_state["sales_start_date"] = min_date
+    if "sales_end_date" not in st.session_state:
+        st.session_state["sales_end_date"] = max_date
+    if "sales_quick_range" not in st.session_state:
+        st.session_state["sales_quick_range"] = "totale"
+
+    active_quick_range = st.session_state.get("sales_quick_range", "totale")
+
+    st.markdown("### Range Rapido")
+    quick_col1, quick_col2, quick_col3, quick_col4 = st.columns(4)
+    quick_col1.button(
+        "Vendite di Oggi",
+        key="sales-quick-today",
+        use_container_width=True,
+        type="primary" if active_quick_range == "oggi" else "secondary",
+        on_click=_set_quick_range,
+        args=("oggi", today, min_date, max_date),
+    )
+    quick_col2.button(
+        "Vendite del Mese",
+        key="sales-quick-month",
+        use_container_width=True,
+        type="primary" if active_quick_range == "mese" else "secondary",
+        on_click=_set_quick_range,
+        args=("mese", today, min_date, max_date),
+    )
+    quick_col3.button(
+        "Vendite dell'Anno",
+        key="sales-quick-year",
+        use_container_width=True,
+        type="primary" if active_quick_range == "anno" else "secondary",
+        on_click=_set_quick_range,
+        args=("anno", today, min_date, max_date),
+    )
+    quick_col4.button(
+        "Vendite Totali",
+        key="sales-quick-total",
+        use_container_width=True,
+        type="primary" if active_quick_range == "totale" else "secondary",
+        on_click=_set_quick_range,
+        args=("totale", today, min_date, max_date),
+    )
+
     st.markdown("### Filtri")
     
     col1, col2, col3 = st.columns(3)
@@ -53,14 +206,14 @@ def render_sales_history_screen():
     with col1:
         start_date = st.date_input(
             "Data inizio",
-            value=df["Data Vendita"].min().date() if not df.empty else datetime.now().date() - timedelta(days=30),
+            value=st.session_state["sales_start_date"],
             key="sales_start_date"
         )
     
     with col2:
         end_date = st.date_input(
             "Data fine",
-            value=df["Data Vendita"].max().date() if not df.empty else datetime.now().date(),
+            value=st.session_state["sales_end_date"],
             key="sales_end_date"
         )
     
@@ -68,6 +221,9 @@ def render_sales_history_screen():
         st.write("")  # spacing
         st.write("")  # spacing
         filter_button = st.button("Filtra", use_container_width=True)
+
+    if filter_button:
+        st.session_state["sales_quick_range"] = "custom"
 
     # Filter by date range
     if filter_button or "sales_filtered" in st.session_state:
@@ -82,23 +238,48 @@ def render_sales_history_screen():
         else:
             # Display statistics
             st.markdown("### Statistiche")
+            delta_map = _compute_delta_map(
+                st.session_state.get("sales_quick_range", "totale"),
+                df,
+                filtered_df,
+            )
             
             stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
             
             with stat_col1:
-                st.metric("Numero Vendite", len(filtered_df))
+                st.metric(
+                    "Numero Vendite",
+                    len(filtered_df),
+                    delta=delta_map["sales_count"],
+                    delta_color="normal",
+                )
             
             with stat_col2:
                 total_quantity = filtered_df["Quantità"].sum()
-                st.metric("Quantità Totale", int(total_quantity))
+                st.metric(
+                    "Quantità Totale",
+                    int(total_quantity),
+                    delta=delta_map["total_quantity"],
+                    delta_color="normal",
+                )
             
             with stat_col3:
                 avg_price = filtered_df["Prezzo Unitario"].mean()
-                st.metric("Prezzo Medio", f"EUR {avg_price:.2f}")
+                st.metric(
+                    "Prezzo Medio",
+                    f"EUR {avg_price:.2f}",
+                    delta=delta_map["avg_price"],
+                    delta_color="normal",
+                )
             
             with stat_col4:
                 total_sales = filtered_df["Totale"].sum()
-                st.metric("Vendita Totale", f"EUR {total_sales:.2f}", delta=f"EUR {total_sales:.2f}", delta_color="off")
+                st.metric(
+                    "Vendita Totale",
+                    f"EUR {total_sales:.2f}",
+                    delta=delta_map["total_sales"],
+                    delta_color="normal",
+                )
             
             # Display filtered sales
             st.markdown("### Dettaglio Vendite")
@@ -126,12 +307,12 @@ def render_sales_history_screen():
             )
             
             # Export option
-            csv = display_df.to_csv(index=False).encode("utf-8")
+            excel_data = _to_excel_bytes(display_df)
             st.download_button(
-                label="Scarica CSV",
-                data=csv,
-                file_name=f"vendite_{start_date}_{end_date}.csv",
-                mime="text/csv",
+                label="Scarica Excel",
+                data=excel_data,
+                file_name=f"vendite_{start_date}_{end_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
     else:
         # Show all sales by default
@@ -177,12 +358,12 @@ def render_sales_history_screen():
         )
         
         # Export option
-        csv = display_df.to_csv(index=False).encode("utf-8")
+        excel_data = _to_excel_bytes(display_df)
         st.download_button(
-            label="Scarica CSV",
-            data=csv,
-            file_name=f"vendite_tutte.csv",
-            mime="text/csv",
+            label="Scarica Excel",
+            data=excel_data,
+            file_name="vendite_tutte.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
     st.markdown("[Torna alla dashboard](?view=dashboard)")
