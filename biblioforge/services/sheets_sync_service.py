@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 from biblioforge.models.book import Book
 from biblioforge.repositories.book_repository import BookRepository
@@ -39,6 +40,7 @@ class SheetsSyncService:
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive.readonly",
     ]
+    ROME_TZ = ZoneInfo("Europe/Rome")
 
     def __init__(
         self,
@@ -94,6 +96,11 @@ class SheetsSyncService:
     @staticmethod
     def _utc_now_iso() -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    @classmethod
+    def _rome_now_iso(cls) -> str:
+        now_rome = datetime.now(cls.ROME_TZ)
+        return f"{now_rome.isoformat()} {now_rome.tzname()}"
 
     @staticmethod
     def _truthy_env(name: str, default: bool = False) -> bool:
@@ -306,7 +313,7 @@ class SheetsSyncService:
         log_entries.append(
             {
                 "timestamp_epoch": time.time(),
-                "timestamp_iso": self._utc_now_iso(),
+                "timestamp_iso": self._rome_now_iso(),
                 "queue_rows_before": queue_rows_before,
                 "queue_rows_after": queue_rows_after,
                 "queue_rows_added": queue_added,
