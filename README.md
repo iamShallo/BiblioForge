@@ -38,7 +38,29 @@ Open your terminal and run the following commands:
     cd BiblioForge
     python -m venv .venv
     .venv\Scripts\Activate.ps1
-    pip install streamlit httpx pydantic pandas openpyxl
+    pip install streamlit httpx pydantic pandas openpyxl google-api-python-client google-auth
+
+---
+
+## Google Sheets Sync (Optional)
+
+The dashboard supports central synchronization with Google Sheets:
+- Push local DB to Google Sheets on a periodic schedule, with conflict policy `local_wins`
+- Google Sheets is treated as a mirror of Streamlit state; remote edits are not pulled automatically
+- Manual connection/save controls are available under **Importa da Excel**
+
+Required environment variables:
+
+    BIBLIOFORGE_SHEETS_SYNC_ENABLED=true
+    BIBLIOFORGE_SHEETS_SPREADSHEET_ID=your_google_sheet_id
+    BIBLIOFORGE_SHEETS_SERVICE_ACCOUNT_FILE=C:\path\to\service-account.json
+
+Optional environment variables:
+
+    BIBLIOFORGE_SHEETS_QUEUE_TAB=Libri
+    BIBLIOFORGE_SHEETS_APPROVED_TAB=Vendite
+    BIBLIOFORGE_SHEETS_SYNC_INTERVAL_SECONDS=600
+    BIBLIOFORGE_SHEETS_CONFLICT_POLICY=local_wins
 
 ---
 

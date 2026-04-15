@@ -127,7 +127,7 @@ def render_sales_history_screen():
 
     if not all_sold_books:
         st.info("Nessuna vendita registrata.")
-        st.markdown("[Torna alla dashboard](?view=dashboard)")
+        st.markdown('<a href="?view=dashboard" target="_blank" rel="noopener noreferrer">Torna alla dashboard</a>', unsafe_allow_html=True)
         return
 
     # Convert to dataframe
@@ -206,14 +206,12 @@ def render_sales_history_screen():
     with col1:
         start_date = st.date_input(
             "Data inizio",
-            value=st.session_state["sales_start_date"],
             key="sales_start_date"
         )
     
     with col2:
         end_date = st.date_input(
             "Data fine",
-            value=st.session_state["sales_end_date"],
             key="sales_end_date"
         )
     
@@ -366,4 +364,4 @@ def render_sales_history_screen():
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
-    st.markdown("[Torna alla dashboard](?view=dashboard)")
+    st.markdown('<a href="?view=dashboard" target="_blank" rel="noopener noreferrer">Torna alla dashboard</a>', unsafe_allow_html=True)

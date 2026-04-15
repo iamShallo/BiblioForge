@@ -1,0 +1,11 @@
+{
+  "last_push_epoch": 1776251088.542346,
+  "last_push_iso": "2026-04-15T11:04:48.542415+00:00",
+  "queue_checksum": "5d2bed427d4ca005a4b54bc5e1d1bb600f2512941f10f16b3ac4c1668cff317c",
+  "approved_checksum": "4ab47fc55cd842358c88902b6e1b32efb44d5daaf7ba4c118e01f77945a714ac",
+  "last_pull_iso": "2026-04-15T09:46:45.824230+00:00",
+  "last_error": null,
+  "sales_checksum": "4ab47fc55cd842358c88902b6e1b32efb44d5daaf7ba4c118e01f77945a714ac",
+  "last_push_queue_rows": 4961,
+  "last_push_sales_rows": 147
+}

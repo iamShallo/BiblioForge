@@ -16,6 +16,7 @@ import streamlit.components.v1 as components
 from biblioforge.controllers.pipeline_controller import BookNotFoundError, PipelineController
 from biblioforge.models.book import Book, BookStatus, SoldBook
 from biblioforge.repositories.sold_book_repository import SoldBookRepository
+from biblioforge.services.sheets_sync_service import SheetsSyncService
 from biblioforge.services.normalization_service import normalize_title
 from biblioforge.services.crawling_service import fetch_ibs_metadata
 from biblioforge.views.sales_history import render_sales_history_screen
@@ -24,6 +25,11 @@ from biblioforge.views.sales_history import render_sales_history_screen
 controller = PipelineController()
 sold_book_repo = SoldBookRepository(
     Path(__file__).parent.parent / "data" / "processed" / "sold_books.json"
+)
+sheets_sync = SheetsSyncService(
+    queue_repository=controller.repository,
+    approved_repository=controller.approved_repository,
+    state_path=controller.package_root / "data" / "processed" / "sheets_sync_state.json",
 )
 st.set_page_config(page_title="La Cicogna Triste", layout="wide")
 st.markdown(
@@ -260,9 +266,9 @@ def sync_books_file_state() -> None:
             "last_multi_sale_feedback",
         ]:
             st.session_state.pop(key, None)
-        # Avoid forced rerun here: it can interrupt list selection and make
-        # the UI snap back to the first book while the user is opening one.
-        return
+        st.session_state.pop("selected_book_id", None)
+        st.session_state.pop("pending_selected_book_id", None)
+        st.rerun()
 
 
 def _selection_base_title(book: Book) -> str:
@@ -282,6 +288,23 @@ def _selection_label(book: Book, duplicate_title_counts: Counter[str]) -> str:
         duplicate_suffix = f" | ID {book.id[-6:]}"
 
     return f"{title} - {author} | {code_label}{duplicate_suffix}"
+
+
+def _book_metadata_score(book: Book) -> int:
+    return controller._metadata_score(book)
+
+
+def _rank_books_by_metadata(books: list[Book]) -> list[Book]:
+    return sorted(
+        books,
+        key=lambda book: (
+            _book_metadata_score(book),
+            int(getattr(book, "catalog_quantity", 0) or 0),
+            int(getattr(book, "ratings_count", 0) or 0),
+            book.id,
+        ),
+        reverse=True,
+    )
 
 
 def request_selected_book(book_id: str | None) -> None:
@@ -314,6 +337,24 @@ def focus_text_input(label: str) -> None:
             }};
             focusField();
             setTimeout(focusField, 150);
+        }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
+def set_browser_tab_title(title: str) -> None:
+    escaped_title = json.dumps(title)
+    components.html(
+        f"""
+        <script>
+        (function() {{
+            document.title = {escaped_title};
+            if (window.parent && window.parent.document) {{
+                window.parent.document.title = {escaped_title};
+            }}
         }})();
         </script>
         """,
@@ -361,58 +402,63 @@ def focus_and_autoblur_isbn_input(label: str, should_focus: bool = False) -> Non
 
 def ensure_isbn_auto_trigger(label: str) -> None:
     escaped_label = json.dumps(label)
-    components.html(
-        f"""
+    script = """
         <script>
-        (function() {{
+        (function() {
             const parentWindow = window.parent;
-            const label = {escaped_label};
+            const label = __LABEL__;
             const selector = 'input[aria-label="' + label + '"]';
 
-            if (!parentWindow.__biblioforgeIsbnWatchers) {{
-                parentWindow.__biblioforgeIsbnWatchers = {{}};
-            }}
+            if (!parentWindow.__biblioforgeIsbnWatchers) {
+                parentWindow.__biblioforgeIsbnWatchers = {};
+            }
 
             const existing = parentWindow.__biblioforgeIsbnWatchers[label];
-            if (existing) {{
+            if (existing) {
                 clearInterval(existing);
-            }}
+            }
 
-            const triggerIfReady = (input) => {{
-                if (!input) {{
+            const triggerIfReady = (input) => {
+                if (!input) {
                     return;
-                }}
+                }
                 const normalized = (input.value || '').replace(/[^0-9A-Za-z]/g, '');
                 const lastSent = input.dataset.biblioforgeLastSubmittedIsbn || '';
-                if (normalized.length >= 13) {{
-                    if (lastSent !== normalized) {{
+                if (normalized.length >= 13) {
+                    if (lastSent !== normalized) {
                         input.dataset.biblioforgeLastSubmittedIsbn = normalized;
-                        input.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                        input.blur();
-                    }}
-                }} else {{
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                        setTimeout(() => input.blur(), 120);
+                    }
+                } else {
                     input.dataset.biblioforgeLastSubmittedIsbn = '';
-                }}
-            }};
+                }
+            };
 
-            const tick = () => {{
+            const tick = () => {
                 const input = parentWindow.document.querySelector(selector);
-                if (!input) {{
+                if (!input) {
                     return;
-                }}
-                if (input.dataset.biblioforgeIsbnImmediateInstalled !== '1') {{
+                }
+                if (input.dataset.biblioforgeIsbnImmediateInstalled !== '1') {
                     input.dataset.biblioforgeIsbnImmediateInstalled = '1';
                     input.addEventListener('input', () => triggerIfReady(input));
-                    input.addEventListener('paste', () => setTimeout(() => triggerIfReady(input), 0));
-                }}
+                    input.addEventListener('paste', () => {
+                        setTimeout(() => triggerIfReady(input), 50);
+                        setTimeout(() => triggerIfReady(input), 150);
+                    });
+                }
                 triggerIfReady(input);
-            }};
+            };
 
             parentWindow.__biblioforgeIsbnWatchers[label] = setInterval(tick, 40);
             tick();
-        }})();
+        })();
         </script>
-        """,
+        """.replace("__LABEL__", escaped_label)
+    components.html(
+        script,
         height=0,
         width=0,
     )
@@ -493,6 +539,71 @@ def format_duration(seconds: float) -> str:
     if minutes:
         return f"{minutes}m {secs}s"
     return f"{secs}s"
+
+
+def run_sheets_bootstrap_once() -> None:
+    """Keep startup local-first; do not import remote Google Sheets changes automatically."""
+    st.session_state["sheets_bootstrap_done"] = True
+
+
+def run_scheduled_sheets_push() -> None:
+    """Attempt push sync without interrupting user flow."""
+    cfg = sheets_sync.describe_configuration()
+    if not cfg.get("ready", False):
+        return
+
+    now = time.time()
+    push_result = sheets_sync.push_local_to_remote(force=False)
+    st.session_state["last_sheets_push_result"] = {
+        "status": push_result.status,
+        "message": push_result.message,
+        "when": now,
+    }
+
+
+def push_sheets_after_local_change() -> None:
+    """Keep compatibility hook for local edits without forcing an immediate push."""
+    st.session_state["sheets_sync_dirty"] = True
+
+
+def render_sheets_sync_box() -> None:
+    st.markdown("### Sincronizzazione cloud (Google Sheets)")
+    cfg = sheets_sync.describe_configuration()
+    manual_sheet = st.text_input(
+        "Link Google Sheet",
+        value=cfg.get("spreadsheet_id", ""),
+        key="sheets-manual-id-input",
+    )
+
+    resolved_sheet_id = sheets_sync._extract_sheet_id(manual_sheet)
+    if resolved_sheet_id:
+        sheet_url = f"https://docs.google.com/spreadsheets/d/{resolved_sheet_id}/edit"
+        st.markdown(
+            f'<a href="{sheet_url}" target="_blank" rel="noopener noreferrer">Apri Google Sheet</a>',
+            unsafe_allow_html=True,
+        )
+
+    stop_col, sync_col = st.columns([1, 5])
+
+    if stop_col.button("X", use_container_width=True, help="Termina sincronizzazione"):
+        sheets_sync.disable_connection()
+        st.warning("Sincronizzazione disattivata.")
+        st.rerun()
+
+    if sync_col.button("Salva e sincronizza subito", use_container_width=True):
+        linked = sheets_sync.save_connection(manual_sheet, enabled=True)
+        if not linked.get("ok"):
+            st.error(linked.get("message"))
+            return
+
+        with st.spinner("Sincronizzazione in corso..."):
+            result = sheets_sync.push_local_to_remote(force=True)
+        if result.status == "ok":
+            st.success("Foglio salvato e sincronizzato con successo.")
+        elif result.status == "skipped":
+            st.info(result.message)
+        else:
+            st.error(result.message)
 
 
 def bust_cache(url: str, token: str) -> str:
@@ -720,6 +831,7 @@ def render_editing_column(book: Book) -> None:
 
         if remove_with_price:
             st.session_state.pop(f"show-quantity-popup-{book.id}", None)
+            st.session_state["pending_selected_book_id"] = book.id
             st.session_state[f"show-remove-choice-{book.id}"] = True
             st.rerun()
         if reject:
@@ -1037,25 +1149,19 @@ def render_ingestion_box():
                     "author": author,
                     "catalog_ean": catalog_code,
                 }
-                selected = candidates[0] if candidates else None
-                if selected is not None:
-                    book = controller.ingest_selected_candidate(
-                        selected,
-                        fallback_title=title or query_title,
-                        fallback_author=author or None,
-                        catalog_ean=catalog_code or None,
-                        catalog_price=resolved_price,
-                        catalog_quantity=1,
+                if not candidates:
+                    st.session_state["show_isbn_ean_fallback"] = True
+                    st.session_state["last_failed_title"] = title
+                    st.session_state["last_failed_author"] = author
+                    st.session_state["last_failed_catalog_code"] = catalog_code
+                    st.session_state["ingestion_error_message"] = (
+                        "Nessun candidato trovato. Aggiungi autore o ISBN/EAN per restringere la ricerca."
                     )
-                else:
-                    book = controller.ingest_raw_book(
-                        query_title,
-                        author or None,
-                        catalog_ean=catalog_code or None,
-                        catalog_price=resolved_price,
-                        catalog_quantity=1,
-                        allow_low_confidence=True,
-                    )
+                    request_isbn_refocus("manual")
+                    st.warning(st.session_state["ingestion_error_message"])
+                    return
+
+                st.info("Trovate più corrispondenze. Seleziona il libro corretto qui sotto e conferma.")
         else:
             candidates = controller.find_candidates(
                 query_title,
@@ -1070,6 +1176,14 @@ def render_ingestion_box():
                 "catalog_ean": catalog_code,
             }
 
+            if len(candidates) > 1:
+                st.info("Trovate più corrispondenze. Seleziona il libro corretto qui sotto e conferma.")
+                st.session_state["show_isbn_ean_fallback"] = False
+                st.session_state["last_failed_title"] = ""
+                st.session_state["last_failed_author"] = ""
+                st.session_state["last_failed_catalog_code"] = ""
+                return
+
             selected = candidates[0] if candidates else None
             if selected is not None:
                 book = controller.ingest_selected_candidate(
@@ -1081,14 +1195,24 @@ def render_ingestion_box():
                     catalog_quantity=1,
                 )
             else:
-                book = controller.ingest_raw_book(
-                    query_title,
-                    author or None,
-                    catalog_ean=catalog_code or None,
-                    catalog_price=resolved_price,
-                    catalog_quantity=1,
-                    allow_low_confidence=True,
-                )
+                try:
+                    book = controller.ingest_raw_book(
+                        query_title,
+                        author or None,
+                        catalog_ean=catalog_code or None,
+                        catalog_price=resolved_price,
+                        catalog_quantity=1,
+                        allow_low_confidence=True,
+                    )
+                except BookNotFoundError as exc:
+                    st.session_state["show_isbn_ean_fallback"] = True
+                    st.session_state["last_failed_title"] = title
+                    st.session_state["last_failed_author"] = author
+                    st.session_state["last_failed_catalog_code"] = catalog_code
+                    st.session_state["ingestion_error_message"] = str(exc)
+                    request_isbn_refocus("manual")
+                    st.warning(str(exc))
+                    return
 
             inserted_price = getattr(book, "catalog_price", None)
             price_message = f"EUR {float(inserted_price):.2f}" if inserted_price is not None else "non disponibile"
@@ -1139,9 +1263,28 @@ def render_ingestion_box():
     title = st.text_input("Titolo", key="manual_ingest_title")
     author = st.text_input("Autore (opzionale)", key="manual_ingest_author")
     catalog_code = st.text_input("ISBN o EAN", key="manual_ingest_catalog_code")
+
+    normalized_catalog_code = _normalize_code(catalog_code)
+    if len(normalized_catalog_code) >= 10:
+        preview_matches = _find_books_by_isbn(normalized_catalog_code)
+        if preview_matches:
+            preview = preview_matches[0]
+            preview_title = preview.normalized_title or preview.raw_title or "Titolo sconosciuto"
+            preview_author = preview.author or "Autore sconosciuto"
+            preview_qty = int(getattr(preview, "catalog_quantity", 0) or 0)
+            if len(preview_matches) == 1:
+                st.caption(
+                    f"Trovato subito nel DB: {preview_title} - {preview_author} | Quantità: {preview_qty}"
+                )
+            else:
+                st.caption(
+                    f"Trovati {len(preview_matches)} risultati nel DB. Primo: {preview_title} - {preview_author} | Quantità: {preview_qty}"
+                )
+
     ensure_isbn_auto_trigger("ISBN o EAN")
     manual_scan_code = _normalize_code(catalog_code)
     if len(manual_scan_code) >= 13 and manual_scan_code != st.session_state.get("manual_last_autosearch_code", ""):
+        st.session_state["manual_clear_input_next_run"] = False
         st.session_state["manual_last_autosearch_code"] = manual_scan_code
         process_manual_ingestion(force=False)
         st.rerun()
@@ -1163,7 +1306,11 @@ def render_ingestion_box():
         choice = st.radio(
             "Candidati",
             options=list(range(len(candidates))),
-            format_func=lambda idx: f"{candidates[idx].get('title') or 'Titolo sconosciuto'} — {candidates[idx].get('authors') or 'Autore sconosciuto'}",
+            format_func=lambda idx: (
+                f"{candidates[idx].get('title') or 'Titolo sconosciuto'} — "
+                f"{candidates[idx].get('authors') or 'Autore sconosciuto'} | "
+                f"ISBN/EAN {candidates[idx].get('isbn') or candidates[idx].get('ean') or 'non disponibile'}"
+            ),
             key="ingest_choice",
         )
         if st.button("Usa selezione e importa", use_container_width=True):
@@ -1327,6 +1474,8 @@ def render_excel_ingestion_box() -> None:
             )
             st.error(f"Import da Excel fallito: {exc}")
 
+    render_sheets_sync_box()
+
     skipped_details = st.session_state.get("persisted_skipped_entries", [])
     skipped_report_path = st.session_state.get("persisted_skipped_report_path")
 
@@ -1441,22 +1590,32 @@ def _skipped_entries_to_dataframe(skipped_entries: list[dict]) -> pd.DataFrame:
 
 
 def _approved_books_to_dataframe(approved_books: list[Book]) -> pd.DataFrame:
+    def _best_identifier(book: Book) -> str | None:
+        for value in (
+            getattr(book, "isbn", None),
+            getattr(book, "isbn_10", None),
+            getattr(book, "catalog_ean", None),
+        ):
+            text = str(value or "").strip()
+            if text:
+                return text
+        return None
+
     rows = []
     for book in approved_books:
         categories = ", ".join(getattr(book, "categories", []) or [])
         rows.append(
             {
-                "Title": book.normalized_title or book.raw_title,
-                "Author": book.author,
-                "Primary Image": getattr(book, "cover_url", None),
+                "Titolo": book.normalized_title or book.raw_title,
+                "Autore": book.author,
+                "Immagine principale": getattr(book, "cover_url", None),
                 "Prezzo": getattr(book, "catalog_price", None),
-                "ISBN": getattr(book, "isbn", None),
-                "Publication Date": getattr(book, "published_date", None),
-                "Number of pages": getattr(book, "pages", None),
+                "ISBN": _best_identifier(book),
+                "Data pubblicazione": getattr(book, "published_date", None),
+                "Numero pagine": getattr(book, "pages", None),
                 "Categoria": categories,
-                "Content Summary": book.insights.summary if book.insights else None,
-                "Catalog Quantity": getattr(book, "catalog_quantity", None),
-                "Average Rating": getattr(book, "average_rating", None),
+                "Quantita catalogo": getattr(book, "catalog_quantity", None),
+                "Valutazione media": getattr(book, "average_rating", None),
             }
         )
     return pd.DataFrame(rows)
@@ -1468,26 +1627,106 @@ def _normalize_code(value: str | None) -> str:
     return "".join(ch for ch in str(value).upper() if ch.isalnum())
 
 
+def _isbn10_to_isbn13(isbn10: str) -> str:
+    core = _normalize_code(isbn10)
+    if len(core) != 10:
+        return ""
+
+    body = f"978{core[:-1]}"
+    total = 0
+    for index, char in enumerate(body):
+        total += int(char) * (1 if index % 2 == 0 else 3)
+    check = (10 - (total % 10)) % 10
+    return f"{body}{check}"
+
+
+def _isbn13_to_isbn10(isbn13: str) -> str:
+    core = _normalize_code(isbn13)
+    if len(core) != 13 or not core.startswith("978"):
+        return ""
+
+    body = core[3:-1]
+    total = 0
+    for index, char in enumerate(body, start=1):
+        total += index * int(char)
+    remainder = total % 11
+    check = "X" if remainder == 10 else str(remainder)
+    return f"{body}{check}"
+
+
+def _isbn_code_matches(left: str | None, right: str | None) -> bool:
+    left_norm = _normalize_code(left)
+    right_norm = _normalize_code(right)
+    if not left_norm or not right_norm:
+        return False
+    if left_norm == right_norm:
+        return True
+
+    pairs = {
+        (_isbn10_to_isbn13(left_norm), right_norm),
+        (_isbn10_to_isbn13(right_norm), left_norm),
+        (_isbn13_to_isbn10(left_norm), right_norm),
+        (_isbn13_to_isbn10(right_norm), left_norm),
+    }
+    return any(expected and expected == actual for expected, actual in pairs)
+
+
 def _find_book_by_isbn(code: str) -> Book | None:
     needle = _normalize_code(code)
     if not needle:
         return None
 
+    candidates = _rank_books_by_metadata(controller.repository.list_books())
+
+    for candidate in candidates:
+        values = [
+            getattr(candidate, "isbn", None),
+            getattr(candidate, "isbn_10", None),
+            getattr(candidate, "catalog_ean", None),
+        ]
+        if any(_isbn_code_matches(needle, v) for v in values if v):
+            return candidate
+    return None
+
+
+def _find_books_by_isbn(code: str) -> list[Book]:
+    needle = _normalize_code(code)
+    if not needle:
+        return []
+
+    matches: list[Book] = []
     for candidate in controller.repository.list_books():
         values = [
             getattr(candidate, "isbn", None),
             getattr(candidate, "isbn_10", None),
             getattr(candidate, "catalog_ean", None),
         ]
-        if any(_normalize_code(v) == needle for v in values if v):
-            return candidate
-    return None
+        if any(_isbn_code_matches(needle, v) for v in values if v):
+            matches.append(candidate)
+    return _rank_books_by_metadata(matches)
 
 
 def _find_existing_book_for_manual(title: str | None, author: str | None, catalog_ean: str | None) -> Book | None:
-    existing_by_code = _find_book_by_isbn(catalog_ean or "")
-    if existing_by_code is not None:
-        return existing_by_code
+    code_matches = _find_books_by_isbn(catalog_ean or "")
+    if code_matches:
+        canonical_title = normalize_title((title or "").strip(), (author or "").strip() or None)
+        author_norm = (author or "").strip().casefold()
+        ranked_matches = []
+        for candidate in code_matches:
+            cand_title = normalize_title(
+                (candidate.raw_title or candidate.normalized_title or "").strip(),
+                (candidate.author or "").strip() or None,
+            )
+            cand_author = (candidate.author or "").strip().casefold()
+            score = _book_metadata_score(candidate)
+            if canonical_title and cand_title == canonical_title:
+                score += 2
+            if author_norm and cand_author and author_norm == cand_author:
+                score += 1
+            ranked_matches.append((score, int(getattr(candidate, "catalog_quantity", 0) or 0), candidate.id, candidate))
+
+        ranked_matches.sort(key=lambda item: (item[0], item[1], item[2]), reverse=True)
+        return ranked_matches[0][3]
 
     canonical_title = normalize_title((title or "").strip(), (author or "").strip() or None)
     if not canonical_title:
@@ -1510,7 +1749,8 @@ def _find_existing_book_for_manual(title: str | None, author: str | None, catalo
 
 
 def render_multi_sale_screen() -> None:
-    st.markdown("## Vendita multipla")
+    set_browser_tab_title("Vendite multiple")
+    st.markdown("## Vendite multiple")
     st.caption("Inserisci/scansiona ISBN per aggiungere libri alla vendita.")
 
     if st.session_state.get("last_multi_sale_message"):
@@ -1533,7 +1773,8 @@ def render_multi_sale_screen() -> None:
             return True
 
         cart = dict(st.session_state.get("multi_sale_cart", {}))
-        current_in_catalog = int(getattr(found, "catalog_quantity", 0) or 0)
+        same_code_books = _find_books_by_isbn(scanned_isbn)
+        current_in_catalog = sum(int(getattr(book, "catalog_quantity", 0) or 0) for book in same_code_books)
         current_in_cart = int(cart.get(found.id, 0) or 0)
         proposed_qty = current_in_cart + 1
 
@@ -1561,6 +1802,12 @@ def render_multi_sale_screen() -> None:
     if "multi_sale_clear_input_next_run" not in st.session_state:
         st.session_state["multi_sale_clear_input_next_run"] = False
 
+    def handle_multi_sale_scan_change() -> None:
+        scanned_code = _normalize_code(st.session_state.get("multi_sale_scan_input"))
+        if scanned_code:
+            st.session_state["multi_sale_last_autosearch_code"] = scanned_code
+        process_scanned_isbn()
+
     if st.session_state.get("multi_sale_clear_input_next_run"):
         st.session_state["multi_sale_scan_input"] = ""
         st.session_state["multi_sale_last_autosearch_code"] = ""
@@ -1578,15 +1825,9 @@ def render_multi_sale_screen() -> None:
     isbn_col.text_input(
         "ISBN (scanner codice a barre)",
         key="multi_sale_scan_input",
+        on_change=handle_multi_sale_scan_change,
     )
     ensure_isbn_auto_trigger("ISBN (scanner codice a barre)")
-    multi_sale_scan_code = _normalize_code(st.session_state.get("multi_sale_scan_input"))
-    if len(multi_sale_scan_code) >= 13 and multi_sale_scan_code != st.session_state.get("multi_sale_last_autosearch_code", ""):
-        st.session_state["multi_sale_last_autosearch_code"] = multi_sale_scan_code
-        if process_scanned_isbn():
-            st.rerun()
-    elif len(multi_sale_scan_code) < 13:
-        st.session_state["multi_sale_last_autosearch_code"] = ""
     if add_col.button("Aggiungi", use_container_width=True):
         if process_scanned_isbn():
             st.rerun()
@@ -1637,8 +1878,10 @@ def render_multi_sale_screen() -> None:
                 latest = controller.repository.get_book(book_id)
                 if not latest:
                     continue
-                current_qty = int(getattr(latest, "catalog_quantity", 0) or 0)
-                if int(qty) > current_qty:
+                code = getattr(latest, "isbn", None) or getattr(latest, "isbn_10", None) or getattr(latest, "catalog_ean", None)
+                matched_books = _find_books_by_isbn(str(code or "")) if code else [latest]
+                available_qty = sum(int(getattr(book, "catalog_quantity", 0) or 0) for book in matched_books)
+                if int(qty) > available_qty:
                     invalid_items.append(latest.normalized_title or latest.raw_title)
 
             if invalid_items:
@@ -1649,8 +1892,12 @@ def render_multi_sale_screen() -> None:
                 latest = controller.repository.get_book(book_id)
                 if not latest:
                     continue
-                current_qty = int(getattr(latest, "catalog_quantity", 0) or 0)
-                new_qty = current_qty - int(qty)
+                code = getattr(latest, "isbn", None) or getattr(latest, "isbn_10", None) or getattr(latest, "catalog_ean", None)
+                matched_books = _find_books_by_isbn(str(code or "")) if code else [latest]
+                matched_books = sorted(matched_books, key=lambda b: (int(getattr(b, "catalog_quantity", 0) or 0), b.id), reverse=True)
+                remaining = int(qty)
+                processed_ids: set[str] = set()
+
                 sold_book_repo.add_sale(
                     SoldBook(
                         book_id=latest.id,
@@ -1664,18 +1911,42 @@ def render_multi_sale_screen() -> None:
                         ean=latest.catalog_ean,
                     )
                 )
-                if new_qty < 1:
-                    controller.repository.delete_book(book_id)
-                else:
-                    latest.catalog_quantity = new_qty
-                    controller.repository.upsert_book(latest)
+
+                for candidate in matched_books:
+                    candidate_qty = int(getattr(candidate, "catalog_quantity", 0) or 0)
+                    if candidate_qty <= 0:
+                        continue
+
+                    if remaining <= 0:
+                        if int(qty) == 1 and candidate.id not in processed_ids and candidate_qty <= 1:
+                            controller.repository.delete_book(candidate.id)
+                            processed_ids.add(candidate.id)
+                        continue
+
+                    to_remove = min(candidate_qty, remaining)
+                    new_qty = candidate_qty - to_remove
+                    if new_qty < 1:
+                        controller.repository.delete_book(candidate.id)
+                    else:
+                        candidate.catalog_quantity = new_qty
+                        controller.repository.upsert_book(candidate)
+                    processed_ids.add(candidate.id)
+                    remaining -= to_remove
+
+                if int(qty) == 1:
+                    for candidate in matched_books:
+                        if candidate.id in processed_ids:
+                            continue
+                        candidate_qty = int(getattr(candidate, "catalog_quantity", 0) or 0)
+                        if candidate_qty <= 1:
+                            controller.repository.delete_book(candidate.id)
             st.session_state["multi_sale_cart"] = {}
             st.session_state["last_multi_sale_message"] = "Vendita multipla registrata."
             st.rerun()
 
     render_isbn_refocus("multi_sale", "ISBN (scanner codice a barre)")
 
-    st.markdown("[Torna alla dashboard](?view=dashboard)")
+    st.markdown('<a href="?view=dashboard" target="_blank" rel="noopener noreferrer">Torna alla dashboard</a>', unsafe_allow_html=True)
 
 
 def render_floating_final_db_download_button() -> None:
@@ -1691,8 +1962,8 @@ def render_floating_final_db_download_button() -> None:
                download="LaCicognaTristeDB.xlsx">
                Download Excel DB
             </a>
-            <a class="floating-multi-btn" href="?view=multi-sale">Vendita multipla</a>
-            <a class="floating-sales-btn" href="?view=sales">Vendite passate</a>
+            <a class="floating-multi-btn" href="?view=multi-sale" target="_blank" rel="noopener noreferrer">Vendita multipla</a>
+            <a class="floating-sales-btn" href="?view=sales" target="_blank" rel="noopener noreferrer">Vendite passate</a>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1770,6 +2041,7 @@ def main():
         current_view = current_view[0] if current_view else "dashboard"
 
     sync_books_file_state()
+    run_scheduled_sheets_push()
 
     if current_view == "multi-sale":
         render_centered_title_with_logo()
@@ -1814,6 +2086,7 @@ def main():
     pending_ids = [book.id for book in pending]
     apply_pending_selected_book(pending_ids)
     if st.session_state.get("selected_book_id") not in pending_ids:
+        st.session_state["pending_selected_book_id"] = pending_ids[0]
         st.session_state["selected_book_id"] = pending_ids[0]
 
     title_counts = Counter(_selection_base_title(book).casefold() for book in pending)

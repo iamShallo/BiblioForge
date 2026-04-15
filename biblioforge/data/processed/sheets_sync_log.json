@@ -1,0 +1,67 @@
+[
+  {
+    "timestamp_epoch": 1776249362.169313,
+    "timestamp_iso": "2026-04-15T10:36:02.169321+00:00",
+    "queue_rows_before": 0,
+    "queue_rows_after": 4969,
+    "queue_rows_added": 4969,
+    "queue_rows_deleted": 0,
+    "sales_rows_before": 0,
+    "sales_rows_after": 138,
+    "sales_rows_added": 138,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 2
+  },
+  {
+    "timestamp_epoch": 1776249438.189398,
+    "timestamp_iso": "2026-04-15T10:37:18.189402+00:00",
+    "queue_rows_before": 4969,
+    "queue_rows_after": 4966,
+    "queue_rows_added": 0,
+    "queue_rows_deleted": 3,
+    "sales_rows_before": 138,
+    "sales_rows_after": 140,
+    "sales_rows_added": 2,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 2
+  },
+  {
+    "timestamp_epoch": 1776249617.294192,
+    "timestamp_iso": "2026-04-15T10:40:17.294194+00:00",
+    "queue_rows_before": 4966,
+    "queue_rows_after": 4965,
+    "queue_rows_added": 0,
+    "queue_rows_deleted": 1,
+    "sales_rows_before": 140,
+    "sales_rows_after": 141,
+    "sales_rows_added": 1,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 2
+  },
+  {
+    "timestamp_epoch": 1776250230.046929,
+    "timestamp_iso": "2026-04-15T10:50:30.046936+00:00",
+    "queue_rows_before": 4965,
+    "queue_rows_after": 4964,
+    "queue_rows_added": 0,
+    "queue_rows_deleted": 1,
+    "sales_rows_before": 141,
+    "sales_rows_after": 144,
+    "sales_rows_added": 3,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 2
+  },
+  {
+    "timestamp_epoch": 1776251088.546821,
+    "timestamp_iso": "2026-04-15T11:04:48.546824+00:00",
+    "queue_rows_before": 4964,
+    "queue_rows_after": 4961,
+    "queue_rows_added": 0,
+    "queue_rows_deleted": 3,
+    "sales_rows_before": 144,
+    "sales_rows_after": 147,
+    "sales_rows_added": 3,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 2
+  }
+]

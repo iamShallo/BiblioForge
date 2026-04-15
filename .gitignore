@@ -1,0 +1,4 @@
+
+# Local Google credentials (never commit)
+biblioforge/data/processed/la-cicogna-triste-*.json
+biblioforge/data/processed/google_service_account.json
