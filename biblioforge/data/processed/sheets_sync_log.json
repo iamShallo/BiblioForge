@@ -1,0 +1,67 @@
+[
+  {
+    "timestamp_epoch": 1776332895.0286531,
+    "timestamp_iso": "2026-04-16T11:48:15.028689+02:00 CEST",
+    "queue_rows_before": 3881,
+    "queue_rows_after": 3946,
+    "queue_rows_added": 65,
+    "queue_rows_deleted": 0,
+    "sales_rows_before": 147,
+    "sales_rows_after": 147,
+    "sales_rows_added": 0,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 2
+  },
+  {
+    "timestamp_epoch": 1776332906.234844,
+    "timestamp_iso": "2026-04-16T11:48:26.234863+02:00 CEST",
+    "queue_rows_before": 3946,
+    "queue_rows_after": 3946,
+    "queue_rows_added": 0,
+    "queue_rows_deleted": 0,
+    "sales_rows_before": 147,
+    "sales_rows_after": 147,
+    "sales_rows_added": 0,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 2
+  },
+  {
+    "timestamp_epoch": 1776333080.47505,
+    "timestamp_iso": "2026-04-16T11:51:20.475059+02:00 CEST",
+    "queue_rows_before": 3946,
+    "queue_rows_after": 3946,
+    "queue_rows_added": 0,
+    "queue_rows_deleted": 0,
+    "sales_rows_before": 147,
+    "sales_rows_after": 147,
+    "sales_rows_added": 0,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 2
+  },
+  {
+    "timestamp_epoch": 1776333115.79407,
+    "timestamp_iso": "2026-04-16T11:51:55.794073+02:00 CEST",
+    "queue_rows_before": 3946,
+    "queue_rows_after": 3946,
+    "queue_rows_added": 0,
+    "queue_rows_deleted": 0,
+    "sales_rows_before": 147,
+    "sales_rows_after": 147,
+    "sales_rows_added": 0,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 2
+  },
+  {
+    "timestamp_epoch": 1776333567.070333,
+    "timestamp_iso": "2026-04-16T11:59:27.070335+02:00 CEST",
+    "queue_rows_before": 3946,
+    "queue_rows_after": 3946,
+    "queue_rows_added": 0,
+    "queue_rows_deleted": 0,
+    "sales_rows_before": 147,
+    "sales_rows_after": 147,
+    "sales_rows_added": 0,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 2
+  }
+]

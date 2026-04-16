@@ -10,8 +10,9 @@ from uuid import uuid4
 
 import pandas as pd
 
-from biblioforge.models.book import Book, BookStatus
+from biblioforge.models.book import Book, BookStatus, SoldBook
 from biblioforge.repositories.book_repository import BookRepository
+from biblioforge.repositories.sold_book_repository import SoldBookRepository
 from biblioforge.services.ai_service import generate_insights, normalize_catalog_entry
 from biblioforge.services.crawling_service import _fetch_ibs_price, enrich_book, search_candidates
 from biblioforge.services.normalization_service import normalize_title
@@ -34,9 +35,11 @@ class PipelineController:
 
         self.repository = BookRepository(target)
         self.approved_repository = BookRepository(approved_target)
+        self.sold_repository = SoldBookRepository(processed_dir / "sold_books.json")
         self.default_cleaned_excel_path = cleaned_dir / "books_cleaned.xlsx"
         self.last_import_skipped = 0
         self.last_import_skipped_details: List[dict] = []
+        self.last_import_sales_added = 0
 
     @staticmethod
     def _is_reliably_enriched(book: Book) -> bool:
@@ -715,6 +718,7 @@ class PipelineController:
         self.last_import_skipped = 0
         self.last_import_skipped_details = []
         self.last_import_skipped_report_path = None
+        self.last_import_sales_added = 0
 
         title_candidates = ["Title", "Titolo", "Book Title", "Titolo Libro", "Libro", "Nome Libro"]
         isbn_candidates = ["ISBN", "ISBN-13", "ISBN13", "Codice ISBN", "EAN/ISBN", "Codice libro"]
@@ -736,6 +740,8 @@ class PipelineController:
             "Importo",
             "Costo",
         ]
+        sale_date_candidates = ["Data vendita", "Sale Date", "Data", "Data Vendita"]
+        sale_book_id_candidates = ["ID libro", "Book ID", "Id", "ID"]
 
         def _env_truthy(name: str, default: bool = True) -> bool:
             raw = os.getenv(name)
@@ -900,7 +906,16 @@ class PipelineController:
 
         entries: List[dict] = []
 
-        for _, frame in workbook.items():
+        sheet_map = {str(name).strip().lower(): frame for name, frame in workbook.items()}
+        books_frame = sheet_map.get("libri")
+        sales_frame = sheet_map.get("vendite")
+
+        if books_frame is not None:
+            frames_for_books = [books_frame]
+        else:
+            frames_for_books = []
+
+        for frame in frames_for_books:
             if frame is None or frame.empty:
                 continue
 
@@ -978,6 +993,122 @@ class PipelineController:
                         "price": resolved_price,
                     }
                 )
+
+        def _build_sale_key(payload: dict) -> str:
+            parts = [
+                str(payload.get("book_id") or "").strip().lower(),
+                str(payload.get("normalized_title") or payload.get("raw_title") or "").strip().lower(),
+                str(payload.get("author") or "").strip().lower(),
+                str(payload.get("sale_date") or "").strip().lower(),
+                str(payload.get("isbn") or "").strip().lower(),
+                str(payload.get("ean") or "").strip().lower(),
+                str(payload.get("price") or "").strip().lower(),
+                str(payload.get("quantity") or "").strip().lower(),
+            ]
+            return "|".join(parts)
+
+        def _normalize_sale_date(value) -> str:
+            if value is None or pd.isna(value):
+                return ""
+            if isinstance(value, datetime):
+                return value.strftime("%Y-%m-%d %H:%M:%S")
+            as_text = str(value).strip()
+            if not as_text:
+                return ""
+            try:
+                parsed = pd.to_datetime(as_text, errors="coerce")
+                if pd.notna(parsed):
+                    return parsed.to_pydatetime().strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                pass
+            return as_text
+
+        def _import_sales_from_sheet(frame: Optional[pd.DataFrame]) -> int:
+            if frame is None or frame.empty:
+                return 0
+
+            title_col = _pick_column(frame.columns, title_candidates)
+            author_col = _pick_column(frame.columns, author_candidates)
+            price_col = _pick_column(frame.columns, price_candidates)
+            quantity_col = _pick_column(frame.columns, quantity_candidates)
+            date_col = _pick_column(frame.columns, sale_date_candidates)
+            isbn_col = _pick_column(frame.columns, isbn_candidates)
+            ean_col = _pick_column(frame.columns, ean_candidates)
+            book_id_col = _pick_column(frame.columns, sale_book_id_candidates)
+
+            if title_col is None and isbn_col is None and ean_col is None:
+                return 0
+
+            existing_sales = self.sold_repository.list_all()
+            existing_keys = {
+                _build_sale_key(
+                    {
+                        "book_id": sale.book_id,
+                        "raw_title": sale.raw_title,
+                        "normalized_title": sale.normalized_title,
+                        "author": sale.author,
+                        "price": sale.price,
+                        "quantity": sale.quantity,
+                        "sale_date": sale.sale_date,
+                        "isbn": sale.isbn,
+                        "ean": sale.ean,
+                    }
+                )
+                for sale in existing_sales
+            }
+
+            inserted = 0
+            for _, row in frame.iterrows():
+                raw_title_value = _cell_to_text(row.get(title_col)) if title_col is not None else ""
+                title_value = _clean_title(raw_title_value)
+                isbn_value = _clean_catalog_code(row.get(isbn_col)) if isbn_col is not None else ""
+                ean_value = _clean_catalog_code(row.get(ean_col)) if ean_col is not None else ""
+
+                if not title_value and not isbn_value and not ean_value:
+                    continue
+
+                author_raw = _cell_to_text(row.get(author_col)) if author_col is not None else ""
+                author_value = _clean_author(author_raw) if author_raw else ""
+                price_value = _to_float(row.get(price_col)) if price_col is not None else None
+                quantity_value = _to_int(row.get(quantity_col)) if quantity_col is not None else 1
+                date_value = _normalize_sale_date(row.get(date_col)) if date_col is not None else ""
+                book_id_value = _cell_to_text(row.get(book_id_col)) if book_id_col is not None else ""
+
+                normalized_sale_title = normalize_title(title_value or isbn_value or ean_value, author_value or None)
+                sale_payload = {
+                    "book_id": book_id_value,
+                    "raw_title": title_value or normalized_sale_title,
+                    "normalized_title": normalized_sale_title,
+                    "author": author_value or None,
+                    "price": price_value,
+                    "quantity": quantity_value or 1,
+                    "sale_date": date_value,
+                    "isbn": isbn_value or None,
+                    "ean": ean_value or None,
+                }
+                dedupe_key = _build_sale_key(sale_payload)
+                if dedupe_key in existing_keys:
+                    continue
+
+                self.sold_repository.add_sale(
+                    SoldBook(
+                        book_id=sale_payload["book_id"],
+                        raw_title=sale_payload["raw_title"],
+                        normalized_title=sale_payload["normalized_title"],
+                        author=sale_payload["author"],
+                        price=sale_payload["price"],
+                        quantity=int(sale_payload["quantity"] or 1),
+                        sale_date=sale_payload["sale_date"] or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        isbn=sale_payload["isbn"],
+                        ean=sale_payload["ean"],
+                    )
+                )
+                existing_keys.add(dedupe_key)
+                inserted += 1
+
+            return inserted
+
+        self.last_import_sales_added = _import_sales_from_sheet(sales_frame)
 
         if not entries:
             self.last_import_skipped = skipped

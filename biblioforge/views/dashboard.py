@@ -1,5 +1,6 @@
 import asyncio
 import time
+import threading
 import base64
 import json
 import tempfile
@@ -31,6 +32,10 @@ sheets_sync = SheetsSyncService(
     approved_repository=controller.approved_repository,
     state_path=controller.package_root / "data" / "processed" / "sheets_sync_state.json",
 )
+_sheets_scheduler_lock = threading.Lock()
+_sheets_scheduler_started = False
+_sheets_sync_pause_event = threading.Event()
+_sheets_sync_operation_lock = threading.Lock()
 st.set_page_config(page_title="La Cicogna Triste", layout="wide")
 st.markdown(
     """
@@ -542,28 +547,83 @@ def format_duration(seconds: float) -> str:
 
 
 def run_sheets_bootstrap_once() -> None:
-    """Keep startup local-first; do not import remote Google Sheets changes automatically."""
+    """Pull once per browser session to import remote books/sales into local JSON files."""
+    if st.session_state.get("sheets_bootstrap_done", False):
+        return
+
     st.session_state["sheets_bootstrap_done"] = True
-
-
-def run_scheduled_sheets_push() -> None:
-    """Attempt push sync without interrupting user flow."""
     cfg = sheets_sync.describe_configuration()
     if not cfg.get("ready", False):
         return
 
-    now = time.time()
-    push_result = sheets_sync.push_local_to_remote(force=False)
-    st.session_state["last_sheets_push_result"] = {
-        "status": push_result.status,
-        "message": push_result.message,
-        "when": now,
+    result = sheets_sync.pull_remote_into_local()
+    st.session_state["last_sheets_pull_result"] = {
+        "status": result.status,
+        "message": result.message,
+        "when": time.time(),
     }
+
+
+def run_scheduled_sheets_push() -> None:
+    """Attempt push sync without interrupting user flow."""
+    if _sheets_sync_pause_event.is_set():
+        return
+
+    if not _sheets_sync_operation_lock.acquire(blocking=False):
+        return
+
+    try:
+        cfg = sheets_sync.describe_configuration()
+        if not cfg.get("ready", False):
+            return
+
+        now = time.time()
+        push_result = sheets_sync.push_local_to_remote(force=False)
+        st.session_state["last_sheets_push_result"] = {
+            "status": push_result.status,
+            "message": push_result.message,
+            "when": now,
+        }
+    finally:
+        _sheets_sync_operation_lock.release()
 
 
 def push_sheets_after_local_change() -> None:
     """Keep compatibility hook for local edits without forcing an immediate push."""
     st.session_state["sheets_sync_dirty"] = True
+
+
+def _sheets_scheduler_loop() -> None:
+    """Background periodic sync loop that avoids browser reload side effects."""
+    while True:
+        try:
+            if not _sheets_sync_pause_event.is_set() and _sheets_sync_operation_lock.acquire(blocking=False):
+                try:
+                    sheets_sync.push_local_to_remote(force=False)
+                finally:
+                    _sheets_sync_operation_lock.release()
+        except Exception:
+            pass
+        time.sleep(60)
+
+
+def pause_sheets_sync() -> None:
+    _sheets_sync_pause_event.set()
+
+
+def resume_sheets_sync() -> None:
+    _sheets_sync_pause_event.clear()
+
+
+def ensure_sheets_scheduler_running() -> None:
+    """Start a single background scheduler for periodic Sheets push."""
+    global _sheets_scheduler_started
+    with _sheets_scheduler_lock:
+        if _sheets_scheduler_started:
+            return
+        worker = threading.Thread(target=_sheets_scheduler_loop, daemon=True)
+        worker.start()
+        _sheets_scheduler_started = True
 
 
 def render_sheets_sync_box() -> None:
@@ -583,27 +643,148 @@ def render_sheets_sync_box() -> None:
             unsafe_allow_html=True,
         )
 
-    stop_col, sync_col = st.columns([1, 5])
+    current_cfg = sheets_sync.describe_configuration()
+    if current_cfg.get("ready", False):
+        st.markdown(
+            "<span style='color:#15803d;font-weight:700;'>Sincronizzazione attiva</span>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            "<span style='color:#b91c1c;font-weight:700;'>Sincronizzazione non attiva</span>",
+            unsafe_allow_html=True,
+        )
 
-    if stop_col.button("X", use_container_width=True, help="Termina sincronizzazione"):
+    remove_col, save_col, update_col = st.columns([2, 2, 2])
+
+    if remove_col.button("Togli database", use_container_width=True, help="Termina sincronizzazione"):
         sheets_sync.disable_connection()
+        st.session_state["sheets-manual-id-input"] = ""
         st.warning("Sincronizzazione disattivata.")
         st.rerun()
 
-    if sync_col.button("Salva e sincronizza subito", use_container_width=True):
-        linked = sheets_sync.save_connection(manual_sheet, enabled=True)
-        if not linked.get("ok"):
-            st.error(linked.get("message"))
-            return
+    if save_col.button("Salva e sincronizza", use_container_width=True):
+        _sheets_sync_operation_lock.acquire()
+        try:
+            linked = sheets_sync.save_connection(manual_sheet, enabled=True)
+            if not linked.get("ok"):
+                st.error(linked.get("message"))
+                return
 
-        with st.spinner("Sincronizzazione in corso..."):
-            result = sheets_sync.push_local_to_remote(force=True)
+            with st.spinner("Sincronizzazione in corso..."):
+                result = sheets_sync.push_local_to_remote(force=True)
+        finally:
+            _sheets_sync_operation_lock.release()
         if result.status == "ok":
-            st.success("Foglio salvato e sincronizzato con successo.")
+            st.success("Collegamento salvato. Sincronizzazione iniziale completata con successo.")
+            st.rerun()
         elif result.status == "skipped":
             st.info(result.message)
         else:
             st.error(result.message)
+
+    if update_col.button("Update Database", use_container_width=True):
+        progress_bar = st.progress(0)
+        progress_status = st.empty()
+
+        def _on_pull_progress(progress: int, message: str) -> None:
+            progress_bar.progress(max(0, min(100, int(progress))))
+            progress_status.caption(message)
+
+        pause_sheets_sync()
+        _sheets_sync_operation_lock.acquire()
+        try:
+            linked = sheets_sync.save_connection(manual_sheet, enabled=True)
+            if not linked.get("ok"):
+                st.error(linked.get("message"))
+                return
+
+            with st.spinner("Aggiornamento database locale in corso..."):
+                pull_result = sheets_sync.pull_remote_into_local(progress_callback=_on_pull_progress)
+        finally:
+            _sheets_sync_operation_lock.release()
+            resume_sheets_sync()
+
+        progress_bar.progress(100)
+        st.session_state["last_sheets_pull_result"] = {
+            "status": pull_result.status,
+            "message": pull_result.message,
+            "when": time.time(),
+            "details": pull_result.details or {},
+            "elapsed_seconds": pull_result.elapsed_seconds,
+            "average_seconds": pull_result.average_seconds,
+        }
+
+        if pull_result.status == "ok":
+            st.success("Database locale aggiornato da Google Sheet.")
+            st.caption(pull_result.message)
+        elif pull_result.status == "skipped":
+            st.info(pull_result.message)
+        else:
+            st.error(pull_result.message)
+
+    pull_info = st.session_state.get("last_sheets_pull_result")
+    if isinstance(pull_info, dict) and pull_info.get("status") == "ok":
+        details = pull_info.get("details") or {}
+        books = details.get("books") or {}
+        sales = details.get("sales") or {}
+
+        elapsed = pull_info.get("elapsed_seconds")
+        average = pull_info.get("average_seconds")
+        if isinstance(elapsed, (int, float)):
+            if isinstance(average, (int, float)):
+                st.caption(f"Tempo ultimo update: {elapsed:.1f}s | Tempo medio: {average:.1f}s")
+            else:
+                st.caption(f"Tempo ultimo update: {elapsed:.1f}s")
+
+        with st.expander("Dettaglio modifiche importate (Update Database)", expanded=False):
+            st.markdown(
+                "\n".join(
+                    [
+                        f"- Libri aggiunti: {int(books.get('added', 0) or 0)}",
+                        f"- Libri rimossi: {int(books.get('deleted', 0) or 0)}",
+                        f"- Libri modificati: {int(books.get('updated', 0) or 0)}",
+                        f"- Vendite aggiunte: {int(sales.get('added', 0) or 0)}",
+                        f"- Vendite modificate: {int(sales.get('updated', 0) or 0)}",
+                    ]
+                )
+            )
+
+            added_books = books.get("added_items") or []
+            if added_books:
+                st.markdown("**Libri aggiunti**")
+                for item in added_books:
+                    st.write(f"- {item}")
+
+            deleted_books = books.get("deleted_items") or []
+            if deleted_books:
+                st.markdown("**Libri rimossi**")
+                for item in deleted_books:
+                    st.write(f"- {item}")
+
+            updated_books = books.get("updated_items") or []
+            if updated_books:
+                st.markdown("**Libri modificati**")
+                for item in updated_books:
+                    if isinstance(item, dict):
+                        book_label = item.get("book") or "Libro"
+                        changed_fields = ", ".join(str(field) for field in (item.get("changed_fields") or []))
+                        st.write(f"- {book_label}: {changed_fields}")
+
+            added_sales = sales.get("added_items") or []
+            if added_sales:
+                st.markdown("**Vendite aggiunte**")
+                for item in added_sales:
+                    st.write(f"- {item}")
+
+            updated_sales = sales.get("updated_items") or []
+            if updated_sales:
+                st.markdown("**Vendite modificate**")
+                for item in updated_sales:
+                    if isinstance(item, dict):
+                        sale_label = item.get("sale") or "Vendita"
+                        changed_fields = ", ".join(str(field) for field in (item.get("changed_fields") or []))
+                        st.write(f"- {sale_label}: {changed_fields}")
 
 
 def bust_cache(url: str, token: str) -> str:
@@ -1399,6 +1580,7 @@ def render_ingestion_box():
 
 def render_excel_ingestion_box() -> None:
     st.markdown("### Importa da Excel")
+    cfg = sheets_sync.describe_configuration()
     if "persisted_skipped_entries" not in st.session_state:
         st.session_state["persisted_skipped_entries"] = []
     if "persisted_skipped_report_path" not in st.session_state:
@@ -1429,17 +1611,18 @@ def render_excel_ingestion_box() -> None:
 
     submitted = st.button("Importa file selezionato", use_container_width=True, disabled=not bool(st.session_state.get("uploaded_excel_temp_path")))
 
-    timer_placeholder = st.empty()
     progress_placeholder = st.empty()
     if submitted:
         start = time.perf_counter()
-        timer_placeholder.info("Import in corso...")
-        progress_bar = progress_placeholder.progress(0, text="Preparazione import...")
+        progress_bar = progress_placeholder.progress(0, text="Import in corso... 0/0 | mancanti: 0")
 
         def _on_progress(processed: int, total: int) -> None:
             pct = 0 if total == 0 else int((processed / total) * 100)
+            if total > 0 and processed > 0:
+                pct = max(1, pct)
             pct = max(0, min(pct, 100))
-            text = f"Import in corso... {processed}/{total}" if total else "Import in corso..."
+            remaining = max(0, total - processed)
+            text = f"Import in corso... {processed}/{total} | mancanti: {remaining}" if total else "Import in corso... 0/0 | mancanti: 0"
             progress_bar.progress(pct, text=text)
 
         try:
@@ -1447,9 +1630,23 @@ def render_excel_ingestion_box() -> None:
             if not import_source:
                 raise FileNotFoundError("Nessun file Excel selezionato.")
 
-            total = controller.ingest_books_from_excel(import_source, progress_callback=_on_progress)
+            pause_sheets_sync()
+            _sheets_sync_operation_lock.acquire()
+            try:
+                linked = sheets_sync.save_connection(cfg.get("spreadsheet_id", ""), enabled=True)
+                if not linked.get("ok"):
+                    raise RuntimeError(linked.get("message"))
+
+                total = controller.ingest_books_from_excel(import_source, progress_callback=_on_progress)
+            finally:
+                _sheets_sync_operation_lock.release()
+                resume_sheets_sync()
+
             progress_bar.progress(100, text="Import completato")
-            st.success(f"Importati {total} libri nella coda di revisione.")
+            sales_total = int(getattr(controller, "last_import_sales_added", 0) or 0)
+            st.success(
+                f"Importati {total} libri nella coda di revisione e {sales_total} vendite in archivio."
+            )
             if getattr(controller, "last_import_skipped", 0):
                 skipped_count = controller.last_import_skipped
                 st.warning(
@@ -1465,13 +1662,10 @@ def render_excel_ingestion_box() -> None:
             )
             st.session_state["uploaded_excel_signature"] = None
             st.session_state["uploaded_excel_temp_path"] = None
-            
-            timer_placeholder.success(f"Import completato in {format_duration(time.perf_counter() - start)}")
+
+            st.caption(f"Import completato in {format_duration(time.perf_counter() - start)}")
         except Exception as exc:
             progress_bar.progress(0.0, text="Import fallito")
-            timer_placeholder.error(
-                f"Import fallito dopo {format_duration(time.perf_counter() - start)}: {exc}"
-            )
             st.error(f"Import da Excel fallito: {exc}")
 
     render_sheets_sync_box()
@@ -2041,7 +2235,7 @@ def main():
         current_view = current_view[0] if current_view else "dashboard"
 
     sync_books_file_state()
-    run_scheduled_sheets_push()
+    ensure_sheets_scheduler_running()
 
     if current_view == "multi-sale":
         render_centered_title_with_logo()
