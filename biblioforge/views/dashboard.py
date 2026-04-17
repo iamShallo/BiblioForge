@@ -961,30 +961,6 @@ def render_context_column(book: Book) -> None:
             details.append(f"{book.ratings_count:,} valutazioni")
         st.markdown(f"{rating_html} &nbsp; {' · '.join(details)}", unsafe_allow_html=True)
 
-    if book.review_samples:
-        st.markdown("### Esempi di recensioni")
-        preview_chars = 260
-        for idx, sample in enumerate(book.review_samples):
-            full_text = (sample.text or "").strip()
-            expanded_key = f"review-expanded-{book.id}-{idx}"
-            if expanded_key not in st.session_state:
-                st.session_state[expanded_key] = False
-
-            is_long = len(full_text) > preview_chars
-            shown_text = full_text
-            if is_long and not st.session_state[expanded_key]:
-                shown_text = full_text[:preview_chars].rsplit(" ", 1)[0] + "..."
-
-            st.markdown(f"- **{sample.reviewer}** ({sample.rating:.1f}/5)")
-            st.markdown(shown_text)
-
-            if is_long:
-                toggle_label = "Riduci" if st.session_state[expanded_key] else "Espandi"
-                if st.button(toggle_label, key=f"{expanded_key}-toggle"):
-                    st.session_state[expanded_key] = not st.session_state[expanded_key]
-                    st.rerun()
-    else:
-        st.warning("Nessun dato di recensioni utente disponibile per questo libro.")
 
     # Rejected-information audit remains stored in data, but is intentionally hidden in UI.
 def render_editing_column(book: Book) -> None:

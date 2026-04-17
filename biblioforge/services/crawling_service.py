@@ -12,7 +12,7 @@ from urllib.parse import quote_plus, urljoin
 
 import httpx
 
-from biblioforge.models.book import Book, BookStatus, ReviewSample
+from biblioforge.models.book import Book, BookStatus
 from biblioforge.services.normalization_service import normalize_title
 
 
@@ -57,14 +57,6 @@ def _compute_ratio(book: Book) -> Optional[float]:
         return round(min(max(book.average_rating / 5, 0), 1), 3)
     return None
 
-
-def _compute_ratio_from_reviews(samples: List[ReviewSample]) -> Optional[float]:
-    """Compute ratio from collected review ratings when API ratings are missing."""
-    ratings = [s.rating for s in samples if isinstance(getattr(s, "rating", None), (int, float))]
-    if not ratings:
-        return None
-    avg = sum(ratings) / len(ratings)
-    return round(min(max(avg / 5, 0), 1), 3)
 
 
 def _deterministic_float(book: Book, low: float, high: float) -> float:
@@ -980,244 +972,6 @@ async def _fetch_goodreads_rating(
     return None, 0, None
 
 
-async def _fetch_goodreads_user_reviews(
-    normalized_title: str,
-    author: Optional[str],
-    book_url: Optional[str] = None,
-) -> List[ReviewSample]:
-    """Best-effort extraction of user-facing review snippets from Goodreads pages."""
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-    }
-
-    async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=headers) as client:
-        resolved_book_url = book_url
-        if not resolved_book_url:
-            params = {"q": f"{normalized_title} {author or ''}".strip()}
-            search_resp = await client.get(GOODREADS_SEARCH_URL, params=params)
-            search_resp.raise_for_status()
-            search_html = search_resp.text
-            book_link_match = re.search(r'href="(/book/show/[^"]+)"', search_html)
-            if not book_link_match:
-                return []
-            resolved_book_url = f"https://www.goodreads.com{book_link_match.group(1)}"
-
-        book_resp = await client.get(resolved_book_url)
-        book_resp.raise_for_status()
-        page = book_resp.text
-
-    snippets: List[ReviewSample] = []
-    seen_snippets = set()
-
-    card_pattern = r'<article class="ReviewCard"[\s\S]*?</article>'
-    cards = re.findall(card_pattern, page, re.IGNORECASE)
-    for card in cards:
-        text_match = re.search(r'data-testid="reviewText"[^>]*>([\s\S]*?)</section>', card, re.IGNORECASE)
-        if not text_match:
-            text_match = re.search(r'class="ReviewText__content"[^>]*>([\s\S]*?)</span>', card, re.IGNORECASE)
-        if not text_match:
-            continue
-
-        cleaned = _clean_user_review_text(text_match.group(1))
-        if not cleaned or _looks_promotional(cleaned) or _looks_like_synopsis(cleaned):
-            continue
-
-        reviewer = "Goodreads User"
-        reviewer_match = re.search(r'data-testid="name"[^>]*>[\s\S]*?<a[^>]*>(.*?)</a>', card, re.IGNORECASE)
-        if reviewer_match:
-            reviewer_clean = _clean_review_text(reviewer_match.group(1))
-            if reviewer_clean:
-                reviewer = reviewer_clean
-        else:
-            reviewer_match = re.search(r'aria-label="Review by ([^"]+)"', card, re.IGNORECASE)
-            if reviewer_match:
-                reviewer_clean = _clean_review_text(reviewer_match.group(1))
-                if reviewer_clean:
-                    reviewer = reviewer_clean
-
-        rating = None
-        rating_match = re.search(r'aria-label="Rating\s*([0-5](?:[\.,]\d+)?)\s*out of 5"', card, re.IGNORECASE)
-        if rating_match:
-            try:
-                rating = float(rating_match.group(1).replace(",", "."))
-            except Exception:
-                rating = None
-
-        if rating is None:
-            continue
-
-        normalized = re.sub(r"\s+", " ", cleaned).strip().lower()
-        if normalized in seen_snippets:
-            continue
-        seen_snippets.add(normalized)
-
-        snippets.append(
-            ReviewSample(
-                reviewer=reviewer,
-                rating=rating,
-                text=cleaned[:4000],
-            )
-        )
-        if len(snippets) >= 3:
-            return snippets
-
-    return snippets[:3]
-
-
-async def _fetch_amazon_user_reviews(normalized_title: str, author: Optional[str], max_pages: int = 2) -> List[ReviewSample]:
-    """Best-effort extraction of user review snippets from Amazon product pages.
-
-    Note: Amazon may block scraping; failures should not break the pipeline.
-    max_pages controls pagination depth to gather more than a couple of reviews when available.
-    """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-        "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
-    }
-    query = f"{normalized_title} {author or ''} libro".strip()
-
-    async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=headers) as client:
-        search_resp = await client.get(AMAZON_IT_SEARCH_URL, params={"k": query})
-        search_resp.raise_for_status()
-        search_html = search_resp.text
-
-        # Find first valid ASIN from search results (skip placeholders).
-        asin = None
-        for match in re.finditer(r'data-asin="([A-Z0-9]{10})"', search_html):
-            candidate = match.group(1)
-            if candidate and candidate != "" and candidate != "0000000000":
-                asin = candidate
-                break
-        if not asin:
-            return []
-
-        snippets: List[ReviewSample] = []
-        seen_snippets = set()
-
-        def _extract_amazon_reviewer(context_html: str) -> str:
-            patterns = [
-                r'data-hook="review-author"[^>]*>(.*?)</a>',
-                r'class="a-profile-name"[^>]*>(.*?)</span>',
-            ]
-            for pattern in patterns:
-                m = re.search(pattern, context_html, re.IGNORECASE | re.DOTALL)
-                if not m:
-                    continue
-                name = _clean_review_text(m.group(1))
-                if name:
-                    return name
-            return "Amazon User"
-
-        def _extract_amazon_rating(context_html: str) -> Optional[float]:
-            patterns = [
-                r'([0-5](?:[\.,]\d+)?)\s+su\s+5\s+stelle',
-                r'([0-5](?:[\.,]\d+)?)\s+out of\s+5\s+stars',
-            ]
-            for pattern in patterns:
-                m = re.search(pattern, context_html, re.IGNORECASE)
-                if not m:
-                    continue
-                try:
-                    return float(m.group(1).replace(",", "."))
-                except Exception:
-                    continue
-            return None
-
-        patterns = [
-            r'data-hook="review-body"[^>]*>\s*<span[^>]*>(.*?)</span>',
-            r'class="a-expander-content reviewText review-text-content a-expander-partial-collapse-content"[^>]*>(.*?)</span>',
-            r'data-hook="review-collapsed"[^>]*>(.*?)</span>',
-            r'class="review-text"[^>]*>(.*?)</span>',
-        ]
-
-        for page_num in range(1, max_pages + 1):
-            review_url = f"https://www.amazon.it/product-reviews/{asin}?reviewerType=all_reviews&pageNumber={page_num}"
-            reviews_resp = await client.get(review_url)
-            reviews_resp.raise_for_status()
-            page_html = reviews_resp.text
-
-            for pattern in patterns:
-                for match in re.finditer(pattern, page_html, re.DOTALL | re.IGNORECASE):
-                    cleaned = _clean_user_review_text(match.group(1))
-                    if not cleaned or _looks_promotional(cleaned) or _looks_like_synopsis(cleaned):
-                        continue
-
-                    context_start = max(0, match.start() - 1300)
-                    context_end = min(len(page_html), match.end() + 350)
-                    context_html = page_html[context_start:context_end]
-                    reviewer = _extract_amazon_reviewer(context_html)
-                    rating = _extract_amazon_rating(context_html)
-                    if rating is None:
-                        continue
-
-                    normalized = re.sub(r"\s+", " ", cleaned).strip().lower()
-                    if normalized in seen_snippets:
-                        continue
-                    seen_snippets.add(normalized)
-
-                    snippets.append(
-                        ReviewSample(
-                            reviewer=reviewer,
-                            rating=rating,
-                            text=cleaned[:4000],
-                        )
-                    )
-                    if len(snippets) >= 5:
-                        return snippets[:5]
-
-        return snippets[:5]
-
-
-async def _fetch_amazon_rating(normalized_title: str, author: Optional[str]) -> Tuple[Optional[float], Optional[int]]:
-    """Fetch average star rating and (approximate) count from Amazon search/review page."""
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-        "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
-    }
-    query = f"{normalized_title} {author or ''} libro".strip()
-
-    async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=headers) as client:
-        search_resp = await client.get(AMAZON_IT_SEARCH_URL, params={"k": query})
-        search_resp.raise_for_status()
-        search_html = search_resp.text
-
-        asin = None
-        for match in re.finditer(r'data-asin="([A-Z0-9]{10})"', search_html):
-            candidate = match.group(1)
-            if candidate and candidate != "" and candidate != "0000000000":
-                asin = candidate
-                break
-        if not asin:
-            return None, None
-        review_url = f"https://www.amazon.it/product-reviews/{asin}?reviewerType=all_reviews"
-        reviews_resp = await client.get(review_url)
-        reviews_resp.raise_for_status()
-        page = reviews_resp.text
-
-    rating = None
-    count = None
-
-    rating_match = re.search(r'([0-5],[0-9]|[0-5]\.[0-9]) su 5 stelle', page)
-    if rating_match:
-        rating_text = rating_match.group(1).replace(",", ".")
-        try:
-            rating = float(rating_text)
-        except ValueError:
-            rating = None
-
-    count_match = re.search(r"([\d\.]+) valutazioni", page)
-    if count_match:
-        try:
-            count = int(count_match.group(1).replace(".", ""))
-        except ValueError:
-            count = None
-
-    return rating, count
-
-
 async def _fetch_openlibrary_summary(normalized_title: str, author: Optional[str]) -> Optional[str]:
     params = {
         "title": normalized_title,
@@ -1353,91 +1107,6 @@ def _build_cover_fallback(book: Book) -> str:
     return f"https://via.placeholder.com/320x480.png?text=No+Cover+{seed}"
 
 
-def _reviews_from_snippet(snippet: Optional[str]) -> List[ReviewSample]:
-    if not snippet:
-        return []
-
-    cleaned = _clean_review_text(snippet)
-    if not cleaned or _looks_promotional(cleaned):
-        return []
-
-    return [
-        ReviewSample(
-            reviewer="Google Books Snippet",
-            rating=4.5,
-            text=cleaned,
-        )
-    ]
-
-
-def _reviews_from_snippet_with_discarded(snippet: Optional[str]) -> Tuple[List[ReviewSample], List[str]]:
-    if not snippet:
-        return [], []
-    cleaned = _clean_review_text(snippet)
-    if not cleaned:
-        return [], []
-    if _looks_promotional(cleaned):
-        return [], [cleaned]
-    return _reviews_from_snippet(cleaned), []
-
-
-def _reviews_from_description(description: Optional[str]) -> List[ReviewSample]:
-    if not description:
-        return []
-
-    cleaned = _clean_review_text(description)
-    if not cleaned:
-        return []
-
-    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", cleaned) if s.strip()]
-    snippets = sentences[:2] if sentences else [cleaned[:240]]
-    filtered = []
-    for snippet in snippets:
-        normalized = _clean_review_text(snippet)
-        if not normalized or _looks_promotional(normalized):
-            continue
-        filtered.append(normalized[:280])
-
-    return [
-        ReviewSample(
-            reviewer=f"Editorial Extract {idx + 1}",
-            rating=4.0,
-            text=snippet,
-        )
-        for idx, snippet in enumerate(filtered)
-    ]
-
-
-def _reviews_from_description_with_discarded(description: Optional[str]) -> Tuple[List[ReviewSample], List[str]]:
-    if not description:
-        return [], []
-    cleaned = _clean_review_text(description)
-    if not cleaned:
-        return [], []
-
-    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", cleaned) if s.strip()]
-    snippets = sentences[:3] if sentences else [cleaned[:260]]
-    kept: List[str] = []
-    discarded: List[str] = []
-    for snippet in snippets:
-        normalized = _clean_review_text(snippet)
-        if not normalized:
-            continue
-        if _looks_promotional(normalized):
-            discarded.append(normalized)
-            continue
-        kept.append(normalized[:280])
-
-    return [
-        ReviewSample(
-            reviewer=f"Editorial Extract {idx + 1}",
-            rating=4.0,
-            text=snippet,
-        )
-        for idx, snippet in enumerate(kept)
-    ], discarded
-
-
 def _clean_review_text(text: Optional[str]) -> str:
     if not text:
         return ""
@@ -1446,91 +1115,6 @@ def _clean_review_text(text: Optional[str]) -> str:
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned
 
-
-def _clean_user_review_text(text: Optional[str]) -> str:
-    """Clean user reviews preserving paragraph breaks for readability."""
-    if not text:
-        return ""
-
-    cleaned = html.unescape(str(text))
-    cleaned = re.sub(r"<br\s*/?>", "\n", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"</(p|div|li|section)>", "\n\n", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"<[^>]+>", " ", cleaned)
-    cleaned = cleaned.replace("\r\n", "\n").replace("\r", "\n")
-
-    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in cleaned.split("\n")]
-    compact: List[str] = []
-    previous_blank = False
-    for line in lines:
-        if not line:
-            if not previous_blank:
-                compact.append("")
-            previous_blank = True
-            continue
-        compact.append(line)
-        previous_blank = False
-
-    return "\n".join(compact).strip()
-
-
-def _looks_promotional(text: str) -> bool:
-    lowered = text.lower()
-    promo_markers = [
-        "now the acclaimed",
-        "hbo series",
-        "cultural phenomenon",
-        "masterpiece",
-        "bestseller",
-        "buy now",
-        "movie tie-in",
-        "new york times",
-        "available now",
-    ]
-    if any(marker in lowered for marker in promo_markers):
-        return True
-
-    # Very shouty snippets are often marketing copy.
-    alpha_chars = [ch for ch in text if ch.isalpha()]
-    if alpha_chars:
-        uppercase_ratio = sum(1 for ch in alpha_chars if ch.isupper()) / len(alpha_chars)
-        if uppercase_ratio > 0.6:
-            return True
-
-    return False
-
-
-def _looks_like_synopsis(text: str) -> bool:
-    lowered = (text or "").lower()
-
-    synopsis_markers = [
-        "la storia segue",
-        "il romanzo racconta",
-        "segue le vicende",
-        "in un futuro",
-        "dopo millenni",
-        "la trama",
-        "the story follows",
-        "the novel follows",
-        "set in",
-        "plot",
-    ]
-    marker_hits = sum(1 for marker in synopsis_markers if marker in lowered)
-
-    opinion_markers = [
-        " secondo me ",
-        " a mio ",
-        " penso ",
-        " trovo ",
-        " non mi ",
-        " mi sembra ",
-        " i think ",
-        " for me ",
-        " i found ",
-        " in my opinion ",
-    ]
-    has_opinion = any(marker in f" {lowered} " for marker in opinion_markers)
-
-    return marker_hits >= 2 and not has_opinion
 
 
 def _normalize_summary_candidate(text: Optional[str]) -> str:
@@ -1695,41 +1279,6 @@ async def _fetch_google_books_page_count(links: List[Optional[str]]) -> Optional
 
 
 
-def _reviews_from_rating_signal(rating: Optional[float], count: int) -> List[ReviewSample]:
-    if rating is None and not count:
-        return []
-    count_text = f" over {count} ratings" if count else ""
-    rating_text = f"{rating:.2f}/5" if rating is not None else "N/A"
-    return [
-        ReviewSample(
-            reviewer="Public Rating Signal",
-            rating=float(rating or 3.5),
-            text=f"Average reader score {rating_text}{count_text}.",
-        )
-    ]
-
-
-def _reviews_from_user_snippets(source: str, snippets: List[str], default_rating: float = 4.0) -> List[ReviewSample]:
-    output: List[ReviewSample] = []
-    seen_texts = set()
-    for idx, snippet in enumerate(snippets[:3]):
-        cleaned = _clean_user_review_text(snippet)
-        if not cleaned or _looks_promotional(cleaned) or _looks_like_synopsis(cleaned):
-            continue
-
-        key = re.sub(r"\s+", " ", cleaned).strip().lower()
-        if key in seen_texts:
-            continue
-        seen_texts.add(key)
-
-        output.append(
-            ReviewSample(
-                reviewer=f"{source} User Review {idx + 1}",
-                rating=default_rating,
-                text=cleaned[:4000],
-            )
-        )
-    return output
 
 
 async def enrich_book(book: Book) -> Book:
@@ -1815,7 +1364,7 @@ async def enrich_book(book: Book) -> Book:
         except Exception:
             pass
 
-        # Try Goodreads to refine sentiment.
+        # Try Goodreads to refine sentiment and get description.
         try:
             goodreads_book_url = await _find_goodreads_book_url(book.normalized_title, book.author)
             book.goodreads_link = goodreads_book_url
@@ -1836,26 +1385,6 @@ async def enrich_book(book: Book) -> Book:
             if gr_desc and not book.fetched_summary:
                 book.fetched_summary = str(gr_desc).strip()
                 book.summary_source = "goodreads_crawler"
-        except Exception:
-            pass
-
-        # Fetch user-generated snippets from Goodreads when available.
-        try:
-            goodreads_reviews = await _fetch_goodreads_user_reviews(
-                book.normalized_title,
-                book.author,
-                book_url=getattr(book, "goodreads_link", None),
-            )
-            if goodreads_reviews:
-                book.review_samples.extend(goodreads_reviews)
-        except Exception:
-            pass
-
-        # Try Amazon user reviews as additional source (best-effort, paginated for more coverage).
-        try:
-            amazon_reviews = await _fetch_amazon_user_reviews(book.normalized_title, book.author, max_pages=2)
-            if amazon_reviews:
-                book.review_samples.extend(amazon_reviews)
         except Exception:
             pass
 
@@ -1897,28 +1426,13 @@ async def enrich_book(book: Book) -> Book:
         if not book.cover_url:
             book.cover_url = _build_cover_fallback(book)
 
-        # Keep only validated real review snippets.
-        deduped: List[ReviewSample] = []
-        seen = set()
-        for sample in book.review_samples:
-            sample.text = _clean_user_review_text(sample.text)
-            if not sample.text or _looks_promotional(sample.text) or _looks_like_synopsis(sample.text):
-                if sample.text:
-                    discarded_examples.append(sample.text)
-                continue
-            key = re.sub(r"\s+", " ", sample.text).strip().lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            deduped.append(sample)
-
         # Keep rating empty when Goodreads has no score.
         if book.average_rating is None:
             book.positive_ratio = None
             book.ratings_count = 0
 
-        book.review_samples = deduped[:5]
-        book.discarded_information_examples = [x[:260] for x in discarded_examples if x][:5]
+        book.review_samples = []
+        book.discarded_information_examples = []
 
     except Exception:
         # Keep existing values on crawler/network failure; avoid synthetic bibliographic data.

@@ -180,23 +180,6 @@ def _derive_tags(book: Book) -> List[str]:
             if keyword in text:
                 candidates.append(tag)
 
-    if book.review_samples:
-        review_text = " ".join(sample.text for sample in book.review_samples).lower()
-        review_map = {
-            "slow": "Slow Burn",
-            "twist": "Twisty",
-            "atmosphere": "Atmospheric",
-            "character": "Character-Driven",
-            "world": "World-Building",
-            "epic": "Epic",
-            "political": "Political Intrigue",
-            "court": "Court Politics",
-            "magic": "Magic System",
-            "adventure": "Adventure",
-        }
-        for keyword, tag in review_map.items():
-            if keyword in review_text:
-                candidates.append(tag)
 
     if book.pages and book.pages >= 500:
         candidates.append("Long Read")
@@ -221,13 +204,6 @@ def _derive_tags(book: Book) -> List[str]:
 def _derive_rejected_information(book: Book) -> List[TransparencyNote]:
     rejected: List[TransparencyNote] = []
     discarded_examples: List[str] = list(getattr(book, "discarded_information_examples", []) or [])
-    if not book.review_samples:
-        rejected.append(
-            TransparencyNote(
-                reason="No direct user reviews",
-                detail="Excluded reader-opinion claims because no review samples were available.",
-            )
-        )
     if not book.isbn:
         rejected.append(
             TransparencyNote(

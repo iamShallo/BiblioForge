@@ -162,6 +162,84 @@ class SheetsSyncService:
             pass
         return {}
 
+<<<<<<< HEAD
+=======
+    def _resolve_service_account_path(self, service_account_file: str) -> Path:
+        raw_path = str(service_account_file or "").strip()
+        if not raw_path:
+            return Path()
+        path = Path(raw_path).expanduser()
+        if path.is_absolute():
+            # Try to return as-is first if it exists
+            if path.exists():
+                return path
+            # If absolute path doesn't exist, still return it (will fail later with clear error)
+            return path
+
+        candidates = [
+            Path.cwd() / path,
+            self.state_path.parent / path,
+            self.package_root / path,
+            self.project_root / path,
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+
+        # Prefer state_path.parent as fallback for relative paths stored in config
+        return self.state_path.parent / path
+
+    def _discover_service_account_file(self) -> Path:
+        processed_dir = self.state_path.parent
+        conventional_names = [
+            "google_service_account.json",
+            "service_account.json",
+            "service-account.json",
+            "credentials.json",
+        ]
+
+        for name in conventional_names:
+            candidate = processed_dir / name
+            if candidate.exists():
+                return candidate
+
+        reserved_names = {
+            "sheets_sync_config.json",
+            "sheets_sync_log.json",
+            "sheets_sync_state.json",
+            "books.json",
+            "sold_books.json",
+        }
+        json_candidates = [
+            candidate
+            for candidate in processed_dir.glob("*.json")
+            if candidate.name not in reserved_names
+        ]
+        if len(json_candidates) == 1:
+            return json_candidates[0]
+
+        return processed_dir / conventional_names[0]
+
+    def _normalize_service_account_reference(self, service_account_file: Any) -> str:
+        path = str(service_account_file or "").strip()
+        if not path:
+            return ""
+        return self._portable_service_account_reference(self._resolve_service_account_path(path))
+
+    def _portable_service_account_reference(self, path: Path) -> str:
+        candidate = Path(path).expanduser()
+        if not candidate.is_absolute():
+            return str(candidate)
+
+        for root in (self.state_path.parent, self.package_root, self.project_root):
+            try:
+                return str(candidate.relative_to(root))
+            except ValueError:
+                continue
+
+        return str(candidate)
+
+>>>>>>> b968eecf6efc10fdbcf7fb8e5b5dcc4e3cbfcdb7
     def _save_persisted_config(self) -> None:
         payload = {
             "enabled": bool(self.enabled),

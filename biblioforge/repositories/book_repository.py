@@ -170,18 +170,7 @@ class BookRepository:
             average_rating=4.5,
             ratings_count=24000,
             positive_ratio=0.913,
-            review_samples=[
-                ReviewSample(
-                    reviewer="Elena",
-                    rating=4.8,
-                    text="Dense mystery that blends theology and politics in a medieval abbey.",
-                ),
-                ReviewSample(
-                    reviewer="Luca",
-                    rating=4.6,
-                    text="Eco keeps tension high while exploring knowledge, power, and faith.",
-                ),
-            ],
+            review_samples=[],
             discarded_information_examples=[],
             insights=BookInsights(
                 summary=(
