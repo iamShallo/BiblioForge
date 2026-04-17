@@ -36,6 +36,7 @@ sheets_sync = SheetsSyncService(
 _sheets_scheduler_lock = threading.Lock()
 _sheets_scheduler_started = False
 _sheets_sync_pause_event = threading.Event()
+_sheets_scheduler_paused_event = threading.Event()
 _sheets_sync_operation_lock = threading.Lock()
 st.set_page_config(page_title="La Cicogna Triste", layout="wide")
 BatchUpdateManager.init_session_state()
@@ -299,6 +300,38 @@ def _selection_label(book: Book, duplicate_title_counts: Counter[str]) -> str:
 
 def _book_metadata_score(book: Book) -> int:
     return controller._metadata_score(book)
+
+
+def _safe_float(value: object) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        text = str(value).strip().replace(",", ".")
+        if not text:
+            return None
+        return float(text)
+    except (ValueError, TypeError):
+        return None
+
+
+def _safe_int(value: object) -> int:
+    if value is None:
+        return 0
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    try:
+        text = str(value).strip()
+        if not text:
+            return 0
+        return int(float(text))
+    except (ValueError, TypeError):
+        return 0
 
 
 def _rank_books_by_metadata(books: list[Book]) -> list[Book]:
@@ -599,22 +632,33 @@ def _sheets_scheduler_loop() -> None:
     """Background periodic sync loop that avoids browser reload side effects."""
     while True:
         try:
-            if not _sheets_sync_pause_event.is_set() and _sheets_sync_operation_lock.acquire(blocking=False):
-                try:
-                    sheets_sync.push_local_to_remote(force=False)
-                finally:
-                    _sheets_sync_operation_lock.release()
+            if _sheets_sync_pause_event.is_set():
+                # Scheduler is paused - signal this state and sleep
+                _sheets_scheduler_paused_event.set()
+                time.sleep(1)
+            else:
+                # Not paused - try to acquire lock with timeout and run push
+                _sheets_scheduler_paused_event.clear()
+                if _sheets_sync_operation_lock.acquire(timeout=2):
+                    try:
+                        sheets_sync.push_local_to_remote(force=False)
+                    finally:
+                        _sheets_sync_operation_lock.release()
         except Exception:
             pass
         time.sleep(60)
 
 
 def pause_sheets_sync() -> None:
+    """Pause the background scheduler and wait until it's actually paused."""
     _sheets_sync_pause_event.set()
+    # Wait up to 5 seconds for scheduler to actually pause
+    _sheets_scheduler_paused_event.wait(timeout=5)
 
 
 def resume_sheets_sync() -> None:
     _sheets_sync_pause_event.clear()
+    _sheets_scheduler_paused_event.clear()
 
 
 def ensure_sheets_scheduler_running() -> None:
@@ -745,6 +789,8 @@ def render_sheets_sync_box() -> None:
                     [
                         f"- Libri aggiunti: {int(books.get('added', 0) or 0)}",
                         f"- Libri rimossi: {int(books.get('deleted', 0) or 0)}",
+                        f"- Doppioni rimossi: {int(books.get('duplicates_pruned', 0) or 0)}",
+                        f"- Doppioni rimossi su Google Sheet: {int(books.get('remote_duplicates_pruned', 0) or 0)}",
                         f"- Libri modificati: {int(books.get('updated', 0) or 0)}",
                         f"- Vendite aggiunte: {int(sales.get('added', 0) or 0)}",
                         f"- Vendite modificate: {int(sales.get('updated', 0) or 0)}",
@@ -835,7 +881,7 @@ def render_context_column(book: Book) -> None:
     catalog_ean = getattr(book, "catalog_ean", None)
     catalog_publisher = getattr(book, "catalog_publisher", None)
     catalog_quantity = getattr(book, "catalog_quantity", None)
-    catalog_price = getattr(book, "catalog_price", None)
+    catalog_price = _safe_float(getattr(book, "catalog_price", None))
 
     cols = st.columns([1, 2])
     with cols[0]:
@@ -949,18 +995,20 @@ def render_context_column(book: Book) -> None:
     if reject_attempts:
         st.caption(f"Tentativi di rifiuto: {reject_attempts}")
 
-    if book.average_rating is not None:
-        if book.average_rating <= 2.0:
+    rating_value = _safe_float(getattr(book, "average_rating", None))
+    if rating_value is not None:
+        if rating_value <= 2.0:
             color = "#c23b22"  # red
-        elif book.average_rating <= 4.0:
+        elif rating_value <= 4.0:
             color = "#d97706"  # orange
         else:
             color = "#1b8f3b"  # green
 
-        rating_html = f"<span style='color:{color}; font-size:30px; font-weight:800;'>{book.average_rating:.2f}</span>"
+        rating_html = f"<span style='color:{color}; font-size:30px; font-weight:800;'>{rating_value:.2f}</span>"
         details = ["Valutazione Goodreads"]
-        if book.ratings_count:
-            details.append(f"{book.ratings_count:,} valutazioni")
+        ratings_count = _safe_int(getattr(book, "ratings_count", 0))
+        if ratings_count:
+            details.append(f"{ratings_count:,} valutazioni")
         st.markdown(f"{rating_html} &nbsp; {' · '.join(details)}", unsafe_allow_html=True)
 
 
@@ -2286,10 +2334,13 @@ def main():
     )
 
     if book.id not in checked_ids or needs_forced_refresh:
-        with st.spinner("Recupero metadati iniziali..."):
-            refreshed = controller.ensure_review_metadata(book.id)
-        if refreshed:
-            book = refreshed
+        try:
+            with st.spinner("Recupero metadati iniziali..."):
+                refreshed = controller.ensure_review_metadata(book.id)
+            if refreshed:
+                book = refreshed
+        except Exception as exc:
+            st.warning(f"Metadati non aggiornati per questo libro: {exc}")
         checked_ids.add(book.id)
         st.session_state["auto_metadata_checked_ids"] = list(checked_ids)
 

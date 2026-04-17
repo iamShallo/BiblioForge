@@ -63,5 +63,83 @@
     "sales_rows_added": 0,
     "sales_rows_deleted": 0,
     "pushed_tabs": 2
+  },
+  {
+    "timestamp_epoch": 1776435381.4003131,
+    "timestamp_iso": "2026-04-17T16:16:21.400318+02:00 CEST",
+    "queue_rows_before": 3070,
+    "queue_rows_after": 3661,
+    "queue_rows_added": 591,
+    "queue_rows_deleted": 0,
+    "sales_rows_before": 147,
+    "sales_rows_after": 147,
+    "sales_rows_added": 0,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 2
+  },
+  {
+    "timestamp_epoch": 1776435974.3996289,
+    "timestamp_iso": "2026-04-17T16:26:14.399635+02:00 CEST",
+    "queue_rows_before": 3661,
+    "queue_rows_after": 3437,
+    "queue_rows_added": 0,
+    "queue_rows_deleted": 224,
+    "sales_rows_before": 147,
+    "sales_rows_after": 147,
+    "sales_rows_added": 0,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 2
+  },
+  {
+    "timestamp_epoch": 1776436592.0587497,
+    "timestamp_iso": "2026-04-17T16:36:32.058756+02:00 CEST",
+    "queue_rows_before": 3437,
+    "queue_rows_after": 3437,
+    "queue_rows_added": 0,
+    "queue_rows_deleted": 0,
+    "sales_rows_before": 147,
+    "sales_rows_after": 147,
+    "sales_rows_added": 0,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 2
+  },
+  {
+    "timestamp_epoch": 1776436593.7966177,
+    "timestamp_iso": "2026-04-17T16:36:33.796634+02:00 CEST",
+    "queue_rows_before": 3437,
+    "queue_rows_after": 3437,
+    "queue_rows_added": 0,
+    "queue_rows_deleted": 0,
+    "sales_rows_before": 147,
+    "sales_rows_after": 147,
+    "sales_rows_added": 0,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 2
+  },
+  {
+    "timestamp_epoch": 1776436595.6511428,
+    "timestamp_iso": "2026-04-17T16:36:35.651149+02:00 CEST",
+    "queue_rows_before": 3437,
+    "queue_rows_after": 3437,
+    "queue_rows_added": 0,
+    "queue_rows_deleted": 0,
+    "sales_rows_before": 147,
+    "sales_rows_after": 147,
+    "sales_rows_added": 0,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 2
+  },
+  {
+    "timestamp_epoch": 1776436897.2845988,
+    "timestamp_iso": "2026-04-17T16:41:37.284605+02:00 CEST",
+    "queue_rows_before": 3437,
+    "queue_rows_after": 2750,
+    "queue_rows_added": 0,
+    "queue_rows_deleted": 687,
+    "sales_rows_before": 147,
+    "sales_rows_after": 147,
+    "sales_rows_added": 0,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 2
   }
 ]

@@ -10,6 +10,7 @@ import json
 import os
 import re
 import time
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -477,10 +478,48 @@ class SheetsSyncService:
 
     @staticmethod
     def _book_fingerprint(book: Book) -> str:
-        isbn = str(getattr(book, "isbn", None) or getattr(book, "catalog_ean", None) or "").strip().lower()
-        title = str(getattr(book, "normalized_title", None) or getattr(book, "raw_title", None) or "").strip().lower()
-        author = str(getattr(book, "author", None) or "").strip().lower()
-        return "|".join([isbn, title, author])
+        identifier = SheetsSyncService._canonical_identifier(
+            str(getattr(book, "isbn", None) or getattr(book, "catalog_ean", None) or "")
+        )
+        title_seed = str(getattr(book, "normalized_title", None) or getattr(book, "raw_title", None) or "")
+        author_seed = str(getattr(book, "author", None) or "")
+        title = SheetsSyncService._canonical_text(normalize_title(title_seed, author_seed) or title_seed)
+        author = SheetsSyncService._canonical_text(author_seed)
+        return "|".join([identifier, title, author])
+
+    @staticmethod
+    def _canonical_text(value: str) -> str:
+        normalized = unicodedata.normalize("NFKD", str(value or ""))
+        normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+        normalized = normalized.lower()
+        normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        return normalized
+
+    @staticmethod
+    def _canonical_identifier(value: str) -> str:
+        cleaned = re.sub(r"[^0-9xX]", "", str(value or "")).lower()
+        return cleaned.strip()
+
+    def _deduplicate_books(self, books: List[Book]) -> tuple[List[Book], int]:
+        deduped_by_key: Dict[str, Book] = {}
+        duplicate_count = 0
+        for book in books:
+            key = self._book_sync_key(book)
+            existing = deduped_by_key.get(key)
+            if existing is None:
+                deduped_by_key[key] = book
+                continue
+
+            duplicate_count += 1
+            merged = self._merge_book_records(existing, book)
+            # Keep the richer record id when one side has strictly better metadata.
+            if self._metadata_score(book) > self._metadata_score(existing):
+                merged.id = book.id
+                merged.status = book.status
+            deduped_by_key[key] = merged
+
+        return list(deduped_by_key.values()), duplicate_count
 
     @staticmethod
     def _book_sync_key(book: Book) -> str:
@@ -907,10 +946,17 @@ class SheetsSyncService:
 
         print(f"[MERGE] Local-only books kept: {len(local_by_key)}")
         
+        deduped_books, duplicates_pruned = self._deduplicate_books(merged_books)
+        if duplicates_pruned:
+            print(f"[DEDUP] Pruned {duplicates_pruned} duplicate books before save")
+            deleted += duplicates_pruned
+
         upsert_start = time.time()
-        self.queue_repository.upsert_many(merged_books)
+        # Rewrite queue to drop stale duplicate ids accumulated over previous pulls.
+        self.queue_repository.clear_books()
+        self.queue_repository.upsert_many(deduped_books)
         upsert_elapsed = time.time() - upsert_start
-        print(f"[UPSERT] Saved {len(merged_books)} books in {upsert_elapsed:.2f}s")
+        print(f"[UPSERT] Saved {len(deduped_books)} books in {upsert_elapsed:.2f}s")
         
         total_merge_time = time.time() - merge_start
         print(
@@ -920,10 +966,11 @@ class SheetsSyncService:
         
         return {
             "remote_rows": len(remote_queue),
-            "upserted": len(merged_books),
+            "upserted": len(deduped_books),
             "added": added,
             "updated": updated,
             "deleted": deleted,
+            "duplicates_pruned": duplicates_pruned,
             "local_only": len(local_by_key),
             "added_items": self._limit_preview(added_items),
             "updated_items": self._limit_preview(updated_items),
@@ -1447,6 +1494,19 @@ class SheetsSyncService:
             p6_start = time.time()
             refreshed_queue = self.queue_repository.list_books()
             refreshed_sales = self._load_sales()
+
+            # Optional self-healing: when pull detected duplicate rows, rewrite remote queue tab deduplicated.
+            remote_duplicates_pruned = int(queue_reconcile.get("duplicates_pruned", 0) or 0)
+            remote_rewrite_enabled = self._truthy_env("BIBLIOFORGE_SHEETS_AUTOPRUNE_REMOTE_DUPLICATES", default=True)
+            if remote_rewrite_enabled and remote_duplicates_pruned > 0:
+                _report(88, "Rimozione doppioni su Google Sheet...")
+                rewrite_start = time.time()
+                self._overwrite_tab(service, self.queue_tab, refreshed_queue)
+                _log_phase(f"Remote Queue Rewrite (pruned={remote_duplicates_pruned})", time.time() - rewrite_start)
+                queue_reconcile["remote_duplicates_pruned"] = remote_duplicates_pruned
+            else:
+                queue_reconcile["remote_duplicates_pruned"] = 0
+
             elapsed = time.time() - started_at
 
             state = self._load_state()
@@ -1514,6 +1574,13 @@ class SheetsSyncService:
         elapsed = now_epoch - last_push_epoch
 
         queue_books = self.queue_repository.list_books()
+        deduped_queue_books, local_duplicates_pruned = self._deduplicate_books(queue_books)
+        if local_duplicates_pruned:
+            # Keep local storage canonical before pushing to avoid reintroducing historical duplicates.
+            self.queue_repository.clear_books()
+            self.queue_repository.upsert_many(deduped_queue_books)
+            queue_books = deduped_queue_books
+
         sales = self._load_sales()
         queue_checksum = self._books_checksum(queue_books)
         sales_checksum = self._payload_checksum(sales)
@@ -1571,6 +1638,7 @@ class SheetsSyncService:
                 status="ok",
                 message="Sync Google Sheets completata.",
                 pushed_tabs=2,
+                details={"books": {"duplicates_pruned": int(local_duplicates_pruned)}},
             )
         except Exception as exc:
             state["last_error"] = f"push_failed: {exc}"

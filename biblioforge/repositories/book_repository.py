@@ -1,6 +1,8 @@
 import json
+import time
 from pathlib import Path
 from typing import List, Optional
+from uuid import uuid4
 
 from biblioforge.models.book import (
     Book,
@@ -22,18 +24,48 @@ class BookRepository:
     def _load(self) -> List[Book]:
         if not self.storage_path.exists():
             return []
-        try:
-            # Accept both UTF-8 and UTF-8 with BOM across platforms.
-            raw = json.loads(self.storage_path.read_text(encoding="utf-8-sig"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return []
-        if not isinstance(raw, list):
-            return []
-        return [self._dict_to_book(item) for item in raw if isinstance(item, dict)]
+        
+        # Retry logic for file locks during concurrent access
+        max_retries = 3
+        retry_delay = 0.05  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                # Accept both UTF-8 and UTF-8 with BOM across platforms.
+                raw = json.loads(self.storage_path.read_text(encoding="utf-8-sig"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return []
+            except (OSError, IOError):
+                # File lock or other I/O error - retry with backoff
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (2 ** attempt))  # exponential backoff
+                    continue
+                return []
+            
+            if not isinstance(raw, list):
+                return []
+            return [self._dict_to_book(item) for item in raw if isinstance(item, dict)]
+        
+        return []
 
     def _persist(self) -> None:
         payload = [book.to_dict() for book in self._cache]
-        self.storage_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        
+        # Retry logic for file locks during concurrent access
+        max_retries = 3
+        retry_delay = 0.05  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                self.storage_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+                return
+            except (OSError, IOError):
+                # File lock or other I/O error - retry with backoff
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (2 ** attempt))  # exponential backoff
+                    continue
+                # After all retries, let the error propagate
+                raise
 
     def _refresh_from_disk(self) -> None:
         """Reload cache to reflect external file edits while dashboard is running."""
@@ -196,6 +228,47 @@ class BookRepository:
 
     @staticmethod
     def _dict_to_book(data: dict) -> Book:
+        def _to_float(value: object) -> Optional[float]:
+            if value is None:
+                return None
+            if isinstance(value, bool):
+                return float(int(value))
+            if isinstance(value, (int, float)):
+                return float(value)
+            text = str(value).strip().replace(",", ".")
+            if not text:
+                return None
+            try:
+                return float(text)
+            except (ValueError, TypeError):
+                return None
+
+        def _to_int(value: object) -> Optional[int]:
+            if value is None:
+                return None
+            if isinstance(value, bool):
+                return int(value)
+            if isinstance(value, int):
+                return value
+            if isinstance(value, float):
+                return int(value)
+            text = str(value).strip()
+            if not text:
+                return None
+            try:
+                return int(float(text))
+            except (ValueError, TypeError):
+                return None
+
+        def _to_str_list(value: object) -> List[str]:
+            if value is None:
+                return []
+            if isinstance(value, list):
+                return [str(item).strip() for item in value if str(item).strip()]
+            if isinstance(value, str):
+                return [item.strip() for item in value.split(",") if item.strip()]
+            return []
+
         if not isinstance(data, dict):
             data = {}
 
@@ -218,6 +291,8 @@ class BookRepository:
                 tags=list(insights_data.get("tags", [])),
                 rejected_information=rejected,
             )
+
+        normalized_id = str(data.get("id") or "").strip() or str(uuid4())
         return Book(
             raw_title=data.get("raw_title", ""),
             normalized_title=data.get("normalized_title", ""),
@@ -226,16 +301,16 @@ class BookRepository:
             summary_source=data.get("summary_source"),
             catalog_ean=data.get("catalog_ean"),
             catalog_publisher=data.get("catalog_publisher"),
-            catalog_quantity=data.get("catalog_quantity"),
-            catalog_price=data.get("catalog_price"),
+            catalog_quantity=_to_int(data.get("catalog_quantity")),
+            catalog_price=_to_float(data.get("catalog_price")),
             isbn=data.get("isbn"),
             isbn_10=data.get("isbn_10"),
             published_date=data.get("published_date"),
-            publication_year=data.get("publication_year"),
-            pages=data.get("pages"),
+            publication_year=_to_int(data.get("publication_year")),
+            pages=_to_int(data.get("pages")),
             cover_url=data.get("cover_url"),
             publisher=data.get("publisher"),
-            categories=list(data.get("categories", [])),
+            categories=_to_str_list(data.get("categories", [])),
             subtitle=data.get("subtitle"),
             language=data.get("language"),
             print_type=data.get("print_type"),
@@ -244,15 +319,15 @@ class BookRepository:
             canonical_volume_link=data.get("canonical_volume_link"),
             goodreads_link=data.get("goodreads_link"),
             openlibrary_key=data.get("openlibrary_key"),
-            first_publish_year=data.get("first_publish_year"),
-            edition_count=data.get("edition_count"),
-            average_rating=data.get("average_rating"),
+            first_publish_year=_to_int(data.get("first_publish_year")),
+            edition_count=_to_int(data.get("edition_count")),
+            average_rating=_to_float(data.get("average_rating")),
             ratings_count=int(data.get("ratings_count", 0) or 0),
-            positive_ratio=data.get("positive_ratio"),
+            positive_ratio=_to_float(data.get("positive_ratio")),
             review_samples=reviews,
-            discarded_information_examples=list(data.get("discarded_information_examples", [])),
+            discarded_information_examples=_to_str_list(data.get("discarded_information_examples", [])),
             insights=insights,
             reject_attempts=int(data.get("reject_attempts", 0) or 0),
             status=BookRepository._normalize_status(data.get("status")),
-            id=data.get("id"),
+            id=normalized_id,
         )

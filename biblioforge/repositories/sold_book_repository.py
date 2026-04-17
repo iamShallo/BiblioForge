@@ -1,4 +1,5 @@
 import json
+import time
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -18,23 +19,53 @@ class SoldBookRepository:
     def _load(self) -> List[SoldBook]:
         if not self.storage_path.exists():
             return []
-        try:
-            # Accept both UTF-8 and UTF-8 with BOM (common with PowerShell writes).
-            raw = json.loads(self.storage_path.read_text(encoding="utf-8-sig"))
-        except json.JSONDecodeError:
-            return []
-        if not isinstance(raw, list):
-            return []
+        
+        # Retry logic for file locks during concurrent access
+        max_retries = 3
+        retry_delay = 0.05  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                # Accept both UTF-8 and UTF-8 with BOM (common with PowerShell writes).
+                raw = json.loads(self.storage_path.read_text(encoding="utf-8-sig"))
+            except json.JSONDecodeError:
+                return []
+            except (OSError, IOError):
+                # File lock or other I/O error - retry with backoff
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (2 ** attempt))  # exponential backoff
+                    continue
+                return []
+            
+            if not isinstance(raw, list):
+                return []
 
-        result: List[SoldBook] = []
-        for item in raw:
-            if isinstance(item, dict):
-                result.append(self._dict_to_sold_book(item))
-        return result
+            result: List[SoldBook] = []
+            for item in raw:
+                if isinstance(item, dict):
+                    result.append(self._dict_to_sold_book(item))
+            return result
+        
+        return []
 
     def _persist(self) -> None:
         payload = [asdict(sold_book) for sold_book in self._cache]
-        self.storage_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        
+        # Retry logic for file locks during concurrent access
+        max_retries = 3
+        retry_delay = 0.05  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                self.storage_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+                return
+            except (OSError, IOError):
+                # File lock or other I/O error - retry with backoff
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (2 ** attempt))  # exponential backoff
+                    continue
+                # After all retries, let the error propagate
+                raise
 
     def _refresh_from_disk(self) -> None:
         self._cache = self._load()
