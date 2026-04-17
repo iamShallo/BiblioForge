@@ -142,6 +142,10 @@ class SheetsSyncService:
             return Path()
         path = Path(raw_path).expanduser()
         if path.is_absolute():
+            # Try to return as-is first if it exists
+            if path.exists():
+                return path
+            # If absolute path doesn't exist, still return it (will fail later with clear error)
             return path
 
         candidates = [
@@ -154,7 +158,8 @@ class SheetsSyncService:
             if candidate.exists():
                 return candidate
 
-        return self.project_root / path
+        # Prefer state_path.parent as fallback for relative paths stored in config
+        return self.state_path.parent / path
 
     def _discover_service_account_file(self) -> Path:
         processed_dir = self.state_path.parent

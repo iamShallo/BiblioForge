@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CopilotDiffPersistence">
+    <option name="pendingDiffs">
+      <map>
+        <entry key="/sheets_sync_config (snapshot).json">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="/sheets_sync_config (snapshot).json" />
+              <option name="originalContent" value="{&#10;  &quot;enabled&quot;: true,&#10;  &quot;spreadsheet_id&quot;: &quot;1X-RH4vm7-jpLLY-iCiUT9sYVT0vEPrX6TFc9bRSiOb4&quot;,&#10;  &quot;service_account_file&quot;: &quot;la-cicogna-triste-3e46a5bc4715.json&quot;,&#10;  &quot;queue_tab&quot;: &quot;Libri&quot;,&#10;  &quot;approved_tab&quot;: &quot;Vendite&quot;,&#10;  &quot;conflict_policy&quot;: &quot;local_wins&quot;&#10;}" />
+              <option name="updatedContent" value="{&#10;  &quot;enabled&quot;: false,&#10;  &quot;spreadsheet_id&quot;: &quot;1X-RH4vm7-jpLLY-iCiUT9sYVT0vEPrX6TFc9bRSiOb4&quot;,&#10;  &quot;service_account_file&quot;: &quot;la-cicogna-triste-3e46a5bc4715.json&quot;,&#10;  &quot;queue_tab&quot;: &quot;Libri&quot;,&#10;  &quot;approved_tab&quot;: &quot;Vendite&quot;,&#10;  &quot;conflict_policy&quot;: &quot;local_wins&quot;&#10;}" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>
