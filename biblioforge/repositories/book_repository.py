@@ -70,6 +70,7 @@ class BookRepository:
                 cache_map[book.id] = len(self._cache)
                 self._cache.append(book)
                 new_count += 1
+        # IMPORTANT: Always persist if we received books, even if they were all updates (new_count=0)
         if books:
             self._persist()
         return new_count

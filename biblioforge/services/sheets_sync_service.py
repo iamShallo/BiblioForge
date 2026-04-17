@@ -848,6 +848,18 @@ class SheetsSyncService:
                         "isbn_10",
                         "published_date",
                         "pages",
+                        "fetched_summary",
+                        "summary_source",
+                        "publisher",
+                        "categories",
+                        "subtitle",
+                        "language",
+                        "print_type",
+                        "average_rating",
+                        "ratings_count",
+                        "positive_ratio",
+                        "catalog_publisher",
+                        "publication_year",
                     ],
                 )
                 if changed_fields:
@@ -908,9 +920,14 @@ class SheetsSyncService:
         print(f"[MERGE] Local-only books kept: {len(local_by_key)}")
         
         upsert_start = time.time()
-        self.queue_repository.upsert_many(merged_books)
-        upsert_elapsed = time.time() - upsert_start
-        print(f"[UPSERT] Saved {len(merged_books)} books in {upsert_elapsed:.2f}s")
+        print(f"[UPSERT] Starting save of {len(merged_books)} merged books + {len(enriched_books)} enriched books")
+        if merged_books:
+            self.queue_repository.upsert_many(merged_books)
+            upsert_elapsed = time.time() - upsert_start
+            print(f"[UPSERT] ✅ Successfully saved {len(merged_books)} books in {upsert_elapsed:.2f}s")
+        else:
+            upsert_elapsed = 0.0
+            print(f"[UPSERT] ⚠️ WARNING: No books to save! (merged_books is empty)")
         
         total_merge_time = time.time() - merge_start
         print(
