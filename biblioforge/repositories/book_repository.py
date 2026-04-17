@@ -23,8 +23,9 @@ class BookRepository:
         if not self.storage_path.exists():
             return []
         try:
-            raw = json.loads(self.storage_path.read_text())
-        except json.JSONDecodeError:
+            # Accept both UTF-8 and UTF-8 with BOM across platforms.
+            raw = json.loads(self.storage_path.read_text(encoding="utf-8-sig"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
             return []
         if not isinstance(raw, list):
             return []
@@ -32,7 +33,7 @@ class BookRepository:
 
     def _persist(self) -> None:
         payload = [book.to_dict() for book in self._cache]
-        self.storage_path.write_text(json.dumps(payload, indent=2))
+        self.storage_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
     def _refresh_from_disk(self) -> None:
         """Reload cache to reflect external file edits while dashboard is running."""
