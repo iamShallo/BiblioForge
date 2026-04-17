@@ -1,7 +1,7 @@
 {
-  "last_push_epoch": 1776333567.064987,
-  "last_push_iso": "2026-04-16T09:59:27.064990+00:00",
-  "last_push_queue_rows": 3946,
+  "last_push_epoch": 1776432080.1630743,
+  "last_push_iso": "2026-04-17T13:21:20.163079+00:00",
+  "last_push_queue_rows": 3525,
   "last_push_sales_rows": 147,
   "last_push_book_keys": [
     "9788806246426|macchine come me|ian mcewan",
@@ -3954,7 +3954,7 @@
   "last_pull_duration_seconds": null,
   "avg_pull_duration_seconds": null,
   "pull_duration_history_seconds": [],
-  "queue_checksum": "de6c3a3d1bc8e698327f3d22ad65593b64ee961cefe16832350694b891bc790a",
+  "queue_checksum": "233c9a136c5a98ee036d214da03ad25234bbf9f591721113c4dd8040ab77c37c",
   "sales_checksum": "be7fad9f1df22f4ab5705ec0602265d007f26908c85fc1c001f65ffa865ac501",
   "approved_checksum": "be7fad9f1df22f4ab5705ec0602265d007f26908c85fc1c001f65ffa865ac501",
   "last_pull_iso": null,

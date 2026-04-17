@@ -715,6 +715,23 @@ class PipelineController:
         queued = 0
         skipped = 0
         seen = set()
+
+        def _entry_dedupe_key(title: str, author: str, catalog_code: str) -> tuple[str, str, str]:
+            normalized = normalize_title(title, author) or title
+            return (
+                str(normalized or "").casefold().strip(),
+                str(author or "").casefold().strip(),
+                str(catalog_code or "").casefold().strip(),
+            )
+
+        existing_keys = {
+            _entry_dedupe_key(
+                getattr(book, "normalized_title", None) or getattr(book, "raw_title", None) or "",
+                getattr(book, "author", None) or "",
+                getattr(book, "catalog_ean", None) or getattr(book, "isbn", None) or getattr(book, "isbn_10", None) or "",
+            )
+            for book in self.repository.list_books()
+        }
         self.last_import_skipped = 0
         self.last_import_skipped_details = []
         self.last_import_skipped_report_path = None
@@ -938,6 +955,7 @@ class PipelineController:
                 "note",
                 "avviso",
             )
+            placeholder_title_pattern = re.compile(r"^\s*nuovo\s+libro\s*\d+\b", re.IGNORECASE)
 
             for _, row in frame.iterrows():
                 raw_title_value = _cell_to_text(row.get(title_col)) if title_col is not None else ""
@@ -955,6 +973,8 @@ class PipelineController:
                 title_lower = title_value.lower()
                 if any(title_lower.startswith(marker) for marker in noise_markers):
                     continue
+                if placeholder_title_pattern.match(title_value):
+                    continue
                 if len(re.sub(r"[^a-z0-9]+", "", title_lower)) < 3:
                     continue
 
@@ -964,8 +984,8 @@ class PipelineController:
                 publisher_value = _clean_publisher(publisher_raw) if publisher_raw else ""
                 quantity_value = _to_int(row.get(quantity_col)) if quantity_col is not None else None
                 price_value = _to_float(row.get(price_col)) if price_col is not None else None
-                dedupe_key = (title_value.casefold(), author_value.casefold(), catalog_code.casefold())
-                if dedupe_key in seen:
+                dedupe_key = _entry_dedupe_key(title_value, author_value, catalog_code)
+                if dedupe_key in seen or dedupe_key in existing_keys:
                     continue
                 seen.add(dedupe_key)
 
