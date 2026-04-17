@@ -60,6 +60,8 @@ class SheetsSyncService:
         self.queue_repository = queue_repository
         self.approved_repository = approved_repository
         self.state_path = Path(state_path)
+        self.project_root = Path(__file__).resolve().parents[2]
+        self.package_root = Path(__file__).resolve().parent.parent
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.config_path = self.state_path.parent / "sheets_sync_config.json"
         self.log_path = self.state_path.parent / "sheets_sync_log.json"
@@ -75,7 +77,9 @@ class SheetsSyncService:
         env_enabled = os.getenv("BIBLIOFORGE_SHEETS_SYNC_ENABLED")
 
         self.spreadsheet_id = (env_sheet if env_sheet is not None else persisted.get("spreadsheet_id", "")).strip()
-        self.service_account_file = (env_sa if env_sa is not None else persisted.get("service_account_file", "")).strip()
+        self.service_account_file = self._normalize_service_account_reference(
+            env_sa if env_sa is not None else persisted.get("service_account_file", "")
+        )
         self.queue_tab = ((env_queue if env_queue is not None else persisted.get("queue_tab", "Libri")).strip() or "Libri")
         self.approved_tab = ((env_approved if env_approved is not None else persisted.get("approved_tab", "Vendite")).strip() or "Vendite")
         self.conflict_policy = ((env_policy if env_policy is not None else persisted.get("conflict_policy", "local_wins")).strip().lower() or "local_wins")
@@ -87,9 +91,9 @@ class SheetsSyncService:
 
         # Fallback: if no service-account path is configured, use the conventional local path.
         if not self.service_account_file:
-            default_sa = self.state_path.parent / "google_service_account.json"
+            default_sa = self._discover_service_account_file()
             if default_sa.exists():
-                self.service_account_file = str(default_sa)
+                self.service_account_file = self._portable_service_account_reference(default_sa)
 
         self.sync_interval_seconds = self._read_interval_seconds()
 
@@ -132,6 +136,76 @@ class SheetsSyncService:
             pass
         return {}
 
+    def _resolve_service_account_path(self, service_account_file: str) -> Path:
+        raw_path = str(service_account_file or "").strip()
+        if not raw_path:
+            return Path()
+        path = Path(raw_path).expanduser()
+        if path.is_absolute():
+            return path
+
+        candidates = [
+            Path.cwd() / path,
+            self.state_path.parent / path,
+            self.package_root / path,
+            self.project_root / path,
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+
+        return self.project_root / path
+
+    def _discover_service_account_file(self) -> Path:
+        processed_dir = self.state_path.parent
+        conventional_names = [
+            "google_service_account.json",
+            "service_account.json",
+            "service-account.json",
+            "credentials.json",
+        ]
+
+        for name in conventional_names:
+            candidate = processed_dir / name
+            if candidate.exists():
+                return candidate
+
+        reserved_names = {
+            "sheets_sync_config.json",
+            "sheets_sync_log.json",
+            "sheets_sync_state.json",
+            "books.json",
+            "sold_books.json",
+        }
+        json_candidates = [
+            candidate
+            for candidate in processed_dir.glob("*.json")
+            if candidate.name not in reserved_names
+        ]
+        if len(json_candidates) == 1:
+            return json_candidates[0]
+
+        return processed_dir / conventional_names[0]
+
+    def _normalize_service_account_reference(self, service_account_file: Any) -> str:
+        path = str(service_account_file or "").strip()
+        if not path:
+            return ""
+        return self._portable_service_account_reference(self._resolve_service_account_path(path))
+
+    def _portable_service_account_reference(self, path: Path) -> str:
+        candidate = Path(path).expanduser()
+        if not candidate.is_absolute():
+            return str(candidate)
+
+        for root in (self.state_path.parent, self.package_root, self.project_root):
+            try:
+                return str(candidate.relative_to(root))
+            except ValueError:
+                continue
+
+        return str(candidate)
+
     def _save_persisted_config(self) -> None:
         payload = {
             "enabled": bool(self.enabled),
@@ -165,7 +239,7 @@ class SheetsSyncService:
             return {"ok": False, "message": "ID foglio non valido."}
 
         if service_account_file:
-            self.service_account_file = str(service_account_file).strip()
+            self.service_account_file = self._normalize_service_account_reference(service_account_file)
 
         self.spreadsheet_id = sheet_id
         self.enabled = bool(enabled)
@@ -176,7 +250,7 @@ class SheetsSyncService:
         path = str(service_account_file or "").strip()
         if not path:
             return {"ok": False, "message": "Percorso credenziali non valido."}
-        self.service_account_file = path
+        self.service_account_file = self._normalize_service_account_reference(path)
         self._save_persisted_config()
         return {"ok": True, "message": "Credenziali Google salvate."}
 
@@ -189,7 +263,7 @@ class SheetsSyncService:
         cfg = self.describe_configuration()
         if cfg.get("missing") and "BIBLIOFORGE_SHEETS_SPREADSHEET_ID" in cfg.get("missing", []):
             # Listing from Drive only needs credentials, not selected spreadsheet id.
-            if not self.service_account_file or not Path(self.service_account_file).exists():
+            if not self.service_account_file or not self._resolve_service_account_path(self.service_account_file).exists():
                 return []
 
         credentials = self._get_google_credentials()
@@ -219,7 +293,7 @@ class SheetsSyncService:
             missing.append("BIBLIOFORGE_SHEETS_SPREADSHEET_ID")
         if not self.service_account_file:
             missing.append("BIBLIOFORGE_SHEETS_SERVICE_ACCOUNT_FILE")
-        elif not Path(self.service_account_file).exists():
+        elif not self._resolve_service_account_path(self.service_account_file).exists():
             missing.append(f"service account file not found: {self.service_account_file}")
         return missing
 
@@ -969,7 +1043,7 @@ class SheetsSyncService:
     def _get_google_credentials(self):
         google_oauth = importlib.import_module("google.oauth2.service_account")
         credentials_cls = getattr(google_oauth, "Credentials")
-        return credentials_cls.from_service_account_file(self.service_account_file, scopes=self.SCOPES)
+        return credentials_cls.from_service_account_file(str(self._resolve_service_account_path(self.service_account_file)), scopes=self.SCOPES)
 
     @staticmethod
     def _rows_from_books(books: List[Book]) -> List[List[Any]]:
