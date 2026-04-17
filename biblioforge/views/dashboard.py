@@ -21,6 +21,7 @@ from biblioforge.services.sheets_sync_service import SheetsSyncService
 from biblioforge.services.normalization_service import normalize_title
 from biblioforge.services.crawling_service import fetch_ibs_metadata
 from biblioforge.views.sales_history import render_sales_history_screen
+from biblioforge.utils.batch_update import BatchUpdateManager
 
 
 controller = PipelineController()
@@ -37,6 +38,7 @@ _sheets_scheduler_started = False
 _sheets_sync_pause_event = threading.Event()
 _sheets_sync_operation_lock = threading.Lock()
 st.set_page_config(page_title="La Cicogna Triste", layout="wide")
+BatchUpdateManager.init_session_state()
 st.markdown(
     """
     <style>
