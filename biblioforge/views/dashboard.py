@@ -354,6 +354,38 @@ def _safe_int(value: object) -> int:
         return 0
 
 
+def _optional_text(value: object) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _optional_int(value: object) -> int | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return int(float(text))
+    except (ValueError, TypeError):
+        return None
+
+
+def _optional_float(value: object) -> float | None:
+    text = str(value or "").strip().replace(",", ".")
+    if not text:
+        return None
+    try:
+        return float(text)
+    except (ValueError, TypeError):
+        return None
+
+
+def _csv_to_list(value: object) -> list[str]:
+    text = str(value or "").strip()
+    if not text:
+        return []
+    return [item.strip() for item in text.split(",") if item.strip()]
+
+
 def _missing_cover_image_data_uri() -> str:
     """Inline SVG placeholder shown when no valid cover image is available."""
     svg = (
@@ -968,12 +1000,13 @@ def render_context_column(book: Book) -> None:
     catalog_publisher = getattr(book, "catalog_publisher", None)
     catalog_quantity = getattr(book, "catalog_quantity", None)
     catalog_price = _safe_float(getattr(book, "catalog_price", None))
+    edit_manual_state_key = f"show-manual-editor-{book.id}"
 
     cols = st.columns([1, 2])
     with cols[0]:
         st.image(_cover_image_source(book), width=160)
     with cols[1]:
-        st.markdown(f"#### {book.normalized_title}")
+        st.markdown(f"#### {book.normalized_title or book.raw_title or 'Titolo sconosciuto'}")
         st.caption(book.author or "Autore sconosciuto")
 
     st.markdown("---")
@@ -1013,49 +1046,127 @@ def render_context_column(book: Book) -> None:
     if metric_items:
         st.markdown("#### Metadati")
         left_meta, right_meta = st.columns(2)
-        edit_price_state_key = f"show-price-editor-{book.id}"
         for idx, (label, value) in enumerate(metric_items):
             target = left_meta if idx % 2 == 0 else right_meta
-            if label == "Prezzo catalogo":
-                if target.button(
-                    f"Prezzo catalogo: {value}",
-                    key=f"edit-price-line-{book.id}",
-                    help="Clicca per modificare il prezzo",
-                ):
-                    st.session_state[edit_price_state_key] = True
-            else:
-                target.markdown(
-                    f"<div class='meta-line'><span class='meta-label'>{label}:</span> {value}</div>",
-                    unsafe_allow_html=True,
-                )
-
-    if st.session_state.get(edit_price_state_key):
-        st.markdown("##### Modifica prezzo catalogo")
-        with st.form(key=f"edit-price-form-{book.id}"):
-            new_price = st.number_input(
-                "Nuovo prezzo catalogo (EUR)",
-                min_value=0.0,
-                value=float(catalog_price or 0.0),
-                step=0.5,
-                format="%.2f",
+            target.markdown(
+                f"<div class='meta-line'><span class='meta-label'>{label}:</span> {value}</div>",
+                unsafe_allow_html=True,
             )
-            save_col, cancel_col = st.columns(2)
-            save_price = save_col.form_submit_button("Salva", use_container_width=True)
-            cancel_price = cancel_col.form_submit_button("Annulla", use_container_width=True)
 
-        if cancel_price:
-            st.session_state.pop(edit_price_state_key, None)
+    if st.session_state.get(edit_manual_state_key):
+        st.markdown("##### Modifica manuale completa")
+        with st.form(key=f"edit-manual-form-{book.id}"):
+            title_col, author_col = st.columns(2)
+            new_title = title_col.text_input("Titolo", value=str(book.normalized_title or book.raw_title or ""))
+            new_author = author_col.text_input("Autore", value=str(book.author or ""))
+
+            code_col, isbn10_col = st.columns(2)
+            new_catalog_ean = code_col.text_input("EAN catalogo", value=str(getattr(book, "catalog_ean", "") or ""))
+            new_isbn10 = isbn10_col.text_input("ISBN-10", value=str(getattr(book, "isbn_10", "") or ""))
+
+            isbn_col, publisher_col = st.columns(2)
+            new_isbn = isbn_col.text_input("ISBN", value=str(getattr(book, "isbn", "") or ""))
+            new_publisher = publisher_col.text_input("Editore API", value=str(getattr(book, "publisher", "") or ""))
+
+            cat_pub_col, cat_col = st.columns(2)
+            new_catalog_publisher = cat_pub_col.text_input("Editore catalogo", value=str(getattr(book, "catalog_publisher", "") or ""))
+            new_categories = cat_col.text_input("Categorie (separate da virgola)", value=", ".join(getattr(book, "categories", []) or []))
+
+            qty_col, price_col = st.columns(2)
+            new_quantity = qty_col.text_input("Quantita catalogo", value=str(getattr(book, "catalog_quantity", "") or ""))
+            new_price = price_col.text_input("Prezzo catalogo (EUR)", value=str(getattr(book, "catalog_price", "") or ""))
+
+            pub_date_col, pub_year_col = st.columns(2)
+            new_published_date = pub_date_col.text_input("Data pubblicazione", value=str(getattr(book, "published_date", "") or ""))
+            new_publication_year = pub_year_col.text_input("Anno edizione", value=str(getattr(book, "publication_year", "") or ""))
+
+            pages_col, first_year_col = st.columns(2)
+            new_pages = pages_col.text_input("Numero pagine", value=str(getattr(book, "pages", "") or ""))
+            new_first_publish_year = first_year_col.text_input("Anno prima pubblicazione", value=str(getattr(book, "first_publish_year", "") or ""))
+
+            lang_col, type_col = st.columns(2)
+            new_language = lang_col.text_input("Lingua", value=str(getattr(book, "language", "") or ""))
+            new_print_type = type_col.text_input("Tipo stampa", value=str(getattr(book, "print_type", "") or ""))
+
+            rating_col, ratings_count_col = st.columns(2)
+            new_average_rating = rating_col.text_input("Valutazione media", value=str(getattr(book, "average_rating", "") or ""))
+            new_ratings_count = ratings_count_col.text_input("Numero valutazioni", value=str(getattr(book, "ratings_count", "") or ""))
+
+            cover_col, subtitle_col = st.columns(2)
+            new_cover_url = cover_col.text_input("URL copertina", value=str(getattr(book, "cover_url", "") or ""))
+            new_subtitle = subtitle_col.text_input("Sottotitolo", value=str(getattr(book, "subtitle", "") or ""))
+
+            openlibrary_col, edition_count_col = st.columns(2)
+            new_openlibrary_key = openlibrary_col.text_input("Chiave OpenLibrary", value=str(getattr(book, "openlibrary_key", "") or ""))
+            new_edition_count = edition_count_col.text_input("Numero edizioni", value=str(getattr(book, "edition_count", "") or ""))
+
+            info_col, preview_col = st.columns(2)
+            new_info_link = info_col.text_input("Info link", value=str(getattr(book, "info_link", "") or ""))
+            new_preview_link = preview_col.text_input("Preview link", value=str(getattr(book, "preview_link", "") or ""))
+
+            canonical_col, goodreads_col = st.columns(2)
+            new_canonical_link = canonical_col.text_input("Canonical volume link", value=str(getattr(book, "canonical_volume_link", "") or ""))
+            new_goodreads_link = goodreads_col.text_input("Goodreads link", value=str(getattr(book, "goodreads_link", "") or ""))
+
+            source_col, ratio_col = st.columns(2)
+            new_summary_source = source_col.text_input("Summary source", value=str(getattr(book, "summary_source", "") or ""))
+            new_positive_ratio = ratio_col.text_input("Positive ratio", value=str(getattr(book, "positive_ratio", "") or ""))
+
+            new_fetched_summary = st.text_area(
+                "Fetched summary",
+                value=str(getattr(book, "fetched_summary", "") or ""),
+                height=120,
+            )
+
+            save_col, cancel_col = st.columns(2)
+            save_manual = save_col.form_submit_button("Salva modifiche", use_container_width=True)
+            cancel_manual = cancel_col.form_submit_button("Annulla", use_container_width=True)
+
+        if cancel_manual:
+            st.session_state.pop(edit_manual_state_key, None)
             st.rerun()
 
-        if save_price:
+        if save_manual:
             latest = controller.repository.get_book(book.id)
             if latest is None:
                 st.error("Libro non trovato nel DB.")
             else:
-                latest.catalog_price = float(new_price)
+                latest.raw_title = str(new_title or "").strip() or latest.raw_title
+                latest.normalized_title = str(new_title or "").strip() or latest.normalized_title
+                latest.author = _optional_text(new_author)
+                latest.catalog_ean = _optional_text(new_catalog_ean)
+                latest.isbn_10 = _optional_text(new_isbn10)
+                latest.isbn = _optional_text(new_isbn)
+                latest.publisher = _optional_text(new_publisher)
+                latest.catalog_publisher = _optional_text(new_catalog_publisher)
+                latest.categories = _csv_to_list(new_categories)
+                latest.catalog_quantity = _optional_int(new_quantity)
+                latest.catalog_price = _optional_float(new_price)
+                latest.published_date = _optional_text(new_published_date)
+                latest.publication_year = _optional_int(new_publication_year)
+                latest.pages = _optional_int(new_pages)
+                latest.first_publish_year = _optional_int(new_first_publish_year)
+                latest.language = _optional_text(new_language)
+                latest.print_type = _optional_text(new_print_type)
+                latest.average_rating = _optional_float(new_average_rating)
+                latest.ratings_count = _safe_int(new_ratings_count)
+                latest.cover_url = _optional_text(new_cover_url)
+                latest.subtitle = _optional_text(new_subtitle)
+                latest.openlibrary_key = _optional_text(new_openlibrary_key)
+                latest.edition_count = _optional_int(new_edition_count)
+                latest.info_link = _optional_text(new_info_link)
+                latest.preview_link = _optional_text(new_preview_link)
+                latest.canonical_volume_link = _optional_text(new_canonical_link)
+                latest.goodreads_link = _optional_text(new_goodreads_link)
+                latest.summary_source = _optional_text(new_summary_source)
+                latest.positive_ratio = _optional_float(new_positive_ratio)
+                latest.fetched_summary = _optional_text(new_fetched_summary)
+
                 controller.repository.upsert_book(latest)
-                st.success(f"Prezzo catalogo aggiornato: EUR {float(new_price):.2f}")
-            st.session_state.pop(edit_price_state_key, None)
+                st.success("Metadati libro aggiornati manualmente.")
+
+            st.session_state.pop(edit_manual_state_key, None)
+            request_selected_book(book.id)
             st.rerun()
 
     if categories:
@@ -1093,6 +1204,16 @@ def render_context_column(book: Book) -> None:
         if ratings_count:
             details.append(f"{ratings_count:,} valutazioni")
         st.markdown(f"{rating_html} &nbsp; {' · '.join(details)}", unsafe_allow_html=True)
+    else:
+        st.caption("Valutazione Goodreads non disponibile")
+
+    if st.button(
+        "Modifica tutti i campi",
+        key=f"edit-all-fields-{book.id}",
+        use_container_width=True,
+    ):
+        st.session_state[edit_manual_state_key] = True
+        st.rerun()
 
 
     # Rejected-information audit remains stored in data, but is intentionally hidden in UI.
