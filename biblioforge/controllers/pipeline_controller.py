@@ -300,16 +300,16 @@ class PipelineController:
         book = asyncio.run(self._enrich_with_immediate_retry(book))
         if not self._is_reliably_enriched(book):
             if allow_low_confidence:
-                # Manual selection can bypass confidence, but not completely empty metadata.
-                if self._has_minimal_metadata(book):
-                    note = "Manual selection fallback: queued with low confidence, verify metadata before approval."
-                    examples = list(getattr(book, "discarded_information_examples", []) or [])
-                    if note not in examples:
-                        examples.append(note)
-                    book.discarded_information_examples = examples
-                    book = generate_insights(book)
-                    book.status = BookStatus.TO_APPROVE
-                    return self.repository.upsert_book(book)
+                note = "Manual selection fallback: queued with low confidence, verify metadata before approval."
+                examples = list(getattr(book, "discarded_information_examples", []) or [])
+                if note not in examples:
+                    examples.append(note)
+                if not self._has_minimal_metadata(book):
+                    examples.append("Low-confidence fallback: record opened with limited metadata only.")
+                book.discarded_information_examples = examples
+                book = generate_insights(book)
+                book.status = BookStatus.TO_APPROVE
+                return self.repository.upsert_book(book)
 
             suggestions = asyncio.run(
                 search_candidates(
@@ -389,9 +389,11 @@ class PipelineController:
             enriched = self._apply_candidate_metadata(enriched, candidate)
 
             if not self._has_minimal_metadata(enriched):
-                raise BookNotFoundError(
-                    "Selected match could not provide enough metadata. Try another candidate or add ISBN/EAN."
-                )
+                examples = list(getattr(enriched, "discarded_information_examples", []) or [])
+                note = "Manual selected-candidate fallback: opened with limited metadata only."
+                if note not in examples:
+                    examples.append(note)
+                enriched.discarded_information_examples = examples
 
             note = "Manual selected-candidate fallback: queued with preserved external metadata."
             examples = list(getattr(enriched, "discarded_information_examples", []) or [])

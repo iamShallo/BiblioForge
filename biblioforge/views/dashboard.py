@@ -4,6 +4,7 @@ import threading
 import base64
 import json
 import tempfile
+import re
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -254,6 +255,10 @@ def sync_books_file_state() -> None:
 
     if current_mtime != cached_mtime:
         st.session_state["books_file_mtime"] = current_mtime
+        preserved_selected = (
+            st.session_state.get("pending_selected_book_id")
+            or st.session_state.get("selected_book_id")
+        )
         for key in [
             "auto_metadata_checked_ids",
             "last_manual_insert_message",
@@ -274,8 +279,10 @@ def sync_books_file_state() -> None:
             "last_multi_sale_feedback",
         ]:
             st.session_state.pop(key, None)
-        st.session_state.pop("selected_book_id", None)
-        st.session_state.pop("pending_selected_book_id", None)
+        # Keep the current selection stable across automatic file refreshes.
+        if preserved_selected:
+            st.session_state["selected_book_id"] = preserved_selected
+            st.session_state.pop("pending_selected_book_id", None)
         st.rerun()
 
 
@@ -284,10 +291,23 @@ def _selection_base_title(book: Book) -> str:
     return (title or book.normalized_title or book.raw_title or "Titolo sconosciuto").strip()
 
 
+def _selection_code(book: Book) -> str:
+    """Return the best code shown in selectors (EAN, ISBN, or ISBN-10)."""
+    for raw in (
+        getattr(book, "catalog_ean", None),
+        getattr(book, "isbn", None),
+        getattr(book, "isbn_10", None),
+    ):
+        text = str(raw or "").strip()
+        if text:
+            return text
+    return "-"
+
+
 def _selection_label(book: Book, duplicate_title_counts: Counter[str]) -> str:
     title = _selection_base_title(book)
     author = (book.author or "Autore sconosciuto").strip()
-    code = (getattr(book, "catalog_ean", None) or getattr(book, "isbn", None) or getattr(book, "isbn_10", None) or "-").strip()
+    code = _selection_code(book)
     code_label = f"EAN/ISBN {code}" if code != "-" else "EAN/ISBN -"
 
     # Add a tiny id suffix only when multiple entries share the same visible title.
@@ -334,6 +354,63 @@ def _safe_int(value: object) -> int:
         return 0
 
 
+def _missing_cover_image_data_uri() -> str:
+    """Inline SVG placeholder shown when no valid cover image is available."""
+    svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' width='320' height='480' viewBox='0 0 320 480'>"
+        "<rect width='320' height='480' fill='#e5e7eb'/>"
+        "<rect x='44' y='60' width='232' height='332' rx='16' fill='#cbd5e1' stroke='#94a3b8' stroke-width='3'/>"
+        "<path d='M88 292 L142 236 L184 278 L214 248 L262 300 L262 350 L88 350 Z' fill='#94a3b8'/>"
+        "<circle cx='118' cy='152' r='24' fill='#94a3b8'/>"
+        "<text x='160' y='418' text-anchor='middle' font-size='24' font-family='Arial, sans-serif' fill='#334155'>"
+        "Copertina non disponibile"
+        "</text>"
+        "</svg>"
+    )
+    encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded}"
+
+
+def _cover_image_source(book: Book) -> str:
+    """Return a reliable image source, falling back to a local placeholder."""
+    cover_url = str(getattr(book, "cover_url", "") or "").strip()
+    if not cover_url:
+        return _missing_cover_image_data_uri()
+
+    if controller._looks_like_placeholder_cover(cover_url):
+        return _missing_cover_image_data_uri()
+
+    if not re.match(r"^https?://", cover_url, flags=re.IGNORECASE):
+        return _missing_cover_image_data_uri()
+
+    return bust_cache(cover_url, book.id)
+
+
+def _summary_display_value(summary: str | None) -> str:
+    """Hide malformed machine/code blobs and provide a safe readable fallback."""
+    text = str(summary or "").strip()
+    if not text:
+        return "Nessun riassunto disponibile"
+
+    lowered = text.lower()
+    code_markers = [
+        "function(",
+        "=>",
+        "typeof",
+        "json.parse",
+        "return ",
+        "var ",
+        "const ",
+        "let ",
+    ]
+    marker_hits = sum(1 for marker in code_markers if marker in lowered)
+    punctuation_density = sum(text.count(ch) for ch in "{};<>") / max(len(text), 1)
+    if marker_hits >= 2 or punctuation_density > 0.06:
+        return "Nessun riassunto disponibile"
+
+    return text
+
+
 def _rank_books_by_metadata(books: list[Book]) -> list[Book]:
     return sorted(
         books,
@@ -351,12 +428,21 @@ def request_selected_book(book_id: str | None) -> None:
     if not book_id:
         return
     st.session_state["pending_selected_book_id"] = book_id
+    st.session_state["pending_selected_book_id_trusted"] = True
 
 
 def apply_pending_selected_book(pending_ids: list[str]) -> None:
     pending_selected = st.session_state.pop("pending_selected_book_id", None)
-    if pending_selected and pending_selected in pending_ids:
+    trusted_pending = bool(st.session_state.pop("pending_selected_book_id_trusted", False))
+    if trusted_pending and pending_selected and pending_selected in pending_ids:
         st.session_state["selected_book_id"] = pending_selected
+
+
+def mark_book_selection_change() -> None:
+    """Flag the currently selected book for immediate metadata refresh."""
+    selected = st.session_state.get("selected_book_id")
+    if selected:
+        st.session_state["force_metadata_refresh_book_id"] = selected
 
 
 def focus_text_input(label: str) -> None:
@@ -885,10 +971,7 @@ def render_context_column(book: Book) -> None:
 
     cols = st.columns([1, 2])
     with cols[0]:
-        if book.cover_url:
-            st.image(bust_cache(book.cover_url, book.id), width=160)
-        else:
-            st.image("https://via.placeholder.com/160x240?text=Copertina+assente", width=160)
+        st.image(_cover_image_source(book), width=160)
     with cols[1]:
         st.markdown(f"#### {book.normalized_title}")
         st.caption(book.author or "Autore sconosciuto")
@@ -1019,7 +1102,7 @@ def render_editing_column(book: Book) -> None:
         return
 
     with st.form(key=f"editing-form-{book.id}"):
-        summary = st.text_area("Riassunto", value=book.insights.summary, height=180)
+        summary = st.text_area("Riassunto", value=_summary_display_value(book.insights.summary), height=180)
         tags = st.multiselect(
             "Tag",
             options=sorted(
@@ -1038,7 +1121,7 @@ def render_editing_column(book: Book) -> None:
 
         if remove_with_price:
             st.session_state.pop(f"show-quantity-popup-{book.id}", None)
-            st.session_state["pending_selected_book_id"] = book.id
+            request_selected_book(book.id)
             st.session_state[f"show-remove-choice-{book.id}"] = True
             st.rerun()
         if reject:
@@ -2069,10 +2152,7 @@ def render_multi_sale_screen() -> None:
 
             img_col, line_col, qty_col, del_col = st.columns([1, 5, 2, 1])
             with img_col:
-                if getattr(book, "cover_url", None):
-                    st.image(bust_cache(book.cover_url, book.id), width=54)
-                else:
-                    st.image("https://via.placeholder.com/54x80?text=No+Cover", width=54)
+                st.image(_cover_image_source(book), width=54)
             line_col.markdown(f"**{book.normalized_title or book.raw_title}**")
             line_col.caption(book.author or "Autore sconosciuto")
             qty_col.caption(f"Qta {int(qty)} | EUR {unit_price:.2f}")
@@ -2242,10 +2322,7 @@ def render_final_db_list() -> None:
                 with st.expander(f"{idx}. {title} - {author}", expanded=False):
                     top_left, top_right = st.columns([1, 3])
                     with top_left:
-                        if getattr(book, "cover_url", None):
-                            st.image(bust_cache(book.cover_url, book.id), width=120)
-                        else:
-                            st.image("https://via.placeholder.com/120x180?text=Copertina+assente", width=120)
+                        st.image(_cover_image_source(book), width=120)
                     with top_right:
                         st.markdown(f"**Titolo:** {title}")
                         st.markdown(f"**Autore:** {author}")
@@ -2306,7 +2383,9 @@ def main():
     pending_ids = [book.id for book in pending]
     apply_pending_selected_book(pending_ids)
     if st.session_state.get("selected_book_id") not in pending_ids:
-        st.session_state["pending_selected_book_id"] = pending_ids[0]
+        # Fallback only updates the current selection and must not queue a stale
+        # pending selection, otherwise the first manual dropdown change is overridden.
+        st.session_state.pop("pending_selected_book_id", None)
         st.session_state["selected_book_id"] = pending_ids[0]
 
     title_counts = Counter(_selection_base_title(book).casefold() for book in pending)
@@ -2318,9 +2397,18 @@ def main():
         format_func=lambda bid: selection_labels.get(bid, bid),
         label_visibility="collapsed",
         key="selected_book_id",
+        on_change=mark_book_selection_change,
     )
     book = next(b for b in pending if b.id == selected_id)
 
+    previous_selected_id = st.session_state.get("last_selected_book_id")
+    selection_changed = previous_selected_id is not None and previous_selected_id != book.id
+    st.session_state["last_selected_book_id"] = book.id
+
+    force_refresh_for_selected = (
+        st.session_state.pop("force_metadata_refresh_book_id", None) == book.id
+        or selection_changed
+    )
     checked_ids = set(st.session_state.get("auto_metadata_checked_ids", []))
     needs_forced_refresh = (
         controller._has_synthetic_summary(book)
@@ -2333,7 +2421,10 @@ def main():
         )
     )
 
-    if book.id not in checked_ids or needs_forced_refresh:
+    if force_refresh_for_selected or book.id not in checked_ids or needs_forced_refresh:
+        original_title = _selection_base_title(book)
+        original_author = (book.author or "Autore sconosciuto").strip()
+        original_code = _selection_code(book)
         try:
             with st.spinner("Recupero metadati iniziali..."):
                 refreshed = controller.ensure_review_metadata(book.id)
@@ -2343,6 +2434,18 @@ def main():
             st.warning(f"Metadati non aggiornati per questo libro: {exc}")
         checked_ids.add(book.id)
         st.session_state["auto_metadata_checked_ids"] = list(checked_ids)
+
+        # If refresh changed visible selector fields, rerun once to update dropdown labels.
+        refreshed_title = _selection_base_title(book)
+        refreshed_author = (book.author or "Autore sconosciuto").strip()
+        refreshed_code = _selection_code(book)
+        if (
+            refreshed_title != original_title
+            or refreshed_author != original_author
+            or refreshed_code != original_code
+        ):
+            request_selected_book(book.id)
+            st.rerun()
 
     left, right = st.columns([1, 1])
     with left:
