@@ -1934,8 +1934,12 @@ def _isbn10_to_isbn13(isbn10: str) -> str:
     core = _normalize_code(isbn10)
     if len(core) != 10:
         return ""
+    if not core[:9].isdigit():
+        return ""
+    if not (core[-1].isdigit() or core[-1] == "X"):
+        return ""
 
-    body = f"978{core[:-1]}"
+    body = f"978{core[:9]}"
     total = 0
     for index, char in enumerate(body):
         total += int(char) * (1 if index % 2 == 0 else 3)
@@ -1945,7 +1949,7 @@ def _isbn10_to_isbn13(isbn10: str) -> str:
 
 def _isbn13_to_isbn10(isbn13: str) -> str:
     core = _normalize_code(isbn13)
-    if len(core) != 13 or not core.startswith("978"):
+    if len(core) != 13 or not core.startswith("978") or not core.isdigit():
         return ""
 
     body = core[3:-1]
