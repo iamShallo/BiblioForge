@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from biblioforge.models.book import (
     Book,
@@ -17,6 +18,8 @@ from biblioforge.models.book import (
 class BookRepository:
     """Simple JSON-backed repository for demo purposes."""
 
+    ROME_TZ = ZoneInfo("Europe/Rome")
+
     def __init__(self, storage_path: Path) -> None:
         self.storage_path = Path(storage_path)
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
@@ -26,6 +29,11 @@ class BookRepository:
     @staticmethod
     def _utc_now_iso() -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    @classmethod
+    def _rome_now_iso(cls) -> str:
+        now_rome = datetime.now(cls.ROME_TZ)
+        return f"{now_rome.isoformat()} {now_rome.tzname()}"
 
     @staticmethod
     def _book_payload(book: Book) -> Dict[str, Any]:
@@ -71,7 +79,7 @@ class BookRepository:
             payload = dict(entry)
             payload["seq"] = next_seq
             payload.setdefault("timestamp_epoch", time.time())
-            payload.setdefault("timestamp_iso", self._utc_now_iso())
+            payload.setdefault("timestamp_iso", self._rome_now_iso())
             stored_entries.append(payload)
             next_seq += 1
 
