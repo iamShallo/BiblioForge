@@ -1,5 +1,60 @@
 [
   {
+    "book_id": "33",
+    "raw_title": "Libro Test",
+    "normalized_title": "Libro Test",
+    "author": "Autore Test",
+    "price": 0.0,
+    "quantity": 3,
+    "sale_date": "2026-04-21 10:00:00",
+    "isbn": "1111111",
+    "ean": "1111111"
+  },
+  {
+    "book_id": "1588a78b-8b12-41c3-bc3d-4a5bb7151838",
+    "raw_title": "Lo Sfruttamento Della Razza. Le Nuove Gerarchie Della Segregazione",
+    "normalized_title": "Lo Sfruttamento Della Razza. Le Nuove Gerarchie Della Segregazione",
+    "author": "Oiza Queens Day Obasuyi",
+    "price": 16.0,
+    "quantity": 1,
+    "sale_date": "2026-04-21 09:28:57",
+    "isbn": "9788865485965",
+    "ean": "9788865485965"
+  },
+  {
+    "book_id": "0d6b2be5-f354-4ed6-bbeb-37436d475a97",
+    "raw_title": "Chiamami Col Tuo Nome",
+    "normalized_title": "Chiamami Col Tuo Nome",
+    "author": "André Aciman",
+    "price": 9.0,
+    "quantity": 1,
+    "sale_date": "2026-04-21 09:28:55",
+    "isbn": "9788850268832",
+    "ean": "9788850268832"
+  },
+  {
+    "book_id": "12bc20ed-91ed-42dd-a560-182068595ab4",
+    "raw_title": "Pomodori Verdi Fritti",
+    "normalized_title": "Pomodori Verdi Fritti",
+    "author": "Fannie Flagg",
+    "price": 13.0,
+    "quantity": 1,
+    "sale_date": "2026-04-21 09:28:55",
+    "isbn": "9788817042024",
+    "ean": "9788817042024"
+  },
+  {
+    "book_id": "7ae5dc1f-13a1-42fc-8d78-ddbaab447353",
+    "raw_title": "Di Madre In Figlia",
+    "normalized_title": "Di Madre In Figlia",
+    "author": "Concita De Gregorio",
+    "price": 16.0,
+    "quantity": 1,
+    "sale_date": "2026-04-21 09:27:13",
+    "isbn": "9788807036682",
+    "ean": "9788807036682"
+  },
+  {
     "book_id": "c769788f-749f-4e74-89e6-4da07d4f82dd",
     "raw_title": "Cuore Di Cane",
     "normalized_title": "Cuore Di Cane",
