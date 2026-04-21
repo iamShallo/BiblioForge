@@ -404,6 +404,17 @@ class SheetsSyncService:
             pass
         return {"next_seq": 1, "entries": []}
 
+    def _save_change_journal(self, entries: List[Dict[str, Any]]) -> None:
+        """Save merged change journal entries to local file."""
+        journal_path = getattr(self.queue_repository, "journal_path", None) or (self.state_path.parent / "books_change_journal.json")
+        max_seq = self._max_journal_seq(entries)
+        payload = {
+            "next_seq": max(max_seq + 1, 1),
+            "entries": sorted(entries, key=lambda item: int(item.get("seq", 0) or 0))
+        }
+        journal_path.parent.mkdir(parents=True, exist_ok=True)
+        journal_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
     @staticmethod
     def _max_journal_seq(entries: List[Dict[str, Any]]) -> int:
         return max((int(entry.get("seq", 0) or 0) for entry in entries), default=0)
@@ -454,6 +465,57 @@ class SheetsSyncService:
             valueInputOption="RAW",
             body={"values": rows},
         ).execute()
+
+    def _merge_journal_tab(self, service, tab_name: str, local_entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Merge local journal entries with remote ones, avoiding duplicates and data loss.
+        
+        Strategy:
+        1. Pull existing entries from Google Sheets
+        2. Merge with local entries using 'seq' as unique key
+        3. Write merged result back to Google Sheets
+        4. Return merged entries for state tracking
+        
+        This prevents losing remote logs from other devices when local journal is empty.
+        """
+        self._ensure_tab_exists(service, tab_name)
+        
+        # Pull remote entries from Google Sheets
+        remote_entries = self._pull_journal_tab(service, tab_name)
+        
+        # Create maps by seq for efficient merging
+        merged_map: Dict[int, Dict[str, Any]] = {}
+        
+        # Add remote entries first
+        for entry in remote_entries:
+            seq = int(entry.get("seq", 0) or 0)
+            if seq > 0:
+                merged_map[seq] = entry
+        
+        # Add/update with local entries (local wins on duplicates)
+        for entry in local_entries:
+            seq = int(entry.get("seq", 0) or 0)
+            if seq > 0:
+                merged_map[seq] = entry
+        
+        # Sort by seq and convert back to list
+        merged_entries = [merged_map[seq] for seq in sorted(merged_map.keys())]
+        
+        # Write merged result to Google Sheets
+        rows = self._journal_rows_from_entries(merged_entries)
+        service.spreadsheets().values().clear(
+            spreadsheetId=self.spreadsheet_id,
+            range=f"{tab_name}!A:Z",
+            body={},
+        ).execute()
+        service.spreadsheets().values().update(
+            spreadsheetId=self.spreadsheet_id,
+            range=f"{tab_name}!A1",
+            valueInputOption="RAW",
+            body={"values": rows},
+        ).execute()
+        
+        return merged_entries
 
     @staticmethod
     def _journal_entries_from_sheet_values(values: List[List[Any]]) -> List[Dict[str, Any]]:
@@ -1707,6 +1769,17 @@ class SheetsSyncService:
                     p2_elapsed = time.time() - p2_start
                     _log_phase("Journal Stable (no new entries)", p2_elapsed)
 
+            # Phase 4: Full Queue Merge (always sync full list to catch remote-only changes)
+            _report(50, "Sincronizzazione completa lista libri...")
+            p4_start = time.time()
+            remote_queue = self._pull_tab(service, self.queue_tab)
+            queue_merge = self._merge_queue_with_remote(remote_queue)
+            p4_elapsed = time.time() - p4_start
+            _log_phase(f"Full Queue Merge ({queue_merge['upserted']} total, {queue_merge['updated']} updated)", p4_elapsed)
+            
+            # Always use full merge result (it's more reliable than journal-only approach)
+            queue_reconcile = queue_merge
+
             # Phase 3: Fetch Sales
             _report(40, "Lettura vendite dal cloud...")
             p3_start = time.time()
@@ -1856,7 +1929,12 @@ class SheetsSyncService:
             service = self._get_sheets_client()
             self._overwrite_tab(service, self.queue_tab, queue_books)
             self._overwrite_sales_tab(service, self.approved_tab, sales)
-            self._overwrite_journal_tab(service, self.journal_tab, journal.get("entries", []))
+            # Merge journal instead of overwriting to preserve logs from other devices
+            merged_journal_entries = self._merge_journal_tab(service, self.journal_tab, journal.get("entries", []))
+            # Save merged journal locally to prevent data loss
+            self._save_change_journal(merged_journal_entries)
+            # Update journal checksum with merged entries
+            journal_checksum = self._payload_checksum(merged_journal_entries)
 
             self._mark_push_state(
                 state,
