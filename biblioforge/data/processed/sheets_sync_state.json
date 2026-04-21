@@ -2762,6 +2762,6 @@
   "sales_checksum": "be7fad9f1df22f4ab5705ec0602265d007f26908c85fc1c001f65ffa865ac501",
   "approved_checksum": "be7fad9f1df22f4ab5705ec0602265d007f26908c85fc1c001f65ffa865ac501",
   "last_pull_iso": null,
-  "last_error": null,
+  "last_error": "push_failed: The write operation timed out",
   "journal_checksum": "787dfad28198c52fcae17b7ce59299e8f25957de5a973379f614b81e782e1ed1"
 }

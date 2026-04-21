@@ -1696,32 +1696,96 @@ class SheetsSyncService:
             body={"values": rows},
         ).execute()
 
-    def _ensure_tab_exists(self, service, tab_name: str) -> None:
-        metadata = service.spreadsheets().get(
+    def _merge_queue_tab(self, service, tab_name: str, local_books: List[Book]) -> List[Book]:
+        """
+        Merge local books with remote ones, avoiding data loss when local queue is empty.
+        
+        Strategy:
+        1. Pull existing books from Google Sheets
+        2. Merge with local books using sync key (local wins on conflicts)
+        3. Write merged result back to Google Sheets
+        4. Return merged books for state tracking
+        """
+        self._ensure_tab_exists(service, tab_name)
+        
+        # Pull remote books from Google Sheets
+        response = (
+            service.spreadsheets()
+            .values()
+            .get(spreadsheetId=self.spreadsheet_id, range=f"{tab_name}!A:Z")
+            .execute()
+        )
+        values = response.get("values", [])
+        default_status = "approved" if tab_name == self.approved_tab else "to_approve"
+        remote_books = self._books_from_sheet_values(values, default_status)
+        
+        # Create maps by sync key for efficient merging
+        local_by_key = {self._book_sync_key(book): book for book in local_books}
+        remote_by_key = {self._book_sync_key(book): book for book in remote_books}
+        
+        # Merge: keep all books, local wins on conflicts
+        merged_map = dict(remote_by_key)  # Start with all remote
+        merged_map.update(local_by_key)   # Overlay with local
+        
+        merged_books = list(merged_map.values())
+        
+        # Write merged result to Google Sheets
+        rows = self._rows_from_books(merged_books)
+        service.spreadsheets().values().clear(
             spreadsheetId=self.spreadsheet_id,
-            fields="sheets.properties.title",
+            range=f"{tab_name}!A:Z",
+            body={},
         ).execute()
-        existing = {
-            str(sheet.get("properties", {}).get("title", "")).strip()
-            for sheet in metadata.get("sheets", [])
-        }
-        if tab_name in existing:
-            return
+        service.spreadsheets().values().update(
+            spreadsheetId=self.spreadsheet_id,
+            range=f"{tab_name}!A1",
+            valueInputOption="RAW",
+            body={"values": rows},
+        ).execute()
+        
+        return merged_books
 
-        service.spreadsheets().batchUpdate(
+    def _merge_sales_tab(self, service, tab_name: str, local_sales: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Merge local sales with remote ones, avoiding data loss when local sales list is empty.
+        """
+        self._ensure_tab_exists(service, tab_name)
+        
+        # Pull remote sales from Google Sheets
+        response = (
+            service.spreadsheets()
+            .values()
+            .get(spreadsheetId=self.spreadsheet_id, range=f"{tab_name}!A:Z")
+            .execute()
+        )
+        values = response.get("values", [])
+        remote_sales = self._sales_from_sheet_values(values)
+        
+        # Create maps by sync key for efficient merging
+        local_by_key = {self._sale_sync_key(sale): sale for sale in local_sales}
+        remote_by_key = {self._sale_sync_key(sale): sale for sale in remote_sales}
+        
+        # Merge: keep all sales, local wins on conflicts
+        merged_map = dict(remote_by_key)  # Start with all remote
+        merged_map.update(local_by_key)   # Overlay with local
+        
+        merged_sales = list(merged_map.values())
+        
+        # Write merged result to Google Sheets
+        rows = self._rows_from_sales(merged_sales)
+        service.spreadsheets().values().clear(
             spreadsheetId=self.spreadsheet_id,
-            body={
-                "requests": [
-                    {
-                        "addSheet": {
-                            "properties": {
-                                "title": tab_name,
-                            }
-                        }
-                    }
-                ]
-            },
+            range=f"{tab_name}!A:Z",
+            body={},
         ).execute()
+        service.spreadsheets().values().update(
+            spreadsheetId=self.spreadsheet_id,
+            range=f"{tab_name}!A1",
+            valueInputOption="RAW",
+            body={"values": rows},
+        ).execute()
+        
+        return merged_sales
 
     def pull_remote_into_local(
         self,
@@ -1958,8 +2022,10 @@ class SheetsSyncService:
 
         try:
             service = self._get_sheets_client()
-            self._overwrite_tab(service, self.queue_tab, queue_books)
-            self._overwrite_sales_tab(service, self.approved_tab, sales)
+            # Merge queue instead of overwriting to preserve books from other devices
+            merged_queue_books = self._merge_queue_tab(service, self.queue_tab, queue_books)
+            # Merge sales instead of overwriting to preserve sales from other devices
+            merged_sales = self._merge_sales_tab(service, self.approved_tab, sales)
             # Merge journal instead of overwriting to preserve logs from other devices
             merged_journal_entries = self._merge_journal_tab(service, self.journal_tab, journal.get("entries", []))
             # Save merged journal locally to prevent data loss
@@ -1992,7 +2058,3 @@ class SheetsSyncService:
             self._save_state(state)
             return SyncRunResult(status="error", message=f"Push Google Sheets fallito: {exc}")
 
-    def get_state(self) -> Dict[str, Any]:
-        state = self._load_state()
-        state["config"] = self.describe_configuration()
-        return state

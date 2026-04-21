@@ -809,6 +809,11 @@ def ensure_sheets_scheduler_running() -> None:
 def render_sheets_sync_box() -> None:
     st.markdown("### Sincronizzazione cloud (Google Sheets)")
     cfg = sheets_sync.describe_configuration()
+    
+    def _on_sheets_input_clear():
+        """Callback to clear the sheets input when needed."""
+        pass
+    
     manual_sheet = st.text_input(
         "Link Google Sheet",
         value=cfg.get("spreadsheet_id", ""),
@@ -839,8 +844,7 @@ def render_sheets_sync_box() -> None:
 
     if remove_col.button("Togli database", use_container_width=True, help="Termina sincronizzazione"):
         sheets_sync.disable_connection()
-        st.session_state["sheets-manual-id-input"] = ""
-        st.warning("Sincronizzazione disattivata.")
+        st.info("Sincronizzazione disattivata. Ricaricamento pagina...")
         st.rerun()
 
     if update_col.button("⬇️ 1. Update Database", use_container_width=True):
