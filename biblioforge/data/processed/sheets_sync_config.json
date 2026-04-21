@@ -4,5 +4,6 @@
   "service_account_file": "la-cicogna-triste-3e46a5bc4715.json",
   "queue_tab": "Libri",
   "approved_tab": "Vendite",
+  "journal_tab": "Non toccare",
   "conflict_policy": "local_wins"
 }

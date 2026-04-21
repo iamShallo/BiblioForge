@@ -83,6 +83,8 @@ class SheetsSyncService:
         )
         self.queue_tab = ((env_queue if env_queue is not None else persisted.get("queue_tab", "Libri")).strip() or "Libri")
         self.approved_tab = ((env_approved if env_approved is not None else persisted.get("approved_tab", "Vendite")).strip() or "Vendite")
+        env_journal = os.getenv("BIBLIOFORGE_SHEETS_JOURNAL_TAB")
+        self.journal_tab = ((env_journal if env_journal is not None else persisted.get("journal_tab", "Non toccare")).strip() or "Non toccare")
         self.conflict_policy = ((env_policy if env_policy is not None else persisted.get("conflict_policy", "local_wins")).strip().lower() or "local_wins")
 
         if env_enabled is None:
@@ -219,6 +221,7 @@ class SheetsSyncService:
             "service_account_file": self.service_account_file,
             "queue_tab": self.queue_tab,
             "approved_tab": self.approved_tab,
+            "journal_tab": self.journal_tab,
             "conflict_policy": self.conflict_policy,
         }
         self.config_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -346,6 +349,7 @@ class SheetsSyncService:
                 "last_push_queue_rows": 0,
                 "last_push_sales_rows": 0,
                 "last_push_book_keys": [],
+                "last_journal_seq": 0,
                 "last_pull_duration_seconds": None,
                 "avg_pull_duration_seconds": None,
                 "pull_duration_history_seconds": [],
@@ -367,6 +371,7 @@ class SheetsSyncService:
             "last_push_queue_rows": 0,
             "last_push_sales_rows": 0,
                 "last_push_book_keys": [],
+            "last_journal_seq": 0,
             "last_pull_duration_seconds": None,
             "avg_pull_duration_seconds": None,
             "pull_duration_history_seconds": [],
@@ -379,6 +384,195 @@ class SheetsSyncService:
 
     def _save_state(self, state: Dict[str, Any]) -> None:
         self.state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    def _load_change_journal(self) -> Dict[str, Any]:
+        journal_path = getattr(self.queue_repository, "journal_path", None) or (self.state_path.parent / "books_change_journal.json")
+        if not journal_path.exists():
+            return {"next_seq": 1, "entries": []}
+        try:
+            data = json.loads(journal_path.read_text(encoding="utf-8-sig"))
+            if isinstance(data, dict):
+                entries = data.get("entries", [])
+                if not isinstance(entries, list):
+                    entries = []
+                try:
+                    next_seq = max(1, int(data.get("next_seq", 1) or 1))
+                except Exception:
+                    next_seq = 1
+                return {"next_seq": next_seq, "entries": [entry for entry in entries if isinstance(entry, dict)]}
+        except Exception:
+            pass
+        return {"next_seq": 1, "entries": []}
+
+    @staticmethod
+    def _max_journal_seq(entries: List[Dict[str, Any]]) -> int:
+        return max((int(entry.get("seq", 0) or 0) for entry in entries), default=0)
+
+    @staticmethod
+    def _journal_rows_from_entries(entries: List[Dict[str, Any]]) -> List[List[Any]]:
+        headers = [
+            "Seq",
+            "Timestamp Epoch",
+            "Timestamp ISO",
+            "Operation",
+            "Book ID",
+            "Sync Key",
+            "Status",
+            "Changed Fields",
+            "Payload JSON",
+            "Before Payload JSON",
+        ]
+        rows: List[List[Any]] = [headers]
+        for entry in sorted(entries, key=lambda item: int(item.get("seq", 0) or 0)):
+            rows.append(
+                [
+                    int(entry.get("seq", 0) or 0),
+                    entry.get("timestamp_epoch") or "",
+                    entry.get("timestamp_iso") or "",
+                    entry.get("operation") or "",
+                    entry.get("book_id") or "",
+                    entry.get("sync_key") or "",
+                    entry.get("status") or "",
+                    ", ".join(entry.get("changed_fields") or []),
+                    entry.get("payload_json") or "",
+                    entry.get("before_payload_json") or "",
+                ]
+            )
+        return rows
+
+    def _overwrite_journal_tab(self, service, tab_name: str, entries: List[Dict[str, Any]]) -> None:
+        self._ensure_tab_exists(service, tab_name)
+        rows = self._journal_rows_from_entries(entries)
+        service.spreadsheets().values().clear(
+            spreadsheetId=self.spreadsheet_id,
+            range=f"{tab_name}!A:Z",
+            body={},
+        ).execute()
+        service.spreadsheets().values().update(
+            spreadsheetId=self.spreadsheet_id,
+            range=f"{tab_name}!A1",
+            valueInputOption="RAW",
+            body={"values": rows},
+        ).execute()
+
+    @staticmethod
+    def _journal_entries_from_sheet_values(values: List[List[Any]]) -> List[Dict[str, Any]]:
+        if not values or len(values) < 2:
+            return []
+
+        header = [str(col).strip() for col in values[0]]
+        rows = values[1:]
+        entries: List[Dict[str, Any]] = []
+
+        def _value(row_map: Dict[str, Any], *keys: str) -> Any:
+            for key in keys:
+                if key in row_map:
+                    return row_map.get(key)
+            return None
+
+        for row in rows:
+            row_map = {header[i]: row[i] for i in range(min(len(header), len(row)))}
+            try:
+                seq_raw = _value(row_map, "Seq")
+                seq = int(float(seq_raw)) if str(seq_raw or "").strip() else 0
+            except Exception:
+                seq = 0
+
+            payload_json = str(_value(row_map, "Payload JSON") or "").strip() or None
+            before_payload_json = str(_value(row_map, "Before Payload JSON") or "").strip() or None
+            changed_fields = [field.strip() for field in str(_value(row_map, "Changed Fields") or "").split(",") if field.strip()]
+
+            entries.append(
+                {
+                    "seq": seq,
+                    "timestamp_epoch": _value(row_map, "Timestamp Epoch") or None,
+                    "timestamp_iso": _value(row_map, "Timestamp ISO") or None,
+                    "operation": str(_value(row_map, "Operation") or "").strip() or "update",
+                    "book_id": str(_value(row_map, "Book ID") or "").strip() or None,
+                    "sync_key": str(_value(row_map, "Sync Key") or "").strip() or None,
+                    "status": str(_value(row_map, "Status") or "").strip() or None,
+                    "changed_fields": changed_fields,
+                    "payload_json": payload_json,
+                    "before_payload_json": before_payload_json,
+                }
+            )
+
+        entries.sort(key=lambda item: int(item.get("seq", 0) or 0))
+        return entries
+
+    def _pull_journal_tab(self, service, tab_name: str) -> List[Dict[str, Any]]:
+        self._ensure_tab_exists(service, tab_name)
+        response = (
+            service.spreadsheets()
+            .values()
+            .get(spreadsheetId=self.spreadsheet_id, range=f"{tab_name}!A:Z")
+            .execute()
+        )
+        values = response.get("values", [])
+        return self._journal_entries_from_sheet_values(values)
+
+    def _apply_journal_entries(self, entries: List[Dict[str, Any]]) -> Dict[str, Any]:
+        applied_added = 0
+        applied_updated = 0
+        applied_deleted = 0
+        added_items: List[str] = []
+        updated_items: List[Dict[str, Any]] = []
+        deleted_items: List[str] = []
+
+        for entry in sorted(entries, key=lambda item: int(item.get("seq", 0) or 0)):
+            operation = str(entry.get("operation") or "update").strip().lower()
+            book_id = str(entry.get("book_id") or "").strip()
+            payload_json = str(entry.get("payload_json") or "").strip()
+            before_payload_json = str(entry.get("before_payload_json") or "").strip()
+
+            if operation == "delete":
+                label = book_id
+                if before_payload_json:
+                    try:
+                        before_data = json.loads(before_payload_json)
+                        if isinstance(before_data, dict):
+                            label = str(before_data.get("normalized_title") or before_data.get("raw_title") or label).strip() or label
+                    except Exception:
+                        pass
+                if book_id and self.queue_repository.delete_book(book_id, record_journal=False):
+                    applied_deleted += 1
+                    deleted_items.append(label or book_id)
+                continue
+
+            if not payload_json:
+                continue
+
+            try:
+                payload = json.loads(payload_json)
+            except Exception:
+                continue
+            if not isinstance(payload, dict):
+                continue
+
+            book = BookRepository._dict_to_book(payload)
+            exists = self.queue_repository.get_book(book.id)
+            self.queue_repository.upsert_book(book, record_journal=False)
+            label = self._book_label(book)
+            if exists is None or operation == "add":
+                applied_added += 1
+                added_items.append(label)
+            else:
+                applied_updated += 1
+                updated_items.append({"book": label, "changed_fields": entry.get("changed_fields") or []})
+
+        return {
+            "remote_rows": len(entries),
+            "upserted": applied_added + applied_updated,
+            "added": applied_added,
+            "updated": applied_updated,
+            "deleted": applied_deleted,
+            "duplicates_pruned": 0,
+            "local_only": 0,
+            "added_items": self._limit_preview(added_items),
+            "updated_items": self._limit_preview(updated_items),
+            "deleted_items": self._limit_preview(deleted_items),
+            "journal_seq": max((int(entry.get("seq", 0) or 0) for entry in entries), default=0),
+        }
 
     def _load_sync_log(self) -> List[Dict[str, Any]]:
         if not self.log_path.exists():
@@ -430,6 +624,7 @@ class SheetsSyncService:
         state: Dict[str, Any],
         queue_checksum: str,
         sales_checksum: str,
+        journal_checksum: str,
         queue_rows: int,
         sales_rows: int,
         queue_added: int,
@@ -447,6 +642,7 @@ class SheetsSyncService:
         state["queue_checksum"] = queue_checksum
         state["sales_checksum"] = sales_checksum
         state["approved_checksum"] = sales_checksum
+        state["journal_checksum"] = journal_checksum
         state["last_error"] = None
         self._save_state(state)
         self._append_sync_log_entry(
@@ -458,7 +654,7 @@ class SheetsSyncService:
             queue_deleted=queue_deleted,
             sales_added=sales_added,
             sales_deleted=sales_deleted,
-            pushed_tabs=2,
+            pushed_tabs=3,
         )
 
     @staticmethod
@@ -1461,12 +1657,55 @@ class SheetsSyncService:
             service = self._get_sheets_client()
             _log_phase("Client Setup", time.time() - p1_start)
 
-            # Phase 2: Fetch Books
-            _report(20, "Lettura libri dal cloud...")
-            p2_start = time.time()
-            remote_queue = self._pull_tab(service, self.queue_tab)
-            p2_elapsed = time.time() - p2_start
-            _log_phase(f"Pull Books ({len(remote_queue)} books)", p2_elapsed)
+            state = self._load_state()
+            last_journal_seq = int(state.get("last_journal_seq", 0) or 0)
+            local_journal = self._load_change_journal()
+            local_entries = [entry for entry in local_journal.get("entries", []) if int(entry.get("seq", 0) or 0) > last_journal_seq]
+
+            queue_reconcile: Dict[str, Any]
+            used_journal_delta = False
+            journal_seq = last_journal_seq
+
+            if local_entries:
+                _report(20, "Lettura journal modifiche locali...")
+                p2_start = time.time()
+                queue_reconcile = self._apply_journal_entries(local_entries)
+                p2_elapsed = time.time() - p2_start
+                journal_seq = int(queue_reconcile.get("journal_seq", last_journal_seq) or last_journal_seq)
+                used_journal_delta = True
+                _log_phase(f"Journal Delta ({len(local_entries)} entries)", p2_elapsed)
+            else:
+                _report(20, "Lettura journal cloud...")
+                p2_start = time.time()
+                remote_journal = self._pull_journal_tab(service, self.journal_tab)
+                p2_elapsed = time.time() - p2_start
+                _log_phase(f"Pull Journal ({len(remote_journal)} entries)", p2_elapsed)
+
+                remote_entries = [entry for entry in remote_journal if int(entry.get("seq", 0) or 0) > last_journal_seq]
+                if remote_entries:
+                    _report(20, "Applico modifiche dal journal...")
+                    p2_start = time.time()
+                    queue_reconcile = self._apply_journal_entries(remote_entries)
+                    p2_elapsed = time.time() - p2_start
+                    journal_seq = int(queue_reconcile.get("journal_seq", last_journal_seq) or last_journal_seq)
+                    used_journal_delta = True
+                    _log_phase(f"Journal Delta ({len(remote_entries)} entries)", p2_elapsed)
+                else:
+                    queue_reconcile = {
+                        "remote_rows": len(self.queue_repository.list_books()),
+                        "upserted": 0,
+                        "added": 0,
+                        "updated": 0,
+                        "deleted": 0,
+                        "duplicates_pruned": 0,
+                        "local_only": 0,
+                        "added_items": [],
+                        "updated_items": [],
+                        "deleted_items": [],
+                        "journal_seq": last_journal_seq,
+                    }
+                    p2_elapsed = time.time() - p2_start
+                    _log_phase("Journal Stable (no new entries)", p2_elapsed)
 
             # Phase 3: Fetch Sales
             _report(40, "Lettura vendite dal cloud...")
@@ -1474,13 +1713,6 @@ class SheetsSyncService:
             remote_sales = self._pull_sales_tab(service, self.approved_tab)
             p3_elapsed = time.time() - p3_start
             _log_phase(f"Pull Sales ({len(remote_sales)} sales)", p3_elapsed)
-
-            # Phase 4: Merge Books
-            _report(60, "Confronto modifiche libri...")
-            p4_start = time.time()
-            queue_reconcile = self._merge_queue_with_remote(remote_queue)
-            p4_elapsed = time.time() - p4_start
-            _log_phase(f"Merge Books (added={queue_reconcile['added']}, updated={queue_reconcile['updated']}, deleted={queue_reconcile['deleted']})", p4_elapsed)
 
             # Phase 5: Merge Sales
             _report(78, "Confronto modifiche vendite...")
@@ -1509,8 +1741,8 @@ class SheetsSyncService:
 
             elapsed = time.time() - started_at
 
-            state = self._load_state()
             state["last_pull_iso"] = self._utc_now_iso()
+            state["last_journal_seq"] = journal_seq
             history = state.get("pull_duration_history_seconds") or []
             if not isinstance(history, list):
                 history = []
@@ -1536,6 +1768,7 @@ class SheetsSyncService:
             details = {
                 "books": queue_reconcile,
                 "sales": sales_reconcile,
+                "journal_fast_path": used_journal_delta,
             }
 
             return SyncRunResult(
@@ -1584,6 +1817,8 @@ class SheetsSyncService:
         sales = self._load_sales()
         queue_checksum = self._books_checksum(queue_books)
         sales_checksum = self._payload_checksum(sales)
+        journal = self._load_change_journal()
+        journal_checksum = self._payload_checksum(journal.get("entries", []))
         queue_rows = len(queue_books)
         sales_rows = len(sales)
         previous_queue_rows = int(state.get("last_push_queue_rows", 0) or 0)
@@ -1596,6 +1831,7 @@ class SheetsSyncService:
         changed = (
             queue_checksum != (state.get("queue_checksum") or "")
             or sales_checksum != (state.get("sales_checksum") or state.get("approved_checksum") or "")
+            or journal_checksum != (state.get("journal_checksum") or "")
         )
 
         if not force:
@@ -1620,11 +1856,13 @@ class SheetsSyncService:
             service = self._get_sheets_client()
             self._overwrite_tab(service, self.queue_tab, queue_books)
             self._overwrite_sales_tab(service, self.approved_tab, sales)
+            self._overwrite_journal_tab(service, self.journal_tab, journal.get("entries", []))
 
             self._mark_push_state(
                 state,
                 queue_checksum,
                 sales_checksum,
+                journal_checksum,
                 queue_rows,
                 sales_rows,
                 queue_added,
@@ -1637,7 +1875,7 @@ class SheetsSyncService:
             return SyncRunResult(
                 status="ok",
                 message="Sync Google Sheets completata.",
-                pushed_tabs=2,
+                pushed_tabs=3,
                 details={"books": {"duplicates_pruned": int(local_duplicates_pruned)}},
             )
         except Exception as exc:

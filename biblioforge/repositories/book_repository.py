@@ -1,7 +1,8 @@
 import json
 import time
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from biblioforge.models.book import (
@@ -19,7 +20,98 @@ class BookRepository:
     def __init__(self, storage_path: Path) -> None:
         self.storage_path = Path(storage_path)
         self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+        self.journal_path = self.storage_path.parent / "books_change_journal.json" if self.storage_path.name == "books.json" else None
         self._cache: List[Book] = self._load()
+
+    @staticmethod
+    def _utc_now_iso() -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    @staticmethod
+    def _book_payload(book: Book) -> Dict[str, Any]:
+        return book.to_dict()
+
+    @staticmethod
+    def _book_payload_json(book: Book) -> str:
+        return json.dumps(BookRepository._book_payload(book), ensure_ascii=False, sort_keys=True)
+
+    def _load_journal(self) -> Dict[str, Any]:
+        if not self.journal_path or not self.journal_path.exists():
+            return {"next_seq": 1, "entries": []}
+        try:
+            raw = json.loads(self.journal_path.read_text(encoding="utf-8-sig"))
+            if isinstance(raw, dict):
+                entries = raw.get("entries", [])
+                if not isinstance(entries, list):
+                    entries = []
+                next_seq = raw.get("next_seq", 1)
+                try:
+                    next_seq = max(1, int(next_seq))
+                except Exception:
+                    next_seq = 1
+                return {"next_seq": next_seq, "entries": [entry for entry in entries if isinstance(entry, dict)]}
+        except Exception:
+            pass
+        return {"next_seq": 1, "entries": []}
+
+    def _save_journal(self, journal: Dict[str, Any]) -> None:
+        if not self.journal_path:
+            return
+        self.journal_path.write_text(json.dumps(journal, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    def _append_journal_entries(self, entries: List[Dict[str, Any]]) -> None:
+        if not self.journal_path or not entries:
+            return
+
+        journal = self._load_journal()
+        next_seq = int(journal.get("next_seq", 1) or 1)
+        stored_entries = list(journal.get("entries", []))
+
+        for entry in entries:
+            payload = dict(entry)
+            payload["seq"] = next_seq
+            payload.setdefault("timestamp_epoch", time.time())
+            payload.setdefault("timestamp_iso", self._utc_now_iso())
+            stored_entries.append(payload)
+            next_seq += 1
+
+        self._save_journal({"next_seq": next_seq, "entries": stored_entries})
+
+    def _book_entry(self, operation: str, book: Book, before: Optional[Book] = None, changed_fields: Optional[List[str]] = None) -> Dict[str, Any]:
+        after_payload = self._book_payload(book)
+        before_payload = self._book_payload(before) if before is not None else None
+        return {
+            "operation": operation,
+            "book_id": book.id,
+            "sync_key": self._book_sync_key(book),
+            "raw_title": book.raw_title,
+            "normalized_title": book.normalized_title,
+            "author": book.author,
+            "isbn": book.isbn,
+            "catalog_ean": book.catalog_ean,
+            "status": str(book.status.value if hasattr(book.status, "value") else book.status),
+            "changed_fields": changed_fields or [],
+            "before_payload_json": json.dumps(before_payload, ensure_ascii=False, sort_keys=True) if before_payload is not None else None,
+            "payload_json": json.dumps(after_payload, ensure_ascii=False, sort_keys=True),
+        }
+
+    @staticmethod
+    def _book_sync_key(book: Book) -> str:
+        identifier = str(getattr(book, "isbn", None) or getattr(book, "catalog_ean", None) or "").strip().lower()
+        title = str(getattr(book, "normalized_title", None) or getattr(book, "raw_title", None) or "").strip().lower()
+        author = str(getattr(book, "author", None) or "").strip().lower()
+        return "|".join([identifier, title, author])
+
+    @staticmethod
+    def _book_changed_fields(before: Book, after: Book) -> List[str]:
+        fields: List[str] = []
+        for field_name in Book.__dataclass_fields__:
+            if getattr(before, field_name, None) != getattr(after, field_name, None):
+                fields.append(field_name)
+        return fields
+
+    def _record_book_events(self, events: List[Dict[str, Any]]) -> None:
+        self._append_journal_entries(events)
 
     def _load(self) -> List[Book]:
         if not self.storage_path.exists():
@@ -81,65 +173,96 @@ class BookRepository:
         self._refresh_from_disk()
         return next((b for b in self._cache if b.id == book_id), None)
 
-    def upsert_book(self, book: Book) -> Book:
-        existing = self.get_book(book.id)
-        if existing:
-            self._cache = [book if b.id == book.id else b for b in self._cache]
+    def upsert_book(self, book: Book, *, record_journal: bool = True) -> Book:
+        self._refresh_from_disk()
+        existing_index = next((idx for idx, current in enumerate(self._cache) if current.id == book.id), None)
+        if existing_index is not None:
+            existing = self._cache[existing_index]
+            if self._book_payload_json(existing) == self._book_payload_json(book):
+                return book
+            self._cache[existing_index] = book
+            self._persist()
+            if record_journal:
+                self._record_book_events([self._book_entry("update", book, before=existing, changed_fields=self._book_changed_fields(existing, book))])
         else:
             self._cache.append(book)
-        self._persist()
+            self._persist()
+            if record_journal:
+                self._record_book_events([self._book_entry("add", book)])
         return book
 
-    def upsert_many(self, books: List[Book]) -> int:
+    def upsert_many(self, books: List[Book], *, record_journal: bool = True) -> int:
         """Upsert a batch of books with a single disk write for speed."""
         self._refresh_from_disk()
         cache_map = {b.id: idx for idx, b in enumerate(self._cache)}
         new_count = 0
+        journal_entries: List[Dict[str, Any]] = []
         for book in books:
             idx = cache_map.get(book.id)
             if idx is not None:
+                existing = self._cache[idx]
+                if self._book_payload_json(existing) == self._book_payload_json(book):
+                    continue
                 self._cache[idx] = book
+                journal_entries.append(self._book_entry("update", book, before=existing, changed_fields=self._book_changed_fields(existing, book)))
             else:
                 cache_map[book.id] = len(self._cache)
                 self._cache.append(book)
                 new_count += 1
+                journal_entries.append(self._book_entry("add", book))
         # IMPORTANT: Always persist if we received books, even if they were all updates (new_count=0)
         if books:
             self._persist()
+            if record_journal:
+                self._record_book_events(journal_entries)
         return new_count
 
-    def update_status(self, book_id: str, status: BookStatus) -> Optional[Book]:
+    def update_status(self, book_id: str, status: BookStatus, *, record_journal: bool = True) -> Optional[Book]:
         self._refresh_from_disk()
-        book = self.get_book(book_id)
+        book = next((current for current in self._cache if current.id == book_id), None)
         if not book:
             return None
+        before = self._dict_to_book(book.to_dict())
         book.status = status
         self._persist()
+        if record_journal:
+            self._record_book_events([self._book_entry("status_update", book, before=before, changed_fields=["status"])])
         return book
 
-    def clear_books(self, status: Optional[BookStatus] = None) -> int:
+    def clear_books(self, status: Optional[BookStatus] = None, *, record_journal: bool = True) -> int:
         """Clear books from storage and return removed count."""
         self._refresh_from_disk()
         if status is None:
+            removed_books = list(self._cache)
             removed = len(self._cache)
             self._cache = []
             self._persist()
+            if record_journal:
+                self._record_book_events([self._book_entry("delete", book, before=book, changed_fields=[]) for book in removed_books])
             return removed
 
         original_len = len(self._cache)
+        removed_books = [book for book in self._cache if book.status == status]
         self._cache = [book for book in self._cache if book.status != status]
         removed = original_len - len(self._cache)
         self._persist()
+        if record_journal:
+            self._record_book_events([self._book_entry("delete", book, before=book, changed_fields=[]) for book in removed_books])
         return removed
 
-    def delete_book(self, book_id: str) -> bool:
+    def delete_book(self, book_id: str, *, record_journal: bool = True) -> bool:
         """Delete a single book by id and return whether it existed."""
         self._refresh_from_disk()
+        existing = next((book for book in self._cache if book.id == book_id), None)
+        if existing is None:
+            return False
         original_len = len(self._cache)
         self._cache = [book for book in self._cache if book.id != book_id]
         removed = len(self._cache) != original_len
         if removed:
             self._persist()
+            if record_journal:
+                self._record_book_events([self._book_entry("delete", existing, before=existing, changed_fields=[])])
         return removed
 
     @staticmethod
@@ -224,7 +347,8 @@ class BookRepository:
             ),
             status=BookStatus.TO_APPROVE,
         )
-        self.upsert_book(sample)
+        self._cache = [sample]
+        self._persist()
 
     @staticmethod
     def _dict_to_book(data: dict) -> Book:
