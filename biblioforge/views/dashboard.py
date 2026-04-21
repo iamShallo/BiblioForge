@@ -842,11 +842,6 @@ def render_sheets_sync_box() -> None:
 
     remove_col, update_col, save_col = st.columns([2, 2, 2])
 
-    if remove_col.button("Togli database", use_container_width=True, help="Termina sincronizzazione"):
-        sheets_sync.disable_connection()
-        st.info("Sincronizzazione disattivata. Ricaricamento pagina...")
-        st.rerun()
-
     if update_col.button("⬇️ 1. Update Database", use_container_width=True):
         progress_bar = st.progress(0)
         progress_status = st.empty()
@@ -906,6 +901,11 @@ def render_sheets_sync_box() -> None:
             st.info(result.message)
         else:
             st.error(result.message)
+
+    if remove_col.button("Togli database", use_container_width=True, help="Termina sincronizzazione"):
+        sheets_sync.disable_connection()
+        st.info("Sincronizzazione disattivata. Ricaricamento pagina...")
+        st.rerun()
 
     pull_info = st.session_state.get("last_sheets_pull_result")
     if isinstance(pull_info, dict) and pull_info.get("status") == "ok":
