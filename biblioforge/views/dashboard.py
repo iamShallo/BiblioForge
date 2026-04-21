@@ -835,7 +835,7 @@ def render_sheets_sync_box() -> None:
             unsafe_allow_html=True,
         )
 
-    remove_col, save_col, update_col = st.columns([2, 2, 2])
+    remove_col, update_col, save_col = st.columns([2, 2, 2])
 
     if remove_col.button("Togli database", use_container_width=True, help="Termina sincronizzazione"):
         sheets_sync.disable_connection()
@@ -843,27 +843,7 @@ def render_sheets_sync_box() -> None:
         st.warning("Sincronizzazione disattivata.")
         st.rerun()
 
-    if save_col.button("Salva e sincronizza", use_container_width=True):
-        _sheets_sync_operation_lock.acquire()
-        try:
-            linked = sheets_sync.save_connection(manual_sheet, enabled=True)
-            if not linked.get("ok"):
-                st.error(linked.get("message"))
-                return
-
-            with st.spinner("Sincronizzazione in corso..."):
-                result = sheets_sync.push_local_to_remote(force=True)
-        finally:
-            _sheets_sync_operation_lock.release()
-        if result.status == "ok":
-            st.success("Collegamento salvato. Sincronizzazione iniziale completata con successo.")
-            st.rerun()
-        elif result.status == "skipped":
-            st.info(result.message)
-        else:
-            st.error(result.message)
-
-    if update_col.button("Update Database", use_container_width=True):
+    if update_col.button("⬇️ 1. Update Database", use_container_width=True):
         progress_bar = st.progress(0)
         progress_status = st.empty()
 
@@ -902,6 +882,26 @@ def render_sheets_sync_box() -> None:
             st.info(pull_result.message)
         else:
             st.error(pull_result.message)
+
+    if save_col.button("2. Salva e Sincronizza ⬆️", use_container_width=True):
+        _sheets_sync_operation_lock.acquire()
+        try:
+            linked = sheets_sync.save_connection(manual_sheet, enabled=True)
+            if not linked.get("ok"):
+                st.error(linked.get("message"))
+                return
+
+            with st.spinner("Sincronizzazione in corso..."):
+                result = sheets_sync.push_local_to_remote(force=True)
+        finally:
+            _sheets_sync_operation_lock.release()
+        if result.status == "ok":
+            st.success("Collegamento salvato. Sincronizzazione iniziale completata con successo.")
+            st.rerun()
+        elif result.status == "skipped":
+            st.info(result.message)
+        else:
+            st.error(result.message)
 
     pull_info = st.session_state.get("last_sheets_pull_result")
     if isinstance(pull_info, dict) and pull_info.get("status") == "ok":
