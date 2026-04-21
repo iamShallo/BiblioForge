@@ -478,6 +478,69 @@ class PipelineController:
 
         return []
 
+    def prepare_book_from_catalog_code(
+        self,
+        catalog_code: str,
+        fallback_title: Optional[str] = None,
+        fallback_author: Optional[str] = None,
+        catalog_publisher: Optional[str] = None,
+        catalog_quantity: Optional[int] = 1,
+    ) -> Book:
+        """Build an enriched/AI-reviewed book from ISBN/EAN without persisting it."""
+        code_value = (catalog_code or "").strip()
+        if not code_value:
+            raise BookNotFoundError("ISBN/EAN mancante.")
+
+        title_seed = (fallback_title or code_value).strip() or code_value
+        author_seed = (fallback_author or "").strip() or None
+
+        normalized_catalog = normalize_catalog_entry(
+            raw_title=title_seed,
+            raw_author=author_seed,
+            raw_publisher=catalog_publisher,
+        )
+        normalized_input_title = normalized_catalog.get("title") or title_seed
+        normalized_input_author = normalized_catalog.get("author") or author_seed
+        canonical_title = normalize_title(normalized_input_title, normalized_input_author) or normalized_input_title
+
+        seed = Book(
+            raw_title=canonical_title,
+            normalized_title=canonical_title,
+            author=normalized_input_author,
+            catalog_ean=code_value,
+            catalog_publisher=normalized_catalog.get("publisher") or catalog_publisher,
+            catalog_quantity=catalog_quantity,
+            status=BookStatus.IN_PROGRESS,
+        )
+
+        candidates = self.find_candidates(
+            raw_title=normalized_input_title,
+            author=normalized_input_author,
+            catalog_publisher=catalog_publisher,
+            catalog_ean=code_value,
+            limit=1,
+        )
+        top_candidate = candidates[0] if candidates else None
+        if top_candidate:
+            seed = self._apply_candidate_metadata(seed, top_candidate)
+
+        book = asyncio.run(self._enrich_with_immediate_retry(seed))
+        if top_candidate:
+            book = self._apply_candidate_metadata(book, top_candidate)
+
+        if not self._is_reliably_enriched(book):
+            note = "Multi-add fallback: queued with low confidence, verify metadata before approval."
+            examples = list(getattr(book, "discarded_information_examples", []) or [])
+            if note not in examples:
+                examples.append(note)
+            if not self._has_minimal_metadata(book):
+                examples.append("Low-confidence fallback: record opened with limited metadata only.")
+            book.discarded_information_examples = examples
+
+        book = generate_insights(book)
+        book.status = BookStatus.TO_APPROVE
+        return book
+
     def retry_skipped_entries(
         self,
         skipped_entries: List[dict],

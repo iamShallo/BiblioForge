@@ -167,6 +167,39 @@ def _extract_ibs_search_result_metadata(search_html: str) -> dict:
     return {}
 
 
+def _extract_ibs_og_title_metadata(page_html: str) -> tuple[Optional[str], Optional[str]]:
+    if not page_html:
+        return None, None
+
+    match = re.search(r'<meta\s+property="og:title"\s+content="([^"]+)"', page_html, re.IGNORECASE | re.DOTALL)
+    if not match:
+        return None, None
+
+    og_title = _clean_review_text(match.group(1))
+    if not og_title:
+        return None, None
+
+    og_title = re.sub(r"\s*\|\s*IBS\s*$", "", og_title, flags=re.IGNORECASE).strip()
+
+    product_match = re.match(
+        r"^(?P<title>.+?)\s+-\s+(?P<author>.+?)\s+-\s+(?:Libro|eBook|Audiolibro)\b",
+        og_title,
+        re.IGNORECASE,
+    )
+    if product_match:
+        title = _clean_review_text(product_match.group("title"))
+        author = _clean_review_text(product_match.group("author"))
+        return title or None, author or None
+
+    parts = [part.strip() for part in re.split(r"\s+-\s+", og_title) if part.strip()]
+    if len(parts) >= 2:
+        title = _clean_review_text(parts[0])
+        author = _clean_review_text(parts[1])
+        return title or None, author or None
+
+    return og_title, None
+
+
 def _is_generic_ibs_title(title: Optional[str]) -> bool:
     normalized = _normalize_for_match(title)
     if not normalized:
@@ -314,7 +347,100 @@ async def fetch_ibs_metadata(normalized_title: str, author: Optional[str], catal
         "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
     }
 
+    def _extract_page_metadata(page_html: str) -> dict:
+        title = None
+        og_title, authors = _extract_ibs_og_title_metadata(page_html)
+        if og_title:
+            title = og_title
+
+        if not title:
+            title_patterns = [
+                r'<h1[^>]*class="[^"]*title[^"]*"[^>]*>(.*?)</h1>',
+                r'<h1[^>]*>(.*?)</h1>',
+            ]
+            for pattern in title_patterns:
+                match = re.search(pattern, page_html, re.IGNORECASE | re.DOTALL)
+                if match:
+                    title = _clean_review_text(match.group(1))
+                    if title:
+                        break
+
+        publisher = None
+        publisher_patterns = [
+            r'Editore:\s*<a[^>]*>(.*?)</a>',
+            r'Editore:\s*([^<\n]+)',
+            r'Casa editrice:\s*<a[^>]*>(.*?)</a>',
+        ]
+        for pattern in publisher_patterns:
+            match = re.search(pattern, page_html, re.IGNORECASE | re.DOTALL)
+            if match:
+                publisher = _clean_review_text(match.group(1))
+                if publisher:
+                    break
+
+        cover_url = None
+        cover_patterns = []
+        if normalized_code:
+            cover_patterns.append(rf'<img[^>]+src="([^"]*{re.escape(normalized_code)}[^"]*)"')
+        cover_patterns.extend([
+            r'<img[^>]+src="([^"]+978\d{10}[^"]+)"',
+            r'<meta\s+property="og:image"\s+content="([^"]+)"',
+        ])
+        for pattern in cover_patterns:
+            match = re.search(pattern, page_html, re.IGNORECASE | re.DOTALL)
+            if match:
+                cover_url = match.group(1)
+                if cover_url and not cover_url.startswith("http"):
+                    cover_url = urljoin(IBS_BASE_URL, cover_url)
+                if cover_url:
+                    break
+
+        if title and _is_generic_ibs_title(title):
+            title = None
+
+        return {
+            "title": title,
+            "authors": authors,
+            "publisher": publisher,
+            "cover_url": cover_url,
+            "price": _extract_ibs_full_price(page_html),
+        }
+
+    def _has_payload(meta: dict) -> bool:
+        return bool(
+            meta.get("title")
+            or meta.get("authors")
+            or meta.get("publisher")
+            or meta.get("cover_url")
+            or meta.get("price") is not None
+        )
+
+    def _code_matches_link(link: Optional[str]) -> bool:
+        if not normalized_code:
+            return True
+        if not link:
+            return False
+        return normalized_code in str(link)
+
+    def _code_matches_page(page_html: str) -> bool:
+        if not normalized_code:
+            return True
+        return normalized_code in str(page_html)
+
     async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=headers) as client:
+        if normalized_code:
+            direct_link = f"{IBS_BASE_URL}/libri/e/{normalized_code}"
+            try:
+                direct_resp = await client.get(direct_link)
+                direct_resp.raise_for_status()
+                if _code_matches_page(direct_resp.text):
+                    direct_meta = _extract_page_metadata(direct_resp.text)
+                    direct_meta["info_link"] = str(direct_resp.url or direct_link)
+                    if _has_payload(direct_meta):
+                        return direct_meta
+            except Exception:
+                pass
+
         for query in queries:
             try:
                 search_resp = await client.get(IBS_SEARCH_URL, params={"query": query})
@@ -323,75 +449,12 @@ async def fetch_ibs_metadata(normalized_title: str, author: Optional[str], catal
             except Exception:
                 continue
 
-            def _extract_page_metadata(page_html: str) -> dict:
-                title = None
-                title_patterns = [
-                    r'<meta\s+property="og:title"\s+content="([^"]+)"',
-                    r'<h1[^>]*class="[^"]*title[^"]*"[^>]*>(.*?)</h1>',
-                    r'<h1[^>]*>(.*?)</h1>',
-                ]
-                for pattern in title_patterns:
-                    match = re.search(pattern, page_html, re.IGNORECASE | re.DOTALL)
-                    if match:
-                        title = _clean_review_text(match.group(1))
-                        if title:
-                            break
-
-                authors = None
-                author_patterns = [
-                    r'\(Autore\)\s*<a[^>]*>(.*?)</a>',
-                    r'Autore:\s*<a[^>]*>(.*?)</a>',
-                    r'di\s*<a[^>]*>(.*?)</a>',
-                ]
-                for pattern in author_patterns:
-                    match = re.search(pattern, page_html, re.IGNORECASE | re.DOTALL)
-                    if match:
-                        authors = _clean_review_text(match.group(1))
-                        if authors:
-                            break
-
-                publisher = None
-                publisher_patterns = [
-                    r'Editore:\s*<a[^>]*>(.*?)</a>',
-                    r'Editore:\s*([^<\n]+)',
-                    r'Casa editrice:\s*<a[^>]*>(.*?)</a>',
-                ]
-                for pattern in publisher_patterns:
-                    match = re.search(pattern, page_html, re.IGNORECASE | re.DOTALL)
-                    if match:
-                        publisher = _clean_review_text(match.group(1))
-                        if publisher:
-                            break
-
-                cover_url = None
-                cover_patterns = [
-                    r'<img[^>]+src="([^"]+978\d{10}[^"]+)"',
-                    r'<meta\s+property="og:image"\s+content="([^"]+)"',
-                ]
-                for pattern in cover_patterns:
-                    match = re.search(pattern, page_html, re.IGNORECASE | re.DOTALL)
-                    if match:
-                        cover_url = match.group(1)
-                        if cover_url and not cover_url.startswith("http"):
-                            cover_url = urljoin(IBS_BASE_URL, cover_url)
-                        if cover_url:
-                            break
-
-                if title and _is_generic_ibs_title(title):
-                    title = None
-
-                return {
-                    "title": title,
-                    "authors": authors,
-                    "publisher": publisher,
-                    "cover_url": cover_url,
-                    "price": _extract_ibs_full_price(page_html),
-                }
-
             product_link = _extract_ibs_product_link(search_html)
+            if normalized_code and product_link and not _code_matches_link(product_link):
+                product_link = None
 
             search_meta = _extract_page_metadata(search_html)
-            if search_meta.get("title") or search_meta.get("authors") or search_meta.get("publisher") or search_meta.get("cover_url") or search_meta.get("price") is not None:
+            if _has_payload(search_meta) and (not normalized_code or _code_matches_page(search_html)):
                 search_meta["info_link"] = product_link
                 return search_meta
 
@@ -399,9 +462,11 @@ async def fetch_ibs_metadata(normalized_title: str, author: Optional[str], catal
                 try:
                     product_resp = await client.get(product_link)
                     product_resp.raise_for_status()
+                    if normalized_code and not _code_matches_page(product_resp.text):
+                        continue
                     product_meta = _extract_page_metadata(product_resp.text)
                     product_meta["info_link"] = product_link
-                    if product_meta.get("title") or product_meta.get("authors") or product_meta.get("publisher") or product_meta.get("cover_url") or product_meta.get("price") is not None:
+                    if _has_payload(product_meta):
                         return product_meta
                 except Exception:
                     pass
@@ -409,6 +474,9 @@ async def fetch_ibs_metadata(normalized_title: str, author: Optional[str], catal
             search_meta = _extract_ibs_search_result_metadata(search_html)
             search_title = search_meta.get("title")
             search_authors = search_meta.get("authors")
+            search_link = search_meta.get("info_link") or product_link
+            if normalized_code and search_link and not _code_matches_link(search_link):
+                continue
             if search_title and not _is_generic_ibs_title(search_title) and _normalize_for_match(search_title) != _normalize_for_match(search_authors):
                 price = _extract_ibs_full_price(search_html)
                 return {
@@ -417,10 +485,90 @@ async def fetch_ibs_metadata(normalized_title: str, author: Optional[str], catal
                     "publisher": None,
                     "cover_url": None,
                     "price": price,
-                    "info_link": search_meta.get("info_link") or product_link,
+                    "info_link": search_link,
                 }
 
     return {}
+
+
+async def fetch_preview_by_catalog_code(catalog_ean: Optional[str]) -> dict:
+    """Fetch lightweight preview metadata (title/author/cover) by exact ISBN/EAN."""
+    normalized_code = _normalize_catalog_code(catalog_ean)
+    if not normalized_code:
+        return {}
+
+    api_key = os.getenv("GOOGLE_BOOKS_API_KEY")
+    params = {
+        "q": f"isbn:{normalized_code}",
+        "maxResults": 10,
+        "orderBy": "relevance",
+    }
+    if api_key:
+        params["key"] = api_key
+
+    items: List[dict] = []
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(GOOGLE_BOOKS_URL, params=params)
+            resp.raise_for_status()
+            items = resp.json().get("items", [])
+    except Exception:
+        items = []
+
+    if not items:
+        ibs_meta = await fetch_ibs_metadata(normalized_code, None, normalized_code)
+        if ibs_meta:
+            preview_title = str(ibs_meta.get("title") or "").strip() or normalized_code
+            preview_author = str(ibs_meta.get("authors") or "").strip() or None
+            preview_cover = str(ibs_meta.get("cover_url") or "").strip() or f"https://covers.openlibrary.org/b/isbn/{normalized_code}-L.jpg?default=true"
+            return {
+                "title": preview_title,
+                "authors": preview_author,
+                "cover_url": preview_cover,
+                "isbn": normalized_code,
+                "isbn_10": None,
+                "published_date": None,
+                "info_link": ibs_meta.get("info_link"),
+            }
+        return {}
+
+    def _item_has_code(item: dict) -> bool:
+        volume = item.get("volumeInfo", {}) if isinstance(item, dict) else {}
+        identifiers = volume.get("industryIdentifiers", []) or []
+        for ident in identifiers:
+            value = _normalize_catalog_code(ident.get("identifier"))
+            if value and value == normalized_code:
+                return True
+        return False
+
+    selected_item = next((item for item in items if _item_has_code(item)), items[0])
+    meta = _extract_metadata(selected_item, normalized_code)
+
+    preview_title = str(meta.get("title") or "").strip() or normalized_code
+    preview_author = str(meta.get("author") or "").strip() or None
+    preview_cover = str(meta.get("cover_url") or "").strip() or None
+
+    if not preview_cover:
+        cover_probe = Book(
+            raw_title=preview_title,
+            normalized_title=preview_title,
+            author=preview_author,
+            isbn=meta.get("isbn"),
+            isbn_10=meta.get("isbn_10"),
+            catalog_ean=normalized_code,
+            openlibrary_key=None,
+        )
+        preview_cover = _build_cover_fallback(cover_probe)
+
+    return {
+        "title": preview_title,
+        "authors": preview_author,
+        "cover_url": preview_cover,
+        "isbn": meta.get("isbn"),
+        "isbn_10": meta.get("isbn_10"),
+        "published_date": meta.get("published_date"),
+        "info_link": meta.get("info_link"),
+    }
 
 
 async def _fetch_google_books(

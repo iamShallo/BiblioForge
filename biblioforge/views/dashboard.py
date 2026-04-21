@@ -20,7 +20,7 @@ from biblioforge.models.book import Book, BookStatus, SoldBook
 from biblioforge.repositories.sold_book_repository import SoldBookRepository
 from biblioforge.services.sheets_sync_service import SheetsSyncService
 from biblioforge.services.normalization_service import normalize_title
-from biblioforge.services.crawling_service import fetch_ibs_metadata
+from biblioforge.services.crawling_service import fetch_ibs_metadata, fetch_preview_by_catalog_code
 from biblioforge.views.sales_history import render_sales_history_screen
 from biblioforge.utils.batch_update import BatchUpdateManager
 
@@ -163,6 +163,22 @@ st.markdown(
     }
     .floating-sales-btn:hover {
         background: #166534;
+        color: #ffffff !important;
+    }
+    .floating-add-btn {
+        display: inline-block;
+        background: #0f766e;
+        color: #ffffff !important;
+        border: 1px solid #115e59;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-weight: 700;
+        text-decoration: none !important;
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.25);
+        cursor: pointer;
+    }
+    .floating-add-btn:hover {
+        background: #115e59;
         color: #ffffff !important;
     }
     div[class*="st-key-edit-price-line-"] button {
@@ -2374,6 +2390,283 @@ def render_multi_sale_screen() -> None:
     st.markdown('<a href="?view=dashboard" target="_blank" rel="noopener noreferrer">Torna alla dashboard</a>', unsafe_allow_html=True)
 
 
+def render_multi_add_screen() -> None:
+    set_browser_tab_title("Aggiunta multipla")
+    st.markdown("## Aggiunta multipla libri")
+    st.caption("Scannerizza ISBN/EAN: in lista mostriamo solo copertina, titolo e autore. I dati mancanti vengono completati quando premi 'Aggiungi i libri'.")
+
+    if st.session_state.get("last_multi_add_message"):
+        st.success(st.session_state["last_multi_add_message"])
+        st.session_state["last_multi_add_message"] = ""
+
+    if "multi_add_cart" not in st.session_state:
+        st.session_state["multi_add_cart"] = {}
+    if "multi_add_scan_input" not in st.session_state:
+        st.session_state["multi_add_scan_input"] = ""
+    if "multi_add_last_autosearch_code" not in st.session_state:
+        st.session_state["multi_add_last_autosearch_code"] = ""
+    if "multi_add_clear_input_next_run" not in st.session_state:
+        st.session_state["multi_add_clear_input_next_run"] = False
+    if "multi_add_isbn_refocus" not in st.session_state:
+        st.session_state["multi_add_isbn_refocus"] = True
+
+    def process_scanned_code() -> bool:
+        scanned_value = (st.session_state.get("multi_add_scan_input") or "").strip()
+        normalized_code = _normalize_code(scanned_value)
+        if not normalized_code:
+            return False
+
+        cart = dict(st.session_state.get("multi_add_cart", {}))
+        existing = _find_book_by_isbn(normalized_code)
+        if existing:
+            entry_key = f"existing:{existing.id}"
+            entry = dict(cart.get(entry_key, {}))
+            entry["mode"] = "existing"
+            entry["book_id"] = existing.id
+            entry["book"] = existing
+            entry["code"] = normalized_code
+            entry["quantity"] = int(entry.get("quantity", 0) or 0) + 1
+            cart[entry_key] = entry
+            st.session_state["multi_add_cart"] = cart
+            st.session_state["last_multi_add_feedback"] = (
+                "success",
+                f"Aggiunto in lista: {existing.normalized_title or existing.raw_title}",
+            )
+        else:
+            try:
+                exact_preview = {}
+                with st.spinner("Recupero dati online..."):
+                    try:
+                        exact_preview = asyncio.run(fetch_preview_by_catalog_code(normalized_code)) or {}
+                    except Exception:
+                        exact_preview = {}
+
+                    candidates = []
+                    if not exact_preview:
+                        candidates = controller.find_candidates(
+                            normalized_code,
+                            None,
+                            catalog_publisher=None,
+                            catalog_ean=normalized_code,
+                            limit=1,
+                        )
+                selected = candidates[0] if candidates else None
+                ibs_meta = {}
+                if not selected and not exact_preview:
+                    # Fallback morbido: con alcuni ISBN validi la ricerca candidati e troppo rigida.
+                    try:
+                        with st.spinner("Recupero dati IBS..."):
+                            ibs_meta = asyncio.run(fetch_ibs_metadata(normalized_code, None, normalized_code)) or {}
+                    except Exception:
+                        ibs_meta = {}
+
+                preview_title = (
+                    exact_preview.get("title")
+                    or (selected.get("title") if selected else None)
+                    or ibs_meta.get("title")
+                    or normalized_code
+                )
+                preview_title = str(preview_title).strip() or normalized_code
+                preview_author = (
+                    exact_preview.get("authors")
+                    or (selected.get("authors") if selected else None)
+                    or ibs_meta.get("authors")
+                    or ""
+                )
+                preview_author = str(preview_author).strip() or None
+                preview_cover = (
+                    exact_preview.get("cover_url")
+                    or (selected.get("cover_url") if selected else None)
+                    or ibs_meta.get("cover_url")
+                    or f"https://covers.openlibrary.org/b/isbn/{normalized_code}-L.jpg?default=true"
+                )
+                preview_canonical_title = normalize_title(preview_title, preview_author) or preview_title
+                preview_book = Book(
+                    raw_title=preview_canonical_title,
+                    normalized_title=preview_canonical_title,
+                    author=preview_author,
+                    cover_url=str(preview_cover).strip() or None,
+                    catalog_ean=normalized_code,
+                    status=BookStatus.IN_PROGRESS,
+                )
+                entry_key = f"new:{normalized_code}"
+                entry = dict(cart.get(entry_key, {}))
+                entry["mode"] = "new"
+                entry["book"] = preview_book
+                entry["candidate"] = selected or None
+                entry["code"] = normalized_code
+                entry["quantity"] = int(entry.get("quantity", 0) or 0) + 1
+                cart[entry_key] = entry
+                st.session_state["multi_add_cart"] = cart
+                st.session_state["last_multi_add_feedback"] = (
+                    "success",
+                    f"Preparato: {preview_book.normalized_title or preview_book.raw_title}",
+                )
+            except Exception as exc:
+                st.session_state["last_multi_add_feedback"] = (
+                    "error",
+                    f"Nessun libro valido trovato per codice {normalized_code}: {exc}",
+                )
+
+        st.session_state["multi_add_clear_input_next_run"] = True
+        request_isbn_refocus("multi_add")
+        return True
+
+    def handle_multi_add_scan_change() -> None:
+        scanned_code = _normalize_code(st.session_state.get("multi_add_scan_input"))
+        if scanned_code:
+            st.session_state["multi_add_last_autosearch_code"] = scanned_code
+        process_scanned_code()
+
+    if st.session_state.get("multi_add_clear_input_next_run"):
+        st.session_state["multi_add_scan_input"] = ""
+        st.session_state["multi_add_last_autosearch_code"] = ""
+        st.session_state["multi_add_clear_input_next_run"] = False
+
+    feedback = st.session_state.pop("last_multi_add_feedback", None)
+    if feedback:
+        level, message = feedback
+        if level == "error":
+            st.error(message)
+        else:
+            st.success(message)
+
+    isbn_col, add_col = st.columns([4, 1], vertical_alignment="bottom")
+    isbn_col.text_input(
+        "ISBN/EAN (scanner codice a barre)",
+        key="multi_add_scan_input",
+        on_change=handle_multi_add_scan_change,
+    )
+    ensure_isbn_auto_trigger("ISBN/EAN (scanner codice a barre)")
+    if add_col.button("Aggiungi", key="multi-add-add-btn", use_container_width=True):
+        if process_scanned_code():
+            st.rerun()
+
+    cart = dict(st.session_state.get("multi_add_cart", {}))
+    if cart:
+        st.markdown("### Elenco aggiunta")
+        for entry_key in list(cart.keys()):
+            entry = cart.get(entry_key) or {}
+            mode = entry.get("mode")
+            quantity = int(entry.get("quantity", 0) or 0)
+            if quantity <= 0:
+                cart.pop(entry_key, None)
+                continue
+
+            if mode == "existing":
+                book = controller.repository.get_book(str(entry.get("book_id") or ""))
+                if not book:
+                    cart.pop(entry_key, None)
+                    continue
+                entry["book"] = book
+            else:
+                book = entry.get("book")
+                if not isinstance(book, Book):
+                    cart.pop(entry_key, None)
+                    continue
+
+            img_col, line_col, qty_col, del_col = st.columns([1, 5, 2, 1])
+            with img_col:
+                st.image(_cover_image_source(book), width=54)
+            line_col.markdown(f"**{book.normalized_title or book.raw_title}**")
+            line_col.caption(book.author or "Autore sconosciuto")
+            qty_col.caption(f"Qta {quantity}")
+            if del_col.button("X", key=f"multi-add-delete-{entry_key}"):
+                cart.pop(entry_key, None)
+                st.session_state["multi_add_cart"] = cart
+                st.rerun()
+
+        st.session_state["multi_add_cart"] = cart
+
+        add_all_col, clear_col = st.columns(2)
+        confirm_add = add_all_col.button("Aggiungi i libri", key="multi-add-confirm", use_container_width=True)
+        clear_all = clear_col.button("Svuota", key="multi-add-clear", use_container_width=True)
+
+        if clear_all:
+            st.session_state["multi_add_cart"] = {}
+            st.rerun()
+
+        if confirm_add:
+            added_total = 0
+            for entry in cart.values():
+                mode = entry.get("mode")
+                qty = int(entry.get("quantity", 0) or 0)
+                if qty <= 0:
+                    continue
+
+                if mode == "existing":
+                    latest = controller.repository.get_book(str(entry.get("book_id") or ""))
+                    if not latest:
+                        continue
+                    current_qty = int(getattr(latest, "catalog_quantity", 0) or 0)
+                    latest.catalog_quantity = current_qty + qty
+                    controller.repository.upsert_book(latest)
+                    added_total += qty
+                    continue
+
+                prepared = entry.get("book")
+                if not isinstance(prepared, Book):
+                    continue
+
+                code_value = str(entry.get("code") or getattr(prepared, "catalog_ean", None) or "").strip() or None
+                fallback_title = prepared.normalized_title or prepared.raw_title or code_value or ""
+                fallback_author = prepared.author
+                existing = _find_existing_book_for_manual(
+                    fallback_title,
+                    fallback_author,
+                    code_value,
+                )
+                if existing is not None:
+                    latest = controller.repository.get_book(existing.id)
+                    if latest:
+                        current_qty = int(getattr(latest, "catalog_quantity", 0) or 0)
+                        latest.catalog_quantity = current_qty + qty
+                        controller.repository.upsert_book(latest)
+                        added_total += qty
+                    continue
+
+                selected_candidate = entry.get("candidate") if isinstance(entry.get("candidate"), dict) else None
+                inserted: Book | None = None
+                try:
+                    if selected_candidate is not None:
+                        inserted = controller.ingest_selected_candidate(
+                            selected_candidate,
+                            fallback_title=fallback_title,
+                            fallback_author=fallback_author,
+                            catalog_ean=code_value,
+                            catalog_quantity=qty,
+                            catalog_price=None,
+                        )
+                    else:
+                        inserted = controller.ingest_raw_book(
+                            fallback_title or (code_value or ""),
+                            fallback_author,
+                            catalog_ean=code_value,
+                            catalog_quantity=qty,
+                            catalog_price=None,
+                            allow_low_confidence=True,
+                        )
+                except BookNotFoundError:
+                    inserted = controller.ingest_raw_book(
+                        fallback_title or (code_value or ""),
+                        fallback_author,
+                        catalog_ean=code_value,
+                        catalog_quantity=qty,
+                        catalog_price=None,
+                        allow_low_confidence=True,
+                    )
+
+                if inserted is not None:
+                    added_total += qty
+
+            st.session_state["multi_add_cart"] = {}
+            st.session_state["last_multi_add_message"] = f"Inseriti/aggiornati {added_total} libri nel database."
+            st.rerun()
+
+    render_isbn_refocus("multi_add", "ISBN/EAN (scanner codice a barre)")
+    st.markdown('<a href="?view=dashboard" target="_blank" rel="noopener noreferrer">Torna alla dashboard</a>', unsafe_allow_html=True)
+
+
 def render_floating_final_db_download_button() -> None:
     queue_books = controller.list_pending()
     queue_df = _approved_books_to_dataframe(queue_books)
@@ -2388,6 +2681,7 @@ def render_floating_final_db_download_button() -> None:
                Download Excel DB
             </a>
             <a class="floating-multi-btn" href="?view=multi-sale" target="_blank" rel="noopener noreferrer">Vendita multipla</a>
+            <a class="floating-add-btn" href="?view=multi-add" target="_blank" rel="noopener noreferrer">Aggiunta multipla</a>
             <a class="floating-sales-btn" href="?view=sales" target="_blank" rel="noopener noreferrer">Vendite passate</a>
         </div>
         """,
@@ -2468,6 +2762,11 @@ def main():
     if current_view == "multi-sale":
         render_centered_title_with_logo()
         render_multi_sale_screen()
+        return
+
+    if current_view == "multi-add":
+        render_centered_title_with_logo()
+        render_multi_add_screen()
         return
 
     if current_view == "sales":
