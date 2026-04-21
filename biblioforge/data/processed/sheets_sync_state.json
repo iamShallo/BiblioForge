@@ -1,6 +1,6 @@
 {
-  "last_push_epoch": 1776436896.3411708,
-  "last_push_iso": "2026-04-17T14:41:36.341176+00:00",
+  "last_push_epoch": 1776777697.6061301,
+  "last_push_iso": "2026-04-21T13:21:37.606134+00:00",
   "last_push_queue_rows": 2750,
   "last_push_sales_rows": 147,
   "last_push_book_keys": [
@@ -198,7 +198,7 @@
     "9791256040162|the horizon|james hilton",
     "9788806241667|racconti|benjamin walter",
     "9791255750222|le spietate|claudia cravens",
-    "|eupalinos o l arquitecte|o l architetto eupalino",
+    "|eupalinos o l arquitecte|paul valery",
     "9788899452759|i racconti di san francisco|armistead maupin",
     "9788804767855|electric dreams|philip k dick",
     "9788899729691|minuetto all inferno|elemire zolla",
@@ -2758,9 +2758,10 @@
   "last_pull_duration_seconds": null,
   "avg_pull_duration_seconds": null,
   "pull_duration_history_seconds": [],
-  "queue_checksum": "16b5b18f074516b7bc11ba2d11e9c0f3f59fe84326cf3218f9345efa26a0e98e",
+  "queue_checksum": "f0a1b9eb974ec3b42d0ea9fe42f67b6a93665b84274fc8e21f8c5382d8a343a0",
   "sales_checksum": "be7fad9f1df22f4ab5705ec0602265d007f26908c85fc1c001f65ffa865ac501",
   "approved_checksum": "be7fad9f1df22f4ab5705ec0602265d007f26908c85fc1c001f65ffa865ac501",
   "last_pull_iso": null,
-  "last_error": null
+  "last_error": null,
+  "journal_checksum": "787dfad28198c52fcae17b7ce59299e8f25957de5a973379f614b81e782e1ed1"
 }

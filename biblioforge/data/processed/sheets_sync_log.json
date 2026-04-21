@@ -141,5 +141,31 @@
     "sales_rows_added": 0,
     "sales_rows_deleted": 0,
     "pushed_tabs": 2
+  },
+  {
+    "timestamp_epoch": 1776777694.6249104,
+    "timestamp_iso": "2026-04-21T15:21:34.624915+02:00 CEST",
+    "queue_rows_before": 2750,
+    "queue_rows_after": 2750,
+    "queue_rows_added": 0,
+    "queue_rows_deleted": 0,
+    "sales_rows_before": 147,
+    "sales_rows_after": 147,
+    "sales_rows_added": 0,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 3
+  },
+  {
+    "timestamp_epoch": 1776777698.515334,
+    "timestamp_iso": "2026-04-21T15:21:38.515339+02:00 CEST",
+    "queue_rows_before": 2750,
+    "queue_rows_after": 2750,
+    "queue_rows_added": 0,
+    "queue_rows_deleted": 0,
+    "sales_rows_before": 147,
+    "sales_rows_after": 147,
+    "sales_rows_added": 0,
+    "sales_rows_deleted": 0,
+    "pushed_tabs": 3
   }
 ]
