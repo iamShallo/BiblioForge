@@ -1089,7 +1089,7 @@ class SheetsSyncService:
         print(f"[ENRICH COMPLETE] Enriched {len(books)} books in {total_time:.2f}s (avg {total_time/len(books):.2f}s per book)")
         return result
 
-    def _merge_queue_with_remote(self, remote_queue: List[Book]) -> Dict[str, Any]:
+    def _merge_queue_with_remote(self, remote_queue: List[Book], enable_enrichment: bool = False) -> Dict[str, Any]:
         merge_start = time.time()
         print(f"[MERGE START] Remote queue size: {len(remote_queue)}")
         
@@ -1124,8 +1124,8 @@ class SheetsSyncService:
                 merged = copy.deepcopy(remote_book)
                 added += 1
                 added_items.append(self._book_label(merged))
-                # New books can legitimately need enrichment.
-                if self._metadata_score(merged) < 15:
+                # During pull reconciliation we prefer deterministic sync speed over re-enrichment.
+                if enable_enrichment and self._metadata_score(merged) < 15:
                     books_to_enrich.append(merged)
                 else:
                     merged_books.append(merged)
@@ -1164,7 +1164,11 @@ class SheetsSyncService:
                         "isbn",
                         "isbn_10",
                     }
-                    if metadata_sensitive_fields.intersection(changed_fields) and self._metadata_score(merged) < 15:
+                    if (
+                        enable_enrichment
+                        and metadata_sensitive_fields.intersection(changed_fields)
+                        and self._metadata_score(merged) < 15
+                    ):
                         books_to_enrich.append(merged)
                     else:
                         merged_books.append(merged)
@@ -1773,7 +1777,8 @@ class SheetsSyncService:
             _report(50, "Sincronizzazione completa lista libri...")
             p4_start = time.time()
             remote_queue = self._pull_tab(service, self.queue_tab)
-            queue_merge = self._merge_queue_with_remote(remote_queue)
+            pull_enrichment_enabled = self._truthy_env("BIBLIOFORGE_PULL_ENABLE_ENRICHMENT", default=False)
+            queue_merge = self._merge_queue_with_remote(remote_queue, enable_enrichment=pull_enrichment_enabled)
             p4_elapsed = time.time() - p4_start
             _log_phase(f"Full Queue Merge ({queue_merge['upserted']} total, {queue_merge['updated']} updated)", p4_elapsed)
             
