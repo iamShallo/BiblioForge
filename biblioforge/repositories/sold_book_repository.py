@@ -1,4 +1,5 @@
 import json
+import os
 import time
 from dataclasses import asdict
 from datetime import datetime
@@ -57,7 +58,10 @@ class SoldBookRepository:
         
         for attempt in range(max_retries):
             try:
-                self.storage_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+                serialized = json.dumps(payload, indent=2, ensure_ascii=False)
+                temp_path = self.storage_path.with_suffix(f"{self.storage_path.suffix}.tmp")
+                temp_path.write_text(serialized, encoding="utf-8")
+                os.replace(temp_path, self.storage_path)
                 return
             except (OSError, IOError):
                 # File lock or other I/O error - retry with backoff

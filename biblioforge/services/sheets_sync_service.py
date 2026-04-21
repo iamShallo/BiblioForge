@@ -1095,6 +1095,32 @@ class SheetsSyncService:
         
         local_queue = self.queue_repository.list_books()
         print(f"[MERGE] Local queue size: {len(local_queue)}")
+
+        allow_remote_wipe = os.getenv("BIBLIOFORGE_ALLOW_REMOTE_QUEUE_WIPE", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        if not remote_queue and local_queue and not allow_remote_wipe:
+            print(
+                "[MERGE SAFETY] Remote queue is empty while local queue has data. "
+                "Skipping destructive merge to avoid accidental wipe. "
+                "Set BIBLIOFORGE_ALLOW_REMOTE_QUEUE_WIPE=1 to force remote empty state."
+            )
+            return {
+                "remote_rows": 0,
+                "upserted": len(local_queue),
+                "added": 0,
+                "updated": 0,
+                "deleted": 0,
+                "duplicates_pruned": 0,
+                "local_only": len(local_queue),
+                "added_items": [],
+                "updated_items": [],
+                "deleted_items": [],
+                "safety_skipped": True,
+            }
         
         local_by_key = {self._book_sync_key(book): book for book in local_queue}
         remote_by_key: Dict[str, Book] = {}
@@ -1199,7 +1225,7 @@ class SheetsSyncService:
 
         for key, local_book in list(local_by_key.items()):
             if key in previously_pushed_keys:
-                self.queue_repository.delete_book(local_book.id)
+                self.queue_repository.delete_book(local_book.id, record_journal=False)
                 deleted += 1
                 deleted_items.append(self._book_label(local_book))
                 local_by_key.pop(key, None)
@@ -1215,8 +1241,8 @@ class SheetsSyncService:
 
         upsert_start = time.time()
         # Rewrite queue to drop stale duplicate ids accumulated over previous pulls.
-        self.queue_repository.clear_books()
-        self.queue_repository.upsert_many(deduped_books)
+        self.queue_repository.clear_books(record_journal=False)
+        self.queue_repository.upsert_many(deduped_books, record_journal=False)
         upsert_elapsed = time.time() - upsert_start
         print(f"[UPSERT] Saved {len(deduped_books)} books in {upsert_elapsed:.2f}s")
         
@@ -1337,10 +1363,10 @@ class SheetsSyncService:
         for local_book in local_queue:
             key = self._book_sync_key(local_book)
             if key not in remote_keys:
-                if self.queue_repository.delete_book(local_book.id):
+                if self.queue_repository.delete_book(local_book.id, record_journal=False):
                     deleted += 1
 
-        self.queue_repository.upsert_many(to_upsert)
+        self.queue_repository.upsert_many(to_upsert, record_journal=False)
         return {
             "remote_rows": len(remote_queue),
             "upserted": len(to_upsert),
@@ -1888,8 +1914,8 @@ class SheetsSyncService:
         deduped_queue_books, local_duplicates_pruned = self._deduplicate_books(queue_books)
         if local_duplicates_pruned:
             # Keep local storage canonical before pushing to avoid reintroducing historical duplicates.
-            self.queue_repository.clear_books()
-            self.queue_repository.upsert_many(deduped_queue_books)
+            self.queue_repository.clear_books(record_journal=False)
+            self.queue_repository.upsert_many(deduped_queue_books, record_journal=False)
             queue_books = deduped_queue_books
 
         sales = self._load_sales()
