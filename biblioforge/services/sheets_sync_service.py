@@ -835,6 +835,50 @@ class SheetsSyncService:
         cleaned = re.sub(r"[^0-9xX]", "", str(value or "")).lower()
         return cleaned.strip()
 
+    @staticmethod
+    def _strip_placeholder_title_prefix(title: Optional[str]) -> str:
+        current = str(title or "").strip()
+        if not current:
+            return ""
+
+        pattern = re.compile(r"^\s*nuovo\s+libro\s*\d+\s*[-:–—]?\s*", re.IGNORECASE)
+        while True:
+            cleaned = pattern.sub("", current, count=1).strip()
+            if cleaned == current or not cleaned:
+                break
+            current = cleaned
+        return current
+
+    def _sanitize_book_placeholder_title(self, book: Book) -> bool:
+        raw_title = str(getattr(book, "raw_title", "") or "").strip()
+        normalized_title = str(getattr(book, "normalized_title", "") or "").strip()
+
+        cleaned_raw = self._strip_placeholder_title_prefix(raw_title)
+        cleaned_normalized = self._strip_placeholder_title_prefix(normalized_title)
+        candidate_title = cleaned_normalized or cleaned_raw
+        if not candidate_title:
+            return False
+
+        canonical_title = normalize_title(candidate_title, getattr(book, "author", None)) or candidate_title
+        target_raw = cleaned_raw or candidate_title
+        target_normalized = canonical_title
+
+        changed = False
+        if target_raw and target_raw != raw_title:
+            book.raw_title = target_raw
+            changed = True
+        if target_normalized and target_normalized != normalized_title:
+            book.normalized_title = target_normalized
+            changed = True
+        return changed
+
+    def _sanitize_books_placeholder_titles(self, books: List[Book]) -> int:
+        updated = 0
+        for book in books:
+            if self._sanitize_book_placeholder_title(book):
+                updated += 1
+        return updated
+
     def _deduplicate_books(self, books: List[Book]) -> tuple[List[Book], int]:
         deduped_by_key: Dict[str, Book] = {}
         duplicate_count = 0
@@ -1633,8 +1677,7 @@ class SheetsSyncService:
         base = "|".join([title.strip().lower(), author.strip().lower(), isbn.strip().lower()])
         return hashlib.sha256(base.encode("utf-8")).hexdigest()[:24]
 
-    @staticmethod
-    def _books_from_sheet_values(values: List[List[Any]], default_status: str) -> List[Book]:
+    def _books_from_sheet_values(self, values: List[List[Any]], default_status: str) -> List[Book]:
         if not values or len(values) < 2:
             return []
 
@@ -1650,7 +1693,9 @@ class SheetsSyncService:
                 if payload_idx >= 0 and payload_idx < len(row) and row[payload_idx]:
                     data = json.loads(str(row[payload_idx]))
                     if isinstance(data, dict):
-                        books.append(BookRepository._dict_to_book(data))
+                        parsed_book = BookRepository._dict_to_book(data)
+                        self._sanitize_book_placeholder_title(parsed_book)
+                        books.append(parsed_book)
                         continue
 
                 if id_idx >= 0 and id_idx < len(row):
@@ -1668,7 +1713,9 @@ class SheetsSyncService:
                         "catalog_price": float(row_map.get("catalog_price") or 0.0) if str(row_map.get("catalog_price") or "").strip() else None,
                         "status": row_map.get("status") or default_status,
                     }
-                    books.append(BookRepository._dict_to_book(data))
+                    parsed_book = BookRepository._dict_to_book(data)
+                    self._sanitize_book_placeholder_title(parsed_book)
+                    books.append(parsed_book)
                     continue
 
                 row_map = {header[i]: row[i] for i in range(min(len(header), len(row)))}
@@ -1709,7 +1756,9 @@ class SheetsSyncService:
                     "insights": insights,
                     "status": default_status,
                 }
-                books.append(BookRepository._dict_to_book(data))
+                parsed_book = BookRepository._dict_to_book(data)
+                self._sanitize_book_placeholder_title(parsed_book)
+                books.append(parsed_book)
             except Exception:
                 continue
 
@@ -2078,6 +2127,13 @@ class SheetsSyncService:
         elapsed = now_epoch - last_push_epoch
 
         queue_books = self.queue_repository.list_books()
+        placeholder_titles_sanitized = self._sanitize_books_placeholder_titles(queue_books)
+        if placeholder_titles_sanitized:
+            # One-time cleanup: persist sanitized legacy titles locally before checksum/push.
+            self.queue_repository.clear_books(record_journal=False)
+            self.queue_repository.upsert_many(queue_books, record_journal=False)
+            queue_books = self.queue_repository.list_books()
+
         deduped_queue_books, local_duplicates_pruned = self._deduplicate_books(queue_books)
         if local_duplicates_pruned:
             # Keep local storage canonical before pushing to avoid reintroducing historical duplicates.
@@ -2151,7 +2207,10 @@ class SheetsSyncService:
                 message="Sync Google Sheets completata.",
                 pushed_tabs=pushed_tabs,
                 details={
-                    "books": {"duplicates_pruned": int(local_duplicates_pruned)},
+                    "books": {
+                        "duplicates_pruned": int(local_duplicates_pruned),
+                        "placeholder_titles_sanitized": int(placeholder_titles_sanitized),
+                    },
                     "journal": {"appended_rows": int(appended_journal_rows)},
                 },
             )
