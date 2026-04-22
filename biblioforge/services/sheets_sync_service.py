@@ -420,8 +420,8 @@ class SheetsSyncService:
         return max((int(entry.get("seq", 0) or 0) for entry in entries), default=0)
 
     @staticmethod
-    def _journal_rows_from_entries(entries: List[Dict[str, Any]]) -> List[List[Any]]:
-        headers = [
+    def _journal_headers() -> List[str]:
+        return [
             "Seq",
             "Timestamp Epoch",
             "Timestamp ISO",
@@ -433,7 +433,10 @@ class SheetsSyncService:
             "Payload JSON",
             "Before Payload JSON",
         ]
-        rows: List[List[Any]] = [headers]
+
+    @staticmethod
+    def _journal_data_rows_from_entries(entries: List[Dict[str, Any]]) -> List[List[Any]]:
+        rows: List[List[Any]] = []
         for entry in sorted(entries, key=lambda item: int(item.get("seq", 0) or 0)):
             rows.append(
                 [
@@ -451,6 +454,25 @@ class SheetsSyncService:
             )
         return rows
 
+    @classmethod
+    def _journal_rows_from_entries(cls, entries: List[Dict[str, Any]]) -> List[List[Any]]:
+        return [cls._journal_headers()] + cls._journal_data_rows_from_entries(entries)
+
+    @staticmethod
+    def _journal_entry_signature(entry: Dict[str, Any]) -> str:
+        signature_payload = {
+            "operation": str(entry.get("operation") or "").strip().lower(),
+            "book_id": str(entry.get("book_id") or "").strip(),
+            "sync_key": str(entry.get("sync_key") or "").strip(),
+            "status": str(entry.get("status") or "").strip(),
+            "changed_fields": [str(field).strip() for field in entry.get("changed_fields") or [] if str(field).strip()],
+            "payload_json": str(entry.get("payload_json") or "").strip(),
+            "before_payload_json": str(entry.get("before_payload_json") or "").strip(),
+            "timestamp_epoch": str(entry.get("timestamp_epoch") or "").strip(),
+            "timestamp_iso": str(entry.get("timestamp_iso") or "").strip(),
+        }
+        return json.dumps(signature_payload, ensure_ascii=False, sort_keys=True)
+
     def _overwrite_journal_tab(self, service, tab_name: str, entries: List[Dict[str, Any]]) -> None:
         self._ensure_tab_exists(service, tab_name)
         rows = self._journal_rows_from_entries(entries)
@@ -465,6 +487,59 @@ class SheetsSyncService:
             valueInputOption="RAW",
             body={"values": rows},
         ).execute()
+
+    def _append_journal_tab(self, service, tab_name: str, entries: List[Dict[str, Any]]) -> int:
+        self._ensure_tab_exists(service, tab_name)
+        if not entries:
+            return 0
+
+        remote_entries = self._pull_journal_tab(service, tab_name)
+        remote_signatures = {self._journal_entry_signature(entry) for entry in remote_entries}
+        new_entries = [entry for entry in entries if self._journal_entry_signature(entry) not in remote_signatures]
+        if not new_entries:
+            return 0
+
+        next_seq = self._max_journal_seq(remote_entries) + 1
+        appended_rows: List[List[Any]] = []
+        for entry in sorted(new_entries, key=lambda item: int(item.get("seq", 0) or 0)):
+            row = [
+                next_seq,
+                entry.get("timestamp_epoch") or "",
+                entry.get("timestamp_iso") or "",
+                entry.get("operation") or "",
+                entry.get("book_id") or "",
+                entry.get("sync_key") or "",
+                entry.get("status") or "",
+                ", ".join(entry.get("changed_fields") or []),
+                entry.get("payload_json") or "",
+                entry.get("before_payload_json") or "",
+            ]
+            appended_rows.append(row)
+            next_seq += 1
+
+        header_response = (
+            service.spreadsheets()
+            .values()
+            .get(spreadsheetId=self.spreadsheet_id, range=f"{tab_name}!A1:J1")
+            .execute()
+        )
+        header_values = header_response.get("values", []) or []
+        if not header_values:
+            service.spreadsheets().values().update(
+                spreadsheetId=self.spreadsheet_id,
+                range=f"{tab_name}!A1",
+                valueInputOption="RAW",
+                body={"values": [self._journal_headers()]},
+            ).execute()
+
+        service.spreadsheets().values().append(
+            spreadsheetId=self.spreadsheet_id,
+            range=f"{tab_name}!A:J",
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body={"values": appended_rows},
+        ).execute()
+        return len(appended_rows)
 
     def _merge_journal_tab(self, service, tab_name: str, local_entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -694,6 +769,7 @@ class SheetsSyncService:
         sales_added: int,
         sales_deleted: int,
         queue_books: Optional[List[Book]] = None,
+        pushed_tabs: int = 3,
     ) -> None:
         state["last_push_epoch"] = time.time()
         state["last_push_iso"] = self._utc_now_iso()
@@ -716,7 +792,7 @@ class SheetsSyncService:
             queue_deleted=queue_deleted,
             sales_added=sales_added,
             sales_deleted=sales_deleted,
-            pushed_tabs=3,
+            pushed_tabs=int(pushed_tabs),
         )
 
     @staticmethod
@@ -1696,6 +1772,33 @@ class SheetsSyncService:
             body={"values": rows},
         ).execute()
 
+    def _ensure_tab_exists(self, service, tab_name: str) -> None:
+        metadata = service.spreadsheets().get(
+            spreadsheetId=self.spreadsheet_id,
+            fields="sheets.properties.title",
+        ).execute()
+        existing = {
+            str(sheet.get("properties", {}).get("title", "")).strip()
+            for sheet in metadata.get("sheets", [])
+        }
+        if tab_name in existing:
+            return
+
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=self.spreadsheet_id,
+            body={
+                "requests": [
+                    {
+                        "addSheet": {
+                            "properties": {
+                                "title": tab_name,
+                            }
+                        }
+                    }
+                ]
+            },
+        ).execute()
+
     def _merge_queue_tab(self, service, tab_name: str, local_books: List[Book]) -> List[Book]:
         """
         Merge local books with remote ones, avoiding data loss when local queue is empty.
@@ -2022,16 +2125,11 @@ class SheetsSyncService:
 
         try:
             service = self._get_sheets_client()
-            # Merge queue instead of overwriting to preserve books from other devices
-            merged_queue_books = self._merge_queue_tab(service, self.queue_tab, queue_books)
-            # Merge sales instead of overwriting to preserve sales from other devices
-            merged_sales = self._merge_sales_tab(service, self.approved_tab, sales)
-            # Merge journal instead of overwriting to preserve logs from other devices
-            merged_journal_entries = self._merge_journal_tab(service, self.journal_tab, journal.get("entries", []))
-            # Save merged journal locally to prevent data loss
-            self._save_change_journal(merged_journal_entries)
-            # Update journal checksum with merged entries
-            journal_checksum = self._payload_checksum(merged_journal_entries)
+            self._overwrite_tab(service, self.queue_tab, queue_books)
+            self._overwrite_sales_tab(service, self.approved_tab, sales)
+            journal_entries = [entry for entry in journal.get("entries", []) if isinstance(entry, dict)]
+            appended_journal_rows = self._append_journal_tab(service, self.journal_tab, journal_entries)
+            pushed_tabs = 2 + (1 if appended_journal_rows > 0 else 0)
 
             self._mark_push_state(
                 state,
@@ -2045,13 +2143,17 @@ class SheetsSyncService:
                 sales_added,
                 sales_deleted,
                 queue_books,
+                pushed_tabs,
             )
 
             return SyncRunResult(
                 status="ok",
                 message="Sync Google Sheets completata.",
-                pushed_tabs=3,
-                details={"books": {"duplicates_pruned": int(local_duplicates_pruned)}},
+                pushed_tabs=pushed_tabs,
+                details={
+                    "books": {"duplicates_pruned": int(local_duplicates_pruned)},
+                    "journal": {"appended_rows": int(appended_journal_rows)},
+                },
             )
         except Exception as exc:
             state["last_error"] = f"push_failed: {exc}"

@@ -34,6 +34,24 @@ sheets_sync = SheetsSyncService(
     approved_repository=controller.approved_repository,
     state_path=controller.package_root / "data" / "processed" / "sheets_sync_state.json",
 )
+
+
+def _new_sheets_sync_service() -> SheetsSyncService:
+    return SheetsSyncService(
+        queue_repository=controller.repository,
+        approved_repository=controller.approved_repository,
+        state_path=controller.package_root / "data" / "processed" / "sheets_sync_state.json",
+    )
+
+
+def get_sheets_sync_service() -> SheetsSyncService:
+    """Return a fresh sync service if the in-memory instance is stale after hot reloads."""
+    global sheets_sync
+    required_methods = ("_ensure_tab_exists", "push_local_to_remote", "pull_remote_into_local")
+    if any(not hasattr(sheets_sync, method_name) for method_name in required_methods):
+        sheets_sync = _new_sheets_sync_service()
+    return sheets_sync
+
 _sheets_scheduler_lock = threading.Lock()
 _sheets_scheduler_started = False
 _sheets_sync_pause_event = threading.Event()
@@ -721,11 +739,12 @@ def run_sheets_bootstrap_once() -> None:
         return
 
     st.session_state["sheets_bootstrap_done"] = True
-    cfg = sheets_sync.describe_configuration()
+    sync_service = get_sheets_sync_service()
+    cfg = sync_service.describe_configuration()
     if not cfg.get("ready", False):
         return
 
-    result = sheets_sync.pull_remote_into_local()
+    result = sync_service.pull_remote_into_local()
     st.session_state["last_sheets_pull_result"] = {
         "status": result.status,
         "message": result.message,
@@ -742,12 +761,13 @@ def run_scheduled_sheets_push() -> None:
         return
 
     try:
-        cfg = sheets_sync.describe_configuration()
+        sync_service = get_sheets_sync_service()
+        cfg = sync_service.describe_configuration()
         if not cfg.get("ready", False):
             return
 
         now = time.time()
-        push_result = sheets_sync.push_local_to_remote(force=False)
+        push_result = sync_service.push_local_to_remote(force=False)
         st.session_state["last_sheets_push_result"] = {
             "status": push_result.status,
             "message": push_result.message,
@@ -775,7 +795,8 @@ def _sheets_scheduler_loop() -> None:
                 _sheets_scheduler_paused_event.clear()
                 if _sheets_sync_operation_lock.acquire(timeout=2):
                     try:
-                        sheets_sync.push_local_to_remote(force=False)
+                        sync_service = get_sheets_sync_service()
+                        sync_service.push_local_to_remote(force=False)
                     finally:
                         _sheets_sync_operation_lock.release()
         except Exception:
@@ -808,7 +829,8 @@ def ensure_sheets_scheduler_running() -> None:
 
 def render_sheets_sync_box() -> None:
     st.markdown("### Sincronizzazione cloud (Google Sheets)")
-    cfg = sheets_sync.describe_configuration()
+    sync_service = get_sheets_sync_service()
+    cfg = sync_service.describe_configuration()
     
     def _on_sheets_input_clear():
         """Callback to clear the sheets input when needed."""
@@ -820,7 +842,7 @@ def render_sheets_sync_box() -> None:
         key="sheets-manual-id-input",
     )
 
-    resolved_sheet_id = sheets_sync._extract_sheet_id(manual_sheet)
+    resolved_sheet_id = sync_service._extract_sheet_id(manual_sheet)
     if resolved_sheet_id:
         sheet_url = f"https://docs.google.com/spreadsheets/d/{resolved_sheet_id}/edit"
         st.markdown(
@@ -828,7 +850,7 @@ def render_sheets_sync_box() -> None:
             unsafe_allow_html=True,
         )
 
-    current_cfg = sheets_sync.describe_configuration()
+    current_cfg = sync_service.describe_configuration()
     if current_cfg.get("ready", False):
         st.markdown(
             "<span style='color:#15803d;font-weight:700;'>Sincronizzazione attiva</span>",
@@ -853,13 +875,14 @@ def render_sheets_sync_box() -> None:
         pause_sheets_sync()
         _sheets_sync_operation_lock.acquire()
         try:
-            linked = sheets_sync.save_connection(manual_sheet, enabled=True)
+            sync_service = get_sheets_sync_service()
+            linked = sync_service.save_connection(manual_sheet, enabled=True)
             if not linked.get("ok"):
                 st.error(linked.get("message"))
                 return
 
             with st.spinner("Aggiornamento database locale in corso..."):
-                pull_result = sheets_sync.pull_remote_into_local(progress_callback=_on_pull_progress)
+                pull_result = sync_service.pull_remote_into_local(progress_callback=_on_pull_progress)
         finally:
             _sheets_sync_operation_lock.release()
             resume_sheets_sync()
@@ -885,13 +908,14 @@ def render_sheets_sync_box() -> None:
     if save_col.button("2. Salva e Sincronizza ⬆️", use_container_width=True):
         _sheets_sync_operation_lock.acquire()
         try:
-            linked = sheets_sync.save_connection(manual_sheet, enabled=True)
+            sync_service = get_sheets_sync_service()
+            linked = sync_service.save_connection(manual_sheet, enabled=True)
             if not linked.get("ok"):
                 st.error(linked.get("message"))
                 return
 
             with st.spinner("Sincronizzazione in corso..."):
-                result = sheets_sync.push_local_to_remote(force=True)
+                result = sync_service.push_local_to_remote(force=True)
         finally:
             _sheets_sync_operation_lock.release()
         if result.status == "ok":
@@ -903,7 +927,8 @@ def render_sheets_sync_box() -> None:
             st.error(result.message)
 
     if remove_col.button("Togli database", use_container_width=True, help="Termina sincronizzazione"):
-        sheets_sync.disable_connection()
+        sync_service = get_sheets_sync_service()
+        sync_service.disable_connection()
         st.info("Sincronizzazione disattivata. Ricaricamento pagina...")
         st.rerun()
 
@@ -1830,7 +1855,8 @@ def render_ingestion_box():
 
 def render_excel_ingestion_box() -> None:
     st.markdown("### Importa da Excel")
-    cfg = sheets_sync.describe_configuration()
+    sync_service = get_sheets_sync_service()
+    cfg = sync_service.describe_configuration()
     if "persisted_skipped_entries" not in st.session_state:
         st.session_state["persisted_skipped_entries"] = []
     if "persisted_skipped_report_path" not in st.session_state:
@@ -1883,7 +1909,8 @@ def render_excel_ingestion_box() -> None:
             pause_sheets_sync()
             _sheets_sync_operation_lock.acquire()
             try:
-                linked = sheets_sync.save_connection(cfg.get("spreadsheet_id", ""), enabled=True)
+                sync_service = get_sheets_sync_service()
+                linked = sync_service.save_connection(cfg.get("spreadsheet_id", ""), enabled=True)
                 if not linked.get("ok"):
                     raise RuntimeError(linked.get("message"))
 

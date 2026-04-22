@@ -1,6 +1,6 @@
 {
-  "enabled": false,
-  "spreadsheet_id": "",
+  "enabled": true,
+  "spreadsheet_id": "1X-RH4vm7-jpLLY-iCiUT9sYVT0vEPrX6TFc9bRSiOb4",
   "service_account_file": "la-cicogna-triste-3e46a5bc4715.json",
   "queue_tab": "Libri",
   "approved_tab": "Vendite",
