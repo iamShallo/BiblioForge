@@ -22,30 +22,75 @@ Lo script automaticamente:
 
 Se il .bat mostra l'errore **"[ERROR] Python non trovato nel sistema"**:
 
-### Soluzione 1: Installare Python correttamente
+### Lo script ha gia' cercato in:
+- Variabile PATH di sistema
+- `C:\Program Files\Python*`
+- `C:\Program Files (x86)\Python*`
+- `AppData\Local\Programs\Python*`
+- Registro di Windows
+
+### Soluzione 1: Installa Python correttamente (CONSIGLIATO)
 1. Scarica Python da: https://www.python.org/downloads/
 2. Avvia l'installer
-3. **IMPORTANTE**: Spunta il checkbox "**Add Python to PATH**" in basso a sinistra dell'installer
-4. Seleziona "Install Now" oppure personalizza l'installazione
-5. Attendi il completamento
-6. **Riavvia il computer** (consigliato)
+3. **MOLTO IMPORTANTE**: Spunta il checkbox **"Add Python to PATH"** (in basso a sinistra)
+4. Scegli **"Install for all users"** (se hai permessi admin)
+5. Completa l'installazione
+6. **Riavvia il computer** (importante!)
 7. Riapri il file `setup_and_run.bat`
 
-### Soluzione 2: Aggiungere Python al PATH manualmente
-Se hai Python installato ma il PATH non è stato configurato:
+### Soluzione 2: Aggiungi Python al PATH manualmente
+Se Python è gia' installato ma il PATH non è stato configurato:
 
-1. Apri **Pannello di Controllo**
-2. Vai a **Sistema e sicurezza** → **Sistema**
-3. Clicca su **Impostazioni di sistema avanzate** (a sinistra)
-4. Clicca sul pulsante **Variabili di ambiente** in basso
-5. Sotto "Variabili di sistema", trova **Path** e clicca **Modifica**
-6. Clicca **Nuovo** e aggiungi il percorso di Python:
-   - Solitamente: `C:\Users\TuoNome\AppData\Local\Programs\Python\Python3XX`
-   - oppure: `C:\Program Files\Python3XX`
-   - (sostituisci `XX` con la versione, es: Python311)
-7. Clicca **OK** su tutte le finestre
-8. **Riavvia il computer**
-9. Riapri il file `setup_and_run.bat`
+1. Apri **Esplora File** (Windows Explorer)
+2. Clicca su **"Questo PC"** nel menu a sinistra
+3. Nella barra degli indirizzi, scrivi: `%APPDATA%\..\Local\Programs`
+4. Premi Invio
+5. Cerca una cartella che inizia con **Python** (es: `Python314`)
+6. Apri quella cartella e verifica che dentro ci sia **python.exe**
+7. Copia il percorso completo dalla barra degli indirizzi (es: `C:\Users\claud\AppData\Local\Programs\Python314`)
+8. Ora aggiungi al PATH:
+   - Premi il tasto Windows + R
+   - Scrivi: `sysdm.cpl`
+   - Premi Invio
+   - Vai alla scheda **"Avanzate"**
+   - Clicca **"Variabili di ambiente"** in basso
+   - Sezione "Variabili di sistema", trova **Path** e clicca **"Modifica"**
+   - Clicca **"Nuovo"**
+   - Incolla il percorso copiato (es: `C:\Users\claud\AppData\Local\Programs\Python314`)
+   - Clicca **OK** su tutte le finestre
+   - **Riavvia il computer**
+   - Riapri il file `setup_and_run.bat`
+
+### Soluzione 3: Specifica il percorso manualmente nello script
+Se hai trovato il percorso di Python ma vuoi usarlo subito:
+
+1. Apri il file **`setup_and_run.bat`** con **Blocco Note** (tasto destro → Apri con → Blocco Note)
+2. Vai alla riga 10 (subito dopo `cd ../BiblioForge`)
+3. Aggiungi una nuova riga con:
+   ```batch
+   set "PYTHON_PATH=C:\Users\claud\AppData\Local\Programs\Python314\python.exe"
+   ```
+   _(sostituisci il percorso con quello dove hai Python)_
+4. Salva il file (Ctrl+S)
+5. Riapri il file `setup_and_run.bat`
+
+### Come trovare il percorso esatto di Python
+Se non sai dove è installato Python:
+
+**Metodo 1: Usa il Prompt dei Comandi**
+1. Apri **Prompt dei Comandi** (premi Windows, scrivi `cmd`, premi Invio)
+2. Scrivi: `where python`
+3. Premi Invio
+4. Copiarai il percorso completo di python.exe
+
+**Metodo 2: Controlla il registro di Windows**
+1. Premi Windows + R
+2. Scrivi: `regedit`
+3. Premi Invio
+4. Naviga a: `HKEY_CURRENT_USER\Software\Python\PythonCore`
+5. Vedrai cartelle come `3.14`, `3.13`, ecc.
+6. Apri una di loro e cerca la chiave `InstallPath`
+7. Il valore mostrato sarà il percorso di Python
 
 ## Cosa farà il programma
 
