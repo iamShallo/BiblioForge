@@ -24,8 +24,10 @@ Se il .bat mostra l'errore **"[ERROR] Python non trovato nel sistema"**:
 
 ### Lo script ha gia' cercato in:
 - Variabile PATH di sistema
+- Python Launcher di Windows (`py`)
 - `C:\Program Files\Python*`
 - `C:\Program Files (x86)\Python*`
+- `AppData\Local\Programs\Python\Python*`
 - `AppData\Local\Programs\Python*`
 - Registro di Windows
 
@@ -82,6 +84,10 @@ Se non sai dove è installato Python:
 2. Scrivi: `where python`
 3. Premi Invio
 4. Copiarai il percorso completo di python.exe
+
+In alternativa, prova anche:
+- `py --version`
+- `py -c "import sys; print(sys.executable)"`
 
 **Metodo 2: Controlla il registro di Windows**
 1. Premi Windows + R

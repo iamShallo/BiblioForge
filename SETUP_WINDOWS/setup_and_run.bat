@@ -76,14 +76,54 @@ set "PYTHON_PATH="
 REM Try python in PATH first
 python --version >nul 2>&1
 if not errorlevel 1 (
-    set "PYTHON_FOUND=1"
-    set "PYTHON_PATH=python"
-    goto :found_python
+    for /f "usebackq delims=" %%i in (`where python 2^>nul`) do (
+        if exist "%%i" (
+            set "PYTHON_FOUND=1"
+            set "PYTHON_PATH=%%i"
+            goto :found_python
+        )
+    )
+)
+
+REM Fallback: Python Launcher (py) may exist even when python is not in PATH
+if not defined PYTHON_FOUND (
+    py --version >nul 2>&1
+    if not errorlevel 1 (
+        for /f "usebackq delims=" %%i in (`py -c "import sys; print(sys.executable)" 2^>nul`) do (
+            if exist "%%i" (
+                set "PYTHON_FOUND=1"
+                set "PYTHON_PATH=%%i"
+                goto :found_python
+            )
+        )
+    )
+)
+
+REM Additional fallback: resolve python via where even if python --version failed in this shell
+if not defined PYTHON_FOUND (
+    for /f "usebackq delims=" %%i in (`where python 2^>nul`) do (
+        if exist "%%i" (
+            set "PYTHON_FOUND=1"
+            set "PYTHON_PATH=%%i"
+            goto :found_python
+        )
+    )
 )
 
 REM Search in AppData\Local\Programs\Python (modern Python installer default)
 if not defined PYTHON_FOUND (
-    for /d %%i in ("%AppData%\..\Local\Programs\Python*") do (
+    for /d %%i in ("%LocalAppData%\Programs\Python\Python*") do (
+        if exist "%%i\python.exe" (
+            set "PYTHON_FOUND=1"
+            set "PYTHON_PATH=%%i\python.exe"
+            goto :found_python
+        )
+    )
+)
+
+REM Search in legacy AppData variation (Python directly under Programs)
+if not defined PYTHON_FOUND (
+    for /d %%i in ("%LocalAppData%\Programs\Python*") do (
         if exist "%%i\python.exe" (
             set "PYTHON_FOUND=1"
             set "PYTHON_PATH=%%i\python.exe"
@@ -207,23 +247,81 @@ if not defined PYTHON_FOUND (
         
         echo.
         echo Installazione di Python in corso...
-        echo Assicurati di completare l'installazione!
+        echo Installazione silenziosa in corso (potrebbe richiedere alcuni minuti)...
         echo.
         
-        REM Run installer with parameters to add to PATH
-        "!INSTALLER_PATH!" /quiet /PrependPath=1 InstallAllUsers=0
+        REM Run installer and wait for real completion
+        start "" /wait "!INSTALLER_PATH!" /quiet InstallAllUsers=0 PrependPath=1 Include_pip=1 Include_launcher=1
+        set "INSTALL_EXIT_CODE=!ERRORLEVEL!"
+        
+        if not "!INSTALL_EXIT_CODE!"=="0" (
+            echo.
+            echo [ERROR] Installazione Python terminata con codice: !INSTALL_EXIT_CODE!
+            echo.
+            echo Prova ad avviare manualmente questo file:
+            echo !INSTALLER_PATH!
+            echo.
+            pause
+            goto :error_exit
+        )
         
         echo.
         echo Attesa del completamento dell'installazione...
-        timeout /t 30 /nobreak
+        timeout /t 5 /nobreak >nul
         
         echo.
         echo Verifica se Python è stato installato...
+        set "PYTHON_FOUND="
+        set "PYTHON_PATH="
+
+        REM 1) Try from PATH (may already be available)
         python --version >nul 2>&1
-        if errorlevel 1 (
+        if not errorlevel 1 (
+            for /f "usebackq delims=" %%i in (`where python 2^>nul`) do (
+                if exist "%%i" (
+                    set "PYTHON_FOUND=1"
+                    set "PYTHON_PATH=%%i"
+                )
+            )
+        )
+
+        REM 1b) Try Python Launcher if PATH is not updated yet
+        if not defined PYTHON_FOUND (
+            py --version >nul 2>&1
+            if not errorlevel 1 (
+                for /f "usebackq delims=" %%i in (`py -c "import sys; print(sys.executable)" 2^>nul`) do (
+                    if exist "%%i" (
+                        set "PYTHON_FOUND=1"
+                        set "PYTHON_PATH=%%i"
+                    )
+                )
+            )
+        )
+
+        REM 2) Try default per-user install directory
+        if not defined PYTHON_FOUND (
+            for /d %%i in ("%LocalAppData%\Programs\Python\Python*") do (
+                if exist "%%i\python.exe" (
+                    set "PYTHON_FOUND=1"
+                    set "PYTHON_PATH=%%i\python.exe"
+                )
+            )
+        )
+
+        REM 3) Try default all-users install directory
+        if not defined PYTHON_FOUND (
+            for /d %%i in ("C:\Program Files\Python*") do (
+                if exist "%%i\python.exe" (
+                    set "PYTHON_FOUND=1"
+                    set "PYTHON_PATH=%%i\python.exe"
+                )
+            )
+        )
+
+        if not defined PYTHON_FOUND (
             echo.
             echo [ATTENZIONE] Python potrebbe non essere stato installato correttamente
-            echo Riprovare aprendo nuovamente questo script
+            echo Verifica manualmente l'installer e poi riavvia questo script
             echo.
             pause
             goto :error_exit
@@ -231,15 +329,11 @@ if not defined PYTHON_FOUND (
         
         echo.
         echo Python installato con successo!
-        echo Riavvio dello script...
+        echo Continuo con la configurazione dell'ambiente...
         echo.
         
         REM Clean up installer
         if exist "!INSTALLER_PATH!" del "!INSTALLER_PATH!"
-        
-        REM Restart the script
-        call "%~f0"
-        exit /b %ERRORLEVEL%
         
     ) else (
         echo.
@@ -256,7 +350,12 @@ if not defined PYTHON_FOUND (
 )
 
 echo [1/4] Python trovato!
-for /f "tokens=*" %%i in ('!PYTHON_PATH! --version') do set PYTHON_VERSION=%%i
+set "PYTHON_VERSION="
+"!PYTHON_PATH!" --version > "%TEMP%\biblioforge_python_version.txt" 2>&1
+if exist "%TEMP%\biblioforge_python_version.txt" (
+    set /p PYTHON_VERSION=<"%TEMP%\biblioforge_python_version.txt"
+    del "%TEMP%\biblioforge_python_version.txt" >nul 2>&1
+)
 echo        Versione: !PYTHON_VERSION!
 echo.
 
@@ -265,7 +364,7 @@ if exist ".venv" (
     echo [2/4] Virtual environment already exists, skipping creation...
 ) else (
     echo [2/4] Creating virtual environment...
-    !PYTHON_PATH! -m venv .venv
+    "!PYTHON_PATH!" -m venv .venv
     if errorlevel 1 (
         echo [ERROR] Failed to create virtual environment
         pause
