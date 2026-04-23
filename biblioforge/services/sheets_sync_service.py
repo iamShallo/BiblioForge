@@ -1278,20 +1278,15 @@ class SheetsSyncService:
                     skipped_enrichment_count += 1
             else:
                 merged = self._merge_book_records(local_match, remote_book)
+                tracked_fields = [
+                    field_name
+                    for field_name in Book.__dataclass_fields__
+                    if field_name not in {"id", "status"}
+                ]
                 changed_fields = self._changed_fields(
                     local_match,
                     merged,
-                    [
-                        "normalized_title",
-                        "author",
-                        "catalog_quantity",
-                        "catalog_price",
-                        "catalog_ean",
-                        "isbn",
-                        "isbn_10",
-                        "published_date",
-                        "pages",
-                    ],
+                    tracked_fields,
                 )
                 if changed_fields:
                     updated += 1
@@ -2129,9 +2124,9 @@ class SheetsSyncService:
         queue_books = self.queue_repository.list_books()
         placeholder_titles_sanitized = self._sanitize_books_placeholder_titles(queue_books)
         if placeholder_titles_sanitized:
-            # One-time cleanup: persist sanitized legacy titles locally before checksum/push.
+            # One-time cleanup: persist sanitized legacy titles and journal these edits.
             self.queue_repository.clear_books(record_journal=False)
-            self.queue_repository.upsert_many(queue_books, record_journal=False)
+            self.queue_repository.upsert_many(queue_books, record_journal=True)
             queue_books = self.queue_repository.list_books()
 
         deduped_queue_books, local_duplicates_pruned = self._deduplicate_books(queue_books)
