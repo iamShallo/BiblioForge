@@ -1,6 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
 
+REM Log file for diagnostics
+set "LOG_FILE=%~dp0setup_log.txt"
+echo ===== BiblioForge setup run: %DATE% %TIME% ===== >> "%LOG_FILE%"
+
 REM Impedisci che questo script si chiuda subito
 if "%BIBLIOFORGE_RUNNING%"=="1" (
     echo.
@@ -73,9 +77,12 @@ REM Search for Python in common locations
 set "PYTHON_FOUND="
 set "PYTHON_PATH="
 
-REM Try python in PATH first
-python --version >nul 2>&1
-if not errorlevel 1 (
+echo Ricerca di Python in corso... >> "%LOG_FILE%"
+echo.
+
+REM 1) Try 'python' in PATH
+where python >nul 2>&1
+if %errorlevel%==0 (
     for /f "usebackq delims=" %%i in (`where python 2^>nul`) do (
         if exist "%%i" (
             set "PYTHON_FOUND=1"
@@ -85,23 +92,10 @@ if not errorlevel 1 (
     )
 )
 
-REM Fallback: Python Launcher (py) may exist even when python is not in PATH
-if not defined PYTHON_FOUND (
-    py --version >nul 2>&1
-    if not errorlevel 1 (
-        for /f "usebackq delims=" %%i in (`py -c "import sys; print(sys.executable)" 2^>nul`) do (
-            if exist "%%i" (
-                set "PYTHON_FOUND=1"
-                set "PYTHON_PATH=%%i"
-                goto :found_python
-            )
-        )
-    )
-)
-
-REM Additional fallback: resolve python via where even if python --version failed in this shell
-if not defined PYTHON_FOUND (
-    for /f "usebackq delims=" %%i in (`where python 2^>nul`) do (
+REM 1b) Try Python launcher 'py'
+py -c "import sys; print(sys.executable)" >nul 2>&1
+if %errorlevel%==0 (
+    for /f "usebackq delims=" %%i in ('py -c "import sys; print(sys.executable)" 2^>nul') do (
         if exist "%%i" (
             set "PYTHON_FOUND=1"
             set "PYTHON_PATH=%%i"
@@ -110,95 +104,46 @@ if not defined PYTHON_FOUND (
     )
 )
 
-REM Search in AppData\Local\Programs\Python (modern Python installer default)
-if not defined PYTHON_FOUND (
-    for /d %%i in ("%LocalAppData%\Programs\Python\Python*") do (
-        if exist "%%i\python.exe" (
-            set "PYTHON_FOUND=1"
-            set "PYTHON_PATH=%%i\python.exe"
-            goto :found_python
-        )
+REM 2) Common install directories
+for /d %%i in ("%LocalAppData%\Programs\Python\Python*") do (
+    if exist "%%i\python.exe" (
+        set "PYTHON_FOUND=1"
+        set "PYTHON_PATH=%%i\python.exe"
+        goto :found_python
+    )
+)
+for /d %%i in ("C:\Program Files\Python*") do (
+    if exist "%%i\python.exe" (
+        set "PYTHON_FOUND=1"
+        set "PYTHON_PATH=%%i\python.exe"
+        goto :found_python
     )
 )
 
-REM Search in legacy AppData variation (Python directly under Programs)
-if not defined PYTHON_FOUND (
-    for /d %%i in ("%LocalAppData%\Programs\Python*") do (
-        if exist "%%i\python.exe" (
-            set "PYTHON_FOUND=1"
-            set "PYTHON_PATH=%%i\python.exe"
-            goto :found_python
-        )
+REM 3) Registry checks
+for /f "tokens=2*" %%i in ('reg query "HKCU\Software\Python\PythonCore" 2^>nul ^| findstr /i "InstallPath"') do (
+    if exist "%%j\python.exe" (
+        set "PYTHON_FOUND=1"
+        set "PYTHON_PATH=%%j\python.exe"
+        goto :found_python
+    )
+)
+for /f "tokens=2*" %%i in ('reg query "HKLM\Software\Python\PythonCore" 2^>nul ^| findstr /i "InstallPath"') do (
+    if exist "%%j\python.exe" (
+        set "PYTHON_FOUND=1"
+        set "PYTHON_PATH=%%j\python.exe"
+        goto :found_python
+    )
+)
+for /f "tokens=2*" %%i in ('reg query "HKLM\Software\Wow6432Node\Python\PythonCore" 2^>nul ^| findstr /i "InstallPath"') do (
+    if exist "%%j\python.exe" (
+        set "PYTHON_FOUND=1"
+        set "PYTHON_PATH=%%j\python.exe"
+        goto :found_python
     )
 )
 
-REM Search in Program Files
-if not defined PYTHON_FOUND (
-    for /d %%i in ("C:\Program Files\Python*") do (
-        if exist "%%i\python.exe" (
-            set "PYTHON_FOUND=1"
-            set "PYTHON_PATH=%%i\python.exe"
-            goto :found_python
-        )
-    )
-)
-
-REM Search in Program Files (x86)
-if not defined PYTHON_FOUND (
-    for /d %%i in ("C:\Program Files (x86)\Python*") do (
-        if exist "%%i\python.exe" (
-            set "PYTHON_FOUND=1"
-            set "PYTHON_PATH=%%i\python.exe"
-            goto :found_python
-        )
-    )
-)
-
-REM Search in OneDrive/AppData variations (per Anaconda, Conda, ecc)
-if not defined PYTHON_FOUND (
-    for /d %%i in ("%UserProfile%\AppData\Local\*Python*") do (
-        if exist "%%i\python.exe" (
-            set "PYTHON_FOUND=1"
-            set "PYTHON_PATH=%%i\python.exe"
-            goto :found_python
-        )
-    )
-)
-
-REM Try to find Python via Windows Registry (check current user)
-if not defined PYTHON_FOUND (
-    for /f "tokens=2*" %%i in ('reg query "HKCU\Software\Python\PythonCore" 2^>nul ^| findstr /i "InstallPath"') do (
-        if exist "%%j\python.exe" (
-            set "PYTHON_FOUND=1"
-            set "PYTHON_PATH=%%j\python.exe"
-            goto :found_python
-        )
-    )
-)
-
-REM Try to find Python via Windows Registry (check local machine)
-if not defined PYTHON_FOUND (
-    for /f "tokens=2*" %%i in ('reg query "HKLM\Software\Python\PythonCore" 2^>nul ^| findstr /i "InstallPath"') do (
-        if exist "%%j\python.exe" (
-            set "PYTHON_FOUND=1"
-            set "PYTHON_PATH=%%j\python.exe"
-            goto :found_python
-        )
-    )
-)
-
-REM Try to find Python via Windows Registry (check 32-bit registry on 64-bit system)
-if not defined PYTHON_FOUND (
-    for /f "tokens=2*" %%i in ('reg query "HKLM\Software\Wow6432Node\Python\PythonCore" 2^>nul ^| findstr /i "InstallPath"') do (
-        if exist "%%j\python.exe" (
-            set "PYTHON_FOUND=1"
-            set "PYTHON_PATH=%%j\python.exe"
-            goto :found_python
-        )
-    )
-)
-
-:found_python
+REM If Python still not found, prompt to download and install
 if not defined PYTHON_FOUND (
     echo [AVVISO] Python non trovato nel sistema
     echo.
@@ -206,27 +151,18 @@ if not defined PYTHON_FOUND (
     echo Vuoi che continui?
     echo.
     set /p DOWNLOAD_CHOICE="Digita 'S' per scaricare, oppure 'N' per fare altro: "
-    
-    if /i "!DOWNLOAD_CHOICE!"=="S" (
+    if /i "%DOWNLOAD_CHOICE%"=="S" (
         echo.
         echo Scaricamento di Python 3.12 in corso...
         echo.
-        
-        REM Create temp folder
         set "TEMP_PYTHON=%TEMP%\python_installer"
-        if not exist "!TEMP_PYTHON!" mkdir "!TEMP_PYTHON!"
-        
-        REM Download Python installer using PowerShell
+        if not exist "%TEMP_PYTHON%" mkdir "%TEMP_PYTHON%"
         set "PYTHON_URL=https://www.python.org/ftp/python/3.12.3/python-3.12.3-amd64.exe"
-        set "INSTALLER_PATH=!TEMP_PYTHON!\python-installer.exe"
-        
-        echo Percorso: !INSTALLER_PATH!
-        echo URL: !PYTHON_URL!
+        set "INSTALLER_PATH=%TEMP_PYTHON%\python-installer.exe"
+        echo Percorso: %INSTALLER_PATH%
+        echo URL: %PYTHON_URL%
         echo.
-        
-        REM Use PowerShell to download (available on all modern Windows)
-        powershell -NoProfile -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('!PYTHON_URL!', '!INSTALLER_PATH!'); Write-Host 'Download completato'; exit 0 } catch { Write-Host 'Errore download: ' $_.Exception.Message; exit 1 }"
-        
+        powershell -NoProfile -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('%PYTHON_URL%', '%INSTALLER_PATH%'); Write-Host 'Download completato'; exit 0 } catch { Write-Host 'Errore download: ' $_.Exception.Message; exit 1 }"
         if errorlevel 1 (
             echo.
             echo [ERROR] Scaricamento fallito
@@ -236,88 +172,47 @@ if not defined PYTHON_FOUND (
             pause
             goto :error_exit
         )
-        
-        if not exist "!INSTALLER_PATH!" (
+        if not exist "%INSTALLER_PATH%" (
             echo.
-            echo [ERROR] File scaricato non trovato in: !INSTALLER_PATH!
+            echo [ERROR] File scaricato non trovato in: %INSTALLER_PATH%
             echo.
             pause
             goto :error_exit
         )
-        
         echo.
         echo Installazione di Python in corso...
         echo Installazione silenziosa in corso (potrebbe richiedere alcuni minuti)...
         echo.
-        
-        REM Run installer and wait for real completion
-        start "" /wait "!INSTALLER_PATH!" /quiet InstallAllUsers=0 PrependPath=1 Include_pip=1 Include_launcher=1
-        set "INSTALL_EXIT_CODE=!ERRORLEVEL!"
-        
-        if not "!INSTALL_EXIT_CODE!"=="0" (
+        start "" /wait "%INSTALLER_PATH%" /quiet InstallAllUsers=0 PrependPath=1 Include_pip=1 Include_launcher=1
+        set "INSTALL_EXIT_CODE=%ERRORLEVEL%"
+        if not "%INSTALL_EXIT_CODE%"=="0" (
             echo.
-            echo [ERROR] Installazione Python terminata con codice: !INSTALL_EXIT_CODE!
+            echo [ERROR] Installazione Python terminata con codice: %INSTALL_EXIT_CODE%
             echo.
             echo Prova ad avviare manualmente questo file:
-            echo !INSTALLER_PATH!
+            echo %INSTALLER_PATH%
             echo.
             pause
             goto :error_exit
         )
-        
         echo.
         echo Attesa del completamento dell'installazione...
         timeout /t 5 /nobreak >nul
-        
-        echo.
-        echo Verifica se Python è stato installato...
-        set "PYTHON_FOUND="
-        set "PYTHON_PATH="
-
-        REM 1) Try from PATH (may already be available)
-        python --version >nul 2>&1
-        if not errorlevel 1 (
-            for /f "usebackq delims=" %%i in (`where python 2^>nul`) do (
-                if exist "%%i" (
-                    set "PYTHON_FOUND=1"
-                    set "PYTHON_PATH=%%i"
-                )
+        REM Try to detect python after install
+        for /f "usebackq delims=" %%i in (`where python 2^>nul`) do (
+            if exist "%%i" (
+                set "PYTHON_FOUND=1"
+                set "PYTHON_PATH=%%i"
+                goto :found_python
             )
         )
-
-        REM 1b) Try Python Launcher if PATH is not updated yet
-        if not defined PYTHON_FOUND (
-            py --version >nul 2>&1
-            if not errorlevel 1 (
-                for /f "usebackq delims=" %%i in (`py -c "import sys; print(sys.executable)" 2^>nul`) do (
-                    if exist "%%i" (
-                        set "PYTHON_FOUND=1"
-                        set "PYTHON_PATH=%%i"
-                    )
-                )
+        for /d %%i in ("%LocalAppData%\Programs\Python\Python*" "C:\Program Files\Python*") do (
+            if exist "%%i\python.exe" (
+                set "PYTHON_FOUND=1"
+                set "PYTHON_PATH=%%i\python.exe"
+                goto :found_python
             )
         )
-
-        REM 2) Try default per-user install directory
-        if not defined PYTHON_FOUND (
-            for /d %%i in ("%LocalAppData%\Programs\Python\Python*") do (
-                if exist "%%i\python.exe" (
-                    set "PYTHON_FOUND=1"
-                    set "PYTHON_PATH=%%i\python.exe"
-                )
-            )
-        )
-
-        REM 3) Try default all-users install directory
-        if not defined PYTHON_FOUND (
-            for /d %%i in ("C:\Program Files\Python*") do (
-                if exist "%%i\python.exe" (
-                    set "PYTHON_FOUND=1"
-                    set "PYTHON_PATH=%%i\python.exe"
-                )
-            )
-        )
-
         if not defined PYTHON_FOUND (
             echo.
             echo [ATTENZIONE] Python potrebbe non essere stato installato correttamente
@@ -326,15 +221,11 @@ if not defined PYTHON_FOUND (
             pause
             goto :error_exit
         )
-        
         echo.
         echo Python installato con successo!
         echo Continuo con la configurazione dell'ambiente...
         echo.
-        
-        REM Clean up installer
-        if exist "!INSTALLER_PATH!" del "!INSTALLER_PATH!"
-        
+        if exist "%INSTALLER_PATH%" del "%INSTALLER_PATH%"
     ) else (
         echo.
         echo [AVVISO] Python non trovato e installazione annullata
@@ -349,14 +240,60 @@ if not defined PYTHON_FOUND (
     )
 )
 
+:found_python
+echo PYTHON_FOUND=%PYTHON_FOUND% PYTHON_PATH=%PYTHON_PATH% >> "%LOG_FILE%"
+if not defined PYTHON_FOUND (
+    rem Prompt user to download and install Python
+    echo [AVVISO] Python non trovato nel sistema >> "%LOG_FILE%"
+    echo [AVVISO] Python non trovato nel sistema
+    set /p DOWNLOAD_CHOICE="Digita 'S' per scaricare, oppure 'N' per uscire: "
+    if /i "%DOWNLOAD_CHOICE%"=="S" (
+        echo Scaricamento di Python 3.12 in corso... >> "%LOG_FILE%"
+        set "TEMP_PYTHON=%TEMP%\python_installer"
+        if not exist "%TEMP_PYTHON%" mkdir "%TEMP_PYTHON%"
+        set "PYTHON_URL=https://www.python.org/ftp/python/3.12.3/python-3.12.3-amd64.exe"
+        set "INSTALLER_PATH=%TEMP_PYTHON%\python-installer.exe"
+        echo Download URL: %PYTHON_URL% >> "%LOG_FILE%"
+        powershell -NoProfile -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('%PYTHON_URL%', '%INSTALLER_PATH%'); exit 0 } catch { exit 1 }"
+        if errorlevel 1 (
+            echo [ERROR] Scaricamento fallito >> "%LOG_FILE%"
+            echo [ERROR] Scaricamento fallito
+            pause
+            goto :error_exit
+        )
+        start "" /wait "%INSTALLER_PATH%" /quiet InstallAllUsers=0 PrependPath=1 Include_pip=1 Include_launcher=1
+        if errorlevel 1 (
+            echo [ERROR] Installazione terminata con codice %ERRORLEVEL% >> "%LOG_FILE%"
+            echo [ERROR] Installazione terminata con codice %ERRORLEVEL%
+            pause
+            goto :error_exit
+        )
+        rem re-check python
+        for /f "usebackq delims=" %%i in (`where python 2^>nul`) do set "PYTHON_FOUND=1" & set "PYTHON_PATH=%%i"
+        if not defined PYTHON_FOUND (
+            echo [ATTENZIONE] Python installato ma non rilevabile >> "%LOG_FILE%"
+            echo [ATTENZIONE] Python installato ma non rilevabile
+            pause
+            goto :error_exit
+        )
+    ) else (
+        echo Utente ha scelto di non installare Python. >> "%LOG_FILE%"
+        echo Utente ha scelto di non installare Python.
+        pause
+        exit /b 1
+    )
+)
+
+echo [1/4] Python trovato! >> "%LOG_FILE%"
 echo [1/4] Python trovato!
 set "PYTHON_VERSION="
-"!PYTHON_PATH!" --version > "%TEMP%\biblioforge_python_version.txt" 2>&1
+"%PYTHON_PATH%" --version > "%TEMP%\biblioforge_python_version.txt" 2>&1
 if exist "%TEMP%\biblioforge_python_version.txt" (
     set /p PYTHON_VERSION=<"%TEMP%\biblioforge_python_version.txt"
     del "%TEMP%\biblioforge_python_version.txt" >nul 2>&1
 )
-echo        Versione: !PYTHON_VERSION!
+echo        Versione: %PYTHON_VERSION% >> "%LOG_FILE%"
+echo        Versione: %PYTHON_VERSION%
 echo.
 
 REM Check if virtual environment exists
