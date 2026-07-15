@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from pathlib import Path
 from typing import List, Optional
 from uuid import uuid4
 
@@ -11,11 +12,47 @@ from biblioforge.models.book import Book, BookInsights, BookStatus
 from biblioforge.services.normalization_service import normalize_title
 
 
+_LOCAL_ENV_LOADED = False
+
+
+def _load_local_env() -> None:
+    global _LOCAL_ENV_LOADED
+    if _LOCAL_ENV_LOADED:
+        return
+
+    project_root = Path(__file__).resolve().parents[2]
+    for env_path in (project_root / ".env", Path.cwd() / ".env"):
+        if not env_path.exists():
+            continue
+
+        try:
+            for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("export "):
+                    line = line[7:].strip()
+                if "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and value and key not in os.environ:
+                    os.environ[key] = value
+        except Exception:
+            continue
+
+    _LOCAL_ENV_LOADED = True
+
+
+_load_local_env()
+
+
 # URL di Gemini per le richieste API
 # Google's Gemini 1.5 Flash endpoint for content generation
 GEMINI_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-1.5-flash-latest:generateContent"
+    "gemini-3.5-flash:generateContent"
 )
 
 
@@ -73,6 +110,9 @@ def _sanitize_summary_source_text(text: str) -> str:
     if not cleaned:
         return ""
 
+    # Common replacement character from scraped pages (encoding glitches).
+    cleaned = cleaned.replace("�", " ")
+
     # Remove very common promo/noise fragments from metadata descriptions.
     promo_patterns = [
         r"(?i)\b(nuova edizione speciale|edizione speciale|fenomeno editoriale)\b",
@@ -105,15 +145,17 @@ def _build_story_summary(book: Book) -> str:
     ]
 
     if source:
-        # Keep only early, spoiler-safe sentences to preserve story setup.
+        # Keep spoiler-safe sentences and accumulate enough context for a meaningful synopsis.
         parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", source) if p.strip()]
         kept: List[str] = []
+        kept_words = 0
         for part in parts:
             lower_part = part.lower()
             if any(marker in lower_part for marker in spoiler_markers):
                 continue
             kept.append(part)
-            if len(kept) >= 3:
+            kept_words += _word_count(part)
+            if kept_words >= 45 or len(kept) >= 6:
                 break
 
         candidate = " ".join(kept).strip() if kept else source
@@ -123,9 +165,8 @@ def _build_story_summary(book: Book) -> str:
         if _word_count(candidate) >= 25:
             return candidate
 
-    # If no sufficient data was found, return the message about insufficient description
-    # instead of the generic template summary
-    return "Non è stata trovata una descrizione accurata per questo libro"
+    author_part = f" di {book.author}" if book.author else ""
+    return f"Non è stata trovata una descrizione affidabile per {title or 'questo libro'}{author_part} nelle fonti consultate."
 
 
 def _tags_are_acceptable(tags: List[str]) -> bool:
@@ -200,8 +241,21 @@ def _derive_tags(book: Book) -> List[str]:
     if book.pages and book.pages >= 500:
         candidates.append("Long Read")
 
-    fallback_defaults = ["Character-Driven", "Atmospheric", "High Stakes", "Plot-Driven"]
-    candidates.extend(fallback_defaults)
+    fallback_defaults = [
+        "Character-Driven",
+        "Atmospheric",
+        "High Stakes",
+        "Plot-Driven",
+        "Literary Fiction",
+        "Book Club",
+        "Classic",
+        "Page-Turner",
+    ]
+    if candidates:
+        candidates.extend(fallback_defaults[:4])
+    else:
+        seed = abs(hash(book.normalized_title or book.raw_title))
+        candidates.extend(fallback_defaults[(seed + offset) % len(fallback_defaults)] for offset in range(4))
 
     ordered = []
     seen = set()

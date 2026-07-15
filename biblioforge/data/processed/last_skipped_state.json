@@ -1,0 +1,45 @@
+{
+  "entries": [
+    {
+      "index": 14,
+      "title": "88/100",
+      "author": "VANGONE ANTONIO",
+      "ean": "9791281406087",
+      "publisher": "DECLIC",
+      "reason": "No reliable metadata found and catalog row looked invalid/noisy"
+    },
+    {
+      "index": 6,
+      "title": "1984",
+      "author": "George Orwell",
+      "ean": "9788807899614",
+      "publisher": "Feltrinelli",
+      "reason": "No reliable metadata found and catalog row looked invalid/noisy"
+    },
+    {
+      "index": 9,
+      "title": "24/7",
+      "author": "Nova",
+      "ean": "9788832734645",
+      "publisher": "BAO Publishing",
+      "reason": "No reliable metadata found and catalog row looked invalid/noisy"
+    },
+    {
+      "index": 4,
+      "title": "1947",
+      "author": "Elisabeth Åsbrink",
+      "ean": "9788870914924",
+      "publisher": "Iperborea",
+      "reason": "No reliable metadata found and catalog row looked invalid/noisy"
+    },
+    {
+      "index": 7,
+      "title": "1985.",
+      "author": "PEDRO ALFACINHA",
+      "ean": "9788894895612",
+      "publisher": "SKINNERBOOX",
+      "reason": "No reliable metadata found and catalog row looked invalid/noisy"
+    }
+  ],
+  "report_path": "C:\\Users\\fraca\\Desktop\\Universita'\\Technologies for big data management\\BiblioForge\\artifacts\\reports\\import_skipped_20260715_110552.json"
+}

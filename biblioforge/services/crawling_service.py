@@ -5,6 +5,7 @@ import json
 import os
 import re
 import unicodedata
+from pathlib import Path
 from typing import List, Optional, Tuple
 from urllib.parse import quote_plus
 
@@ -14,11 +15,48 @@ from biblioforge.models.book import Book, BookStatus, ReviewSample
 from biblioforge.services.normalization_service import normalize_title
 
 
+_LOCAL_ENV_LOADED = False
+
+
+def _load_local_env() -> None:
+    global _LOCAL_ENV_LOADED
+    if _LOCAL_ENV_LOADED:
+        return
+
+    project_root = Path(__file__).resolve().parents[2]
+    for env_path in (project_root / ".env", Path.cwd() / ".env"):
+        if not env_path.exists():
+            continue
+
+        try:
+            for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("export "):
+                    line = line[7:].strip()
+                if "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and value and key not in os.environ:
+                    os.environ[key] = value
+        except Exception:
+            continue
+
+    _LOCAL_ENV_LOADED = True
+
+
+_load_local_env()
+
+
 # URL dei servizi esterni (Google Books, Goodreads, OpenLibrary, Amazon)
 # External APIs for book data
 GOOGLE_BOOKS_URL = "https://www.googleapis.com/books/v1/volumes"
 GOODREADS_SEARCH_URL = "https://www.goodreads.com/search"
 OPENLIBRARY_SEARCH_URL = "https://openlibrary.org/search.json"
+OPENLIBRARY_WORKS_URL = "https://openlibrary.org/works"
 AMAZON_IT_SEARCH_URL = "https://www.amazon.it/s"
 
 
@@ -572,6 +610,10 @@ async def _fetch_goodreads_rating(
         return int(digits) if digits else 0
 
     def _extract_from_html(page_html: str) -> Tuple[Optional[float], int, Optional[str]]:
+        rating: Optional[float] = None
+        ratings_count = 0
+        description: Optional[str] = None
+
         # JSON-LD is the most stable source when present.
         for match in re.finditer(r"<script type=\"application/ld\+json\">(.*?)</script>", page_html, re.DOTALL):
             try:
@@ -584,13 +626,14 @@ async def _fetch_goodreads_rating(
                     rating_val = agg.get("ratingValue")
                     rating_cnt = agg.get("ratingCount") or agg.get("reviewCount") or 0
                     description_val = payload.get("description")
-                    rating = float(rating_val) if rating_val is not None else None
-                    count = int(rating_cnt) if str(rating_cnt).strip() else 0
-                    description = _clean_review_text(description_val) if description_val else None
-                    if description and len(description) > 600:
-                        description = description[:600].rsplit(" ", 1)[0] + "..."
-                    if rating is not None:
-                        return rating, count, description
+                    if rating is None and rating_val is not None:
+                        rating = float(rating_val)
+                    if not ratings_count and str(rating_cnt).strip():
+                        ratings_count = int(rating_cnt)
+                    if not description and description_val:
+                        description = _clean_review_text(description_val)
+                        if description and len(description) > 600:
+                            description = description[:600].rsplit(" ", 1)[0] + "..."
             except Exception:
                 continue
 
@@ -600,15 +643,15 @@ async def _fetch_goodreads_rating(
             page_html,
             re.IGNORECASE,
         )
-        rating = None
-        ratings_count = 0
         if stats_match:
             rating_raw = stats_match.group(1).replace(",", ".")
-            try:
-                rating = float(rating_raw)
-            except Exception:
-                rating = None
-            ratings_count = _to_int(stats_match.group(2))
+            if rating is None:
+                try:
+                    rating = float(rating_raw)
+                except Exception:
+                    rating = None
+            if not ratings_count:
+                ratings_count = _to_int(stats_match.group(2))
 
         if rating is None:
             # Backup pattern used in some Goodreads variants.
@@ -623,14 +666,14 @@ async def _fetch_goodreads_rating(
             count_match = re.search(r"([\d\.,]+)\s+ratings", page_html, re.IGNORECASE)
             ratings_count = _to_int(count_match.group(1)) if count_match else 0
 
-        description = None
-        desc_match = re.search(r"<meta\s+property=\"og:description\"\s+content=\"(.*?)\"", page_html, re.IGNORECASE)
-        if not desc_match:
-            desc_match = re.search(r"<meta\s+name=\"description\"\s+content=\"(.*?)\"", page_html, re.IGNORECASE)
-        if desc_match:
-            description = _clean_review_text(desc_match.group(1))
-            if description and len(description) > 600:
-                description = description[:600].rsplit(" ", 1)[0] + "..."
+        if not description:
+            desc_match = re.search(r"<meta\s+property=\"og:description\"\s+content=\"(.*?)\"", page_html, re.IGNORECASE)
+            if not desc_match:
+                desc_match = re.search(r"<meta\s+name=\"description\"\s+content=\"(.*?)\"", page_html, re.IGNORECASE)
+            if desc_match:
+                description = _clean_review_text(desc_match.group(1))
+                if description and len(description) > 600:
+                    description = description[:600].rsplit(" ", 1)[0] + "..."
 
         return rating, ratings_count, description
 
@@ -920,12 +963,62 @@ async def _fetch_openlibrary_summary(normalized_title: str, author: Optional[str
     docs = data.get("docs", [])
     if not docs:
         return None
-    first_sentence = docs[0].get("first_sentence")
+    top = docs[0]
+    first_sentence = top.get("first_sentence")
     if isinstance(first_sentence, str):
-        return first_sentence.strip()
+        return first_sentence.replace("�", " ").strip()
     if isinstance(first_sentence, list) and first_sentence:
-        return str(first_sentence[0]).strip()
+        return str(first_sentence[0]).replace("�", " ").strip()
+
+    description = top.get("description")
+    if isinstance(description, str):
+        return description.replace("�", " ").strip()
+    if isinstance(description, dict):
+        value = description.get("value")
+        if isinstance(value, str) and value.strip():
+            return value.replace("�", " ").strip()
+
+    key_raw = str(top.get("key") or "")
+    work_key = key_raw.replace("/works/", "").strip("/") if key_raw else ""
+    if work_key:
+        work_description, _ = await _fetch_openlibrary_work_details(work_key)
+        if work_description:
+            return work_description
+
     return None
+
+
+async def _fetch_openlibrary_work_details(work_key: str) -> Tuple[Optional[str], List[str]]:
+    if not work_key:
+        return None, []
+
+    url = f"{OPENLIBRARY_WORKS_URL}/{work_key}.json"
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception:
+        return None, []
+
+    description = data.get("description")
+    parsed_description: Optional[str] = None
+    if isinstance(description, str):
+        parsed_description = description.replace("�", " ").strip()
+    elif isinstance(description, dict):
+        value = description.get("value")
+        if isinstance(value, str):
+            parsed_description = value.replace("�", " ").strip()
+
+    subjects_raw = data.get("subjects")
+    subjects: List[str] = []
+    if isinstance(subjects_raw, list):
+        for item in subjects_raw:
+            text = str(item or "").strip()
+            if text:
+                subjects.append(text)
+
+    return parsed_description, subjects
 
 
 async def _fetch_openlibrary_metadata(normalized_title: str, author: Optional[str]) -> dict:
@@ -943,11 +1036,17 @@ async def _fetch_openlibrary_metadata(normalized_title: str, author: Optional[st
         return {}
     top = docs[0]
     key_raw = top.get("key")
+    work_key = str(key_raw).replace("/works/", "") if key_raw else None
+    work_description, work_subjects = await _fetch_openlibrary_work_details(work_key or "")
+    cover_i = top.get("cover_i")
     return {
-        "openlibrary_key": str(key_raw).replace("/works/", "") if key_raw else None,
+        "openlibrary_key": work_key,
         "first_publish_year": top.get("first_publish_year"),
         "edition_count": top.get("edition_count"),
         "language": ", ".join(top.get("language", [])[:3]) if isinstance(top.get("language"), list) else None,
+        "description": work_description,
+        "subjects": work_subjects[:8],
+        "cover_url": f"https://covers.openlibrary.org/b/id/{cover_i}-L.jpg" if cover_i else None,
     }
 
 
@@ -1418,13 +1517,19 @@ def _reviews_from_user_snippets(source: str, snippets: List[str], default_rating
 async def enrich_book(book: Book) -> Book:
     try:
         discarded_examples: List[str] = []
-        item = await _fetch_google_books(
-            book.normalized_title,
-            book.author,
-            getattr(book, "catalog_publisher", None),
-            getattr(book, "catalog_ean", None),
-        )
-        meta = _extract_metadata(item, book.normalized_title)
+        # Keep enrichment alive even when Google Books is unavailable/rate-limited.
+        item = {}
+        try:
+            item = await _fetch_google_books(
+                book.normalized_title,
+                book.author,
+                getattr(book, "catalog_publisher", None),
+                getattr(book, "catalog_ean", None),
+            )
+        except Exception:
+            item = {}
+
+        meta = _extract_metadata(item, book.normalized_title) if item else {}
         book.isbn = meta.get("isbn")
         book.isbn_10 = meta.get("isbn_10")
         book.published_date = meta.get("published_date")
@@ -1515,9 +1620,13 @@ async def enrich_book(book: Book) -> Book:
                 book.average_rating = gr_rating
                 if gr_count:
                     book.ratings_count = gr_count
-            if gr_desc and not book.fetched_summary:
-                book.fetched_summary = str(gr_desc).strip()
-                book.summary_source = "goodreads_crawler"
+            if gr_desc:
+                gr_text = str(gr_desc).replace("�", "").strip()
+                # Goodreads og:description can be heavily truncated; keep it only if it is meaningful.
+                if gr_text and len(gr_text) >= 80:
+                    if not book.fetched_summary or len(gr_text) > len((book.fetched_summary or "").strip()):
+                        book.fetched_summary = gr_text
+                        book.summary_source = "goodreads_crawler"
         except Exception:
             pass
 
@@ -1558,6 +1667,22 @@ async def enrich_book(book: Book) -> Book:
                     book.edition_count = ol_meta.get("edition_count")
                 if not book.language:
                     book.language = ol_meta.get("language")
+                if not book.publication_year and ol_meta.get("first_publish_year"):
+                    book.publication_year = ol_meta.get("first_publish_year")
+                if ol_meta.get("description"):
+                    ol_desc = str(ol_meta.get("description")).replace("�", "").strip()
+                    if ol_desc and (
+                        not book.fetched_summary
+                        or len(ol_desc) > len((book.fetched_summary or "").strip())
+                    ):
+                        book.fetched_summary = ol_desc
+                        book.summary_source = "openlibrary_work"
+                if (not book.categories) and ol_meta.get("subjects"):
+                    book.categories = list(ol_meta.get("subjects") or [])[:8]
+                if not book.info_link and ol_meta.get("openlibrary_key"):
+                    book.info_link = f"https://openlibrary.org/works/{ol_meta.get('openlibrary_key')}"
+                if not book.cover_url and ol_meta.get("cover_url"):
+                    book.cover_url = ol_meta.get("cover_url")
                 if not book.cover_url:
                     olid = ol_meta.get("openlibrary_key")
                     if olid:

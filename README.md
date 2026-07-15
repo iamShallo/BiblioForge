@@ -40,6 +40,13 @@ Open your terminal and run the following commands:
     .venv\Scripts\Activate.ps1
     pip install streamlit httpx pydantic pandas openpyxl
 
+Then create a file named `.env` in the project root and add your API keys:
+
+    GEMINI_API_KEY=your_gemini_api_key_here
+    GOOGLE_BOOKS_API_KEY=your_google_books_api_key_here
+
+If you do not have a Google Books key, the project can still run, but Gemini-based summaries and crawler enrichment will be limited when external APIs rate-limit requests.
+
 ---
 
 ## How to Run
